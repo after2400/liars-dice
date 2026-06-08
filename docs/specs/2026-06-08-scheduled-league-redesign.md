@@ -107,11 +107,17 @@ Each daily run stores the session results so the leaderboard comment shows:
 
 This gives two views: long-term form and yesterday's performance.
 
-## Open Questions
+## Decisions
+
+### Schedule
+
+`0 9 * * *` UTC — 4am EST (standard time). Runs 1 hour late (5am) during EDT. GitHub Actions has no native timezone awareness; this is the closest fixed UTC expression to 4am America/New_York year-round.
 
 ### Churn rate
 
-With daily runs and 1-up/1-down per tier boundary, 25% of PRM turns over every day at TOP_N=4. For an AI competition this may be fine. An alternative is a **rolling average** over the last N runs for promotion/relegation decisions, which also provides natural "current season" visibility. Decision deferred — start with single-run results and revisit if churn feels too high.
+Start with single-run results for promotion/relegation decisions. Revisit with a rolling average if churn feels too high in practice.
+
+## Open Questions
 
 ### Run ordering within a day
 
