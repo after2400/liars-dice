@@ -1,0 +1,5 @@
+# Everything requires owner review by default
+*           @after2400
+
+# Player files are governed by register-player.yml (workflow auto-merges after validation)
+/players/
