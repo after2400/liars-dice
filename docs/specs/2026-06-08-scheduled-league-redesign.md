@@ -12,138 +12,40 @@ Decouple game execution from player registration. PRs add players to the league;
 - Stats are cumulative per-tier (already implemented)
 - Solo-game guard prevents games with <2 players (already implemented)
 
----
-
 ## Architecture
 
 ### Two workflows replace the current one
 
 **`register-player.yml`** — triggered by PR to `main` touching `players/*`
-1. Validate the PR (see PR Validation)
+1. Validate: exactly one new `.py` file added
 2. Detect entry tier (see Entry Tier Logic)
-3. Register player in `leaderboard.yaml` (see Leaderboard Schema)
+3. Add player to `leaderboard.yaml` at that tier with zeroed `tier_stats`
 4. Commit leaderboard update to the PR branch
 5. Auto-merge the PR
 6. No games run
 
-**`run-season.yml`** — triggered on a daily schedule (`0 9 * * *` UTC — 4am EST, 5am EDT)
-1. Run each active tier in bottom-up order: **inactive → L1 → CH → PRM**
+**`run-season.yml`** — triggered on a daily schedule (cron)
+1. For each active tier in order (PRM → CH → L1):
    - Active = has ≥2 players
-   - Run `N_GAMES` (250) games per tier
-   - Evaluate results: apply promotions/relegations before running the next tier up
-2. Commit a single leaderboard update with `[skip ci]`
-3. Post a summary to a designated tracking issue
+   - Run 250 games (`N_GAMES` repo variable)
+   - Evaluate results: sort by wins, apply promotion/relegation
+2. Commit single leaderboard update
+3. Post summary comment to a designated issue (or update a pinned discussion)
 
----
-
-## Tier Structure
+### Tier structure
 
 Capacities scale with `TOP_N` (GitHub repo variable, starts at 4, max 8):
 
-| Tier     | Capacity    | Notes                                        |
-|----------|-------------|----------------------------------------------|
-| PRM      | `TOP_N`     | Premier Division                             |
-| CH       | `TOP_N`     | Championship                                 |
-| L1       | `2 × TOP_N` | League One                                   |
-| inactive | unlimited   | Daily game with up to `2 × TOP_N` players    |
-
----
-
-## Player Class Spec
-
-Player files must define a class with a `make_bid` method. The `name` attribute is optional:
-
-```python
-class Fred:
-    name = "Fred the Magnificent"  # optional display name, max 20 chars
-                                   # defaults to class name if omitted
-
-    def make_bid(self, ...):
-        ...
-```
-
-- `name` must be ≤20 characters, alphanumeric + spaces + basic punctuation
-- Parentheses are reserved (used for the username suffix in display)
-- The class name (i.e. `Fred`) is the stable identifier — it must match the filename (`fred.py`)
-
----
-
-## Leaderboard Schema
-
-The leaderboard key is the **class name** (stable, immutable). Display name and GitHub username are stored as separate fields:
-
-```yaml
-players:
-  Fred:                              # key = class name
-    display_name: Fred the Magnificent
-    github_username: after2400
-    date_added: '2026-06-08T00:00:00Z'
-    tier: PRM
-    tier_since: '2026-06-08T00:00:00Z'
-    times_inactive: 0                # replaces times_last_in_l1
-    tier_stats:
-      PRM:
-        wins: 60
-        games: 100
-        win_pct: 60.0
-```
-
-Full display name rendered at output time: `"{display_name} ({github_username})"`,
-e.g. `"Fred the Magnificent (after2400)"`.
-
-**`times_inactive`** replaces `times_last_in_l1` — incremented each time a player is
-relegated to inactive.
-
----
-
-## PR Validation
-
-PRs touching `players/` fall into two mutually exclusive modes. A PR that mixes
-deletions with additions or modifications is rejected outright.
-
-### Addition / modification (exactly one file)
-
-| Diff filter | Case | Action |
-|-------------|------|--------|
-| Added, class name not in leaderboard | New player | Register + auto-merge |
-| Added, class name already in leaderboard | Duplicate name | Reject with comment |
-| Modified, `github_username` matches `github.actor` | Algorithm update | Validate + auto-merge |
-| Modified, `github_username` mismatch and actor is not admin | Unauthorized edit | Reject with comment |
-| Modified, actor is admin | Admin override | Validate + auto-merge |
-
-### Deletion (one or more files, admin batch allowed)
-
-| Case | Action |
-|------|--------|
-| Actor is admin | Remove all deleted players from leaderboard + auto-merge |
-| Actor is not admin, deleted file belongs to actor | Self-removal + auto-merge |
-| Actor is not admin, any deleted file belongs to another player | Reject with comment |
-
-**Admin check:** query the GitHub API for the actor's repository permission level.
-Admin = `admin` permission role.
-
-```bash
-gh api repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission \
-  --jq '.permission == "admin"'
-```
-
-**Deleted player handling:** player is removed entirely from `leaderboard.yaml`.
-All stats are discarded. If the player was mid-tier, they simply won't appear in
-the next scheduled run.
-
-**Author verification (modifications):** look up `github_username` by class name in
-the leaderboard. Compare to `github.actor`. No string parsing needed.
-
-**Name updates:** a modified file may change the `name` attribute freely. The workflow
-updates `display_name` in the leaderboard. Class name, `github_username`, and all
-stats are unchanged.
-
----
+| Tier     | Capacity   | Notes                        |
+|----------|------------|------------------------------|
+| PRM      | `TOP_N`    | Premier Division             |
+| CH       | `TOP_N`    | Championship                 |
+| L1       | `2×TOP_N`  | League One                   |
+| inactive | unlimited  | Eliminated from L1           |
 
 ## Entry Tier Logic
 
-New players always enter at **L1 or above — never inactive**. They enter the lowest
-active tier that has capacity:
+New players enter at the **lowest active tier that has capacity**:
 
 ```
 if L1 is active and L1 has capacity:
@@ -157,31 +59,17 @@ else:
 Active = tier has ≥1 existing player (will have ≥2 once the new player joins).
 Capacity = current player count < tier capacity.
 
-**First player in L1:** If L1 currently has 0 players, it is not active. The new player
-enters CH instead. In their first scheduled run they compete in CH — if they win they
-promote to PRM; if they lose they are relegated to L1, which now has its first resident
-waiting for a second player.
-
 A player registered mid-day plays in the next scheduled run — no immediate game.
-
----
 
 ## Promotion and Relegation
 
-Tiers run bottom-up in the same daily job so promotions are available when the tier
-above runs. All movements are applied immediately (no deferred pending_relegation)
-within a single scheduled run.
+After each scheduled tier run, results determine movement. All tiers run in the same daily job; promotions and relegations from one tier affect the next tier's game in the **same run** (applied in order: L1 first, then CH, then PRM — bottom up so promotions are available when the higher tier runs).
 
 ### Per-tier rules (per daily run)
 
-**inactive:**
-- Up to `2 × TOP_N` players participate (selection criteria: see Open Questions)
-- Top player → promoted to L1 (if L1 has capacity)
-- No relegation out of inactive
-
 **L1:**
 - Top player → promoted to CH (if CH has capacity)
-- Bottom player → relegated to inactive; `times_inactive` incremented
+- Bottom player → inactive (if L1 is at capacity)
 
 **CH:**
 - Top player → promoted to PRM (if PRM has capacity)
@@ -191,88 +79,60 @@ within a single scheduled run.
 - Bottom player → relegated to CH (if CH has capacity)
 - No promotion out of PRM
 
-### Capacity-based movement
+### Capacity-based, not fixed-count
 
-Promotions and relegations move as many players as needed to restore each tier to
-capacity — not a fixed "1 up, 1 down". If multiple new players registered in a tier
-since the last run, the tier may be overcapacity and must shed the excess downward
-before the tier above promotes into it.
+Promotions and relegations are determined by how far each tier is from its capacity, not a fixed "1 up, 1 down" rule. If 3 new players registered in CH since the last run, CH may be over capacity and needs to shed players downward before PRM promotes into it.
 
-### Tiebreak
+**Example with TOP_N=4:**
+- PRM at 5 (overcapacity by 1): relegate bottom 1 to CH
+- CH at 4 (at capacity): before accepting PRM relegation, promote top 1 to PRM to make room
+- Evaluate in bottom-up order to ensure space exists before movement
 
-Within a run: equal wins → more historical `tier_stats[tier].games` (longer proven
-record) → earlier `tier_since` (longer tenure at current tier).
+### Ties
 
----
-
-## Game Engine Changes
-
-The game engine currently uses `p.name` (the `name` attribute) as the leaderboard
-lookup key. With class name as the stable key, this must change:
-
-- Add a `class_name` property to the player base spec: `type(self).__name__`
-- Game engine uses `class_name` for leaderboard lookups and win tracking
-- `name` / `display_name` is used only for display output
-
----
+Tiebreak within a run: players with equal wins are ranked by historical `tier_stats[tier].games` descending (more games = more proven). Secondary tiebreak: `tier_since` ascending (longer tenure = higher rank).
 
 ## Stats and Visibility
 
 ### Per-tier cumulative stats (already implemented)
 
-`tier_stats` tracks wins/games/win_pct per tier independently. Win% in the leaderboard
-table reflects the player's **current tier** only.
+`tier_stats` in `leaderboard.yaml` tracks wins/games/win_pct per tier independently. A player who plays in both CH and PRM has separate records for each. Win% in the leaderboard table reflects the player's **current tier** only.
 
 ### Per-run results (to implement)
 
-Each daily run posts a summary showing:
+Each daily run stores the session results so the leaderboard comment shows:
 - Standings table with cumulative tier win%
-- This run's results (wins out of `N_GAMES`, win% for this run only)
-- Promotions and relegations that occurred
+- This run's results (wins out of 250, win% for this run only)
+- Any promotions/relegations that occurred
 
----
-
-## Decisions
-
-| Topic | Decision |
-|-------|----------|
-| Schedule | `0 9 * * *` UTC (4am EST / 5am EDT) |
-| Churn | Single-run results for promotion/relegation; revisit with rolling average if too volatile |
-| Tier capacities | PRM = `TOP_N`, CH = `TOP_N`, L1 = `2 × TOP_N`, inactive = unlimited (capped at `2 × TOP_N` for daily game) |
-| Max TOP_N | 8 (giving PRM=8, CH=8, L1=16) |
-| N_GAMES | 250 per tier per daily run |
-| Leaderboard key | Class name (stable); display name stored separately |
-| `times_last_in_l1` | Renamed to `times_inactive` |
-
----
+This gives two views: long-term form and yesterday's performance.
 
 ## Open Questions
 
-### Which inactive players participate when inactive > `2 × TOP_N`?
+### Churn rate
 
-Options: most recently relegated (LIFO), best historical win%, or rotate fairly.
-Recommendation: start with all inactive players (no cap) and add a cap only if the
-inactive pool becomes unwieldy.
+With daily runs and 1-up/1-down per tier boundary, 25% of PRM turns over every day at TOP_N=4. For an AI competition this may be fine. An alternative is a **rolling average** over the last N runs for promotion/relegation decisions, which also provides natural "current season" visibility. Decision deferred — start with single-run results and revisit if churn feels too high.
 
-### Run ordering: can a player play twice in one day?
+### Run ordering within a day
 
-If a player tops the inactive run and promotes to L1, they could play in the L1 game
-the same day. Same applies at L1→CH and CH→PRM boundaries. This is intentional —
-it rewards strong performance — but means a player could play up to 4 games in one
-day in an extreme case.
+If tiers run bottom-up (L1 → CH → PRM) in the same job, a player promoted from L1 to CH could theoretically play in the CH game in the same daily run. This is a feature, not a bug — it rewards strong performance. However, it means the CH game sees a different roster than when the job started. This is acceptable.
 
 ### What if a tier has exactly 1 player?
 
-The solo-game guard (already implemented) exits cleanly with no stats updated. That
-player waits until another player joins their tier.
+The solo-game guard (already implemented) exits cleanly. That player waits until another player joins their tier. No stats are updated.
 
----
+## GitHub Actions Notes
+
+- `N_GAMES` and `TOP_N` remain GitHub repo variables
+- The scheduled workflow runs even if no new players registered — tiers with ≥2 players always get a game
+- `[skip ci]` on the leaderboard commit remains to avoid re-triggering the register workflow
+- The register workflow still needs branch protection to validate player files before merge
+- Auto-merge on the register workflow fires immediately after validation (no game to wait for)
 
 ## Rollout
 
-1. Update player class spec and game engine (`class_name` property, leaderboard lookup)
-2. Migrate leaderboard schema (`display_name`, `github_username`, `times_inactive`)
-3. Implement `register-player.yml` (validation, registration, auto-merge)
-4. Implement `run-season.yml` (scheduled bottom-up tier runner)
-5. Retire current `liars-dice.yml`
-6. Update tests throughout
+1. Implement `register-player.yml` (stripped-down current workflow — validation + registration only)
+2. Implement `run-season.yml` (scheduled daily game runner)
+3. Remove game-running steps from current `liars-dice.yml`
+4. Reset leaderboard to current clean state (already done)
+5. Set initial schedule (daily at a fixed UTC time)
