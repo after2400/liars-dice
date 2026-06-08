@@ -1,14 +1,13 @@
 from game.components.bets import Bet
 
 
-class Player:
+class Bruno:
     """
     Aggressive strategy. Opens at own count, raises by 1 when holding the face,
     shifts to a higher held face when not, and calls liar above 1.5x expected.
     """
 
-    def __init__(self):
-        self.name = "Bruno"
+    name = "Bruno"
 
     def algo(self, hand: list, prior_bet: Bet | None, total_dice: int,
              bet_history: list[dict], outcomes: list[dict]) -> Bet | None:

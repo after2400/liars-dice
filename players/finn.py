@@ -3,7 +3,7 @@ from math import comb
 from game.components.bets import Bet
 
 
-class Player:
+class Finn:
     """
     Game-state adaptive strategy. Computes exact binomial probability like Diego,
     but scales the liar threshold with total dice remaining. With many dice the
@@ -13,8 +13,7 @@ class Player:
     to apply extra pressure.
     """
 
-    def __init__(self):
-        self.name = "Finn"
+    name = "Finn"
 
     def _prob_bet_holds(self, hand: list, face: int, quantity: int, total_dice: int) -> float:
         own = hand.count(face) + (hand.count(1) if face != 1 else 0)

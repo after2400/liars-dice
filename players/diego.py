@@ -3,7 +3,7 @@ from math import comb
 from game.components.bets import Bet
 
 
-class Player:
+class Diego:
     """
     Probability-driven strategy. Computes the exact binomial probability that
     the current bet holds given own hand, then calls liar when that probability
@@ -13,8 +13,7 @@ class Player:
 
     CALL_THRESHOLD = 0.30  # call liar when P(bet holds) < 30%
 
-    def __init__(self):
-        self.name = "Diego"
+    name = "Diego"
 
     def _prob_bet_holds(self, hand: list, face: int, quantity: int, total_dice: int) -> float:
         """Probability that at least `quantity` dice show `face` across all dice.

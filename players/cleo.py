@@ -3,7 +3,7 @@ import random
 from game.components.bets import Bet
 
 
-class Player:
+class Cleo:
     """
     Mood-driven strategy. Each turn randomly adopts an aggressive or cautious
     stance, then makes logically grounded decisions within that frame.
@@ -12,8 +12,7 @@ class Player:
     Cautious: bids conservatively, calls liar at the first sign of excess.
     """
 
-    def __init__(self):
-        self.name = "Cleo"
+    name = "Cleo"
 
     def _estimate(self, hand: list, face: int, total_dice: int) -> float:
         """Expected total count of `face` across all dice, using own hand + probability."""
