@@ -98,24 +98,45 @@ relegated to inactive.
 
 ## PR Validation
 
-The register workflow handles four cases based on whether the changed file is new or
-modified, and whether the PR author matches the registered owner:
+PRs touching `players/` fall into two mutually exclusive modes. A PR that mixes
+deletions with additions or modifications is rejected outright.
+
+### Addition / modification (exactly one file)
 
 | Diff filter | Case | Action |
 |-------------|------|--------|
 | Added, class name not in leaderboard | New player | Register + auto-merge |
-| Added, class name already in leaderboard | Duplicate | Reject with comment |
+| Added, class name already in leaderboard | Duplicate name | Reject with comment |
 | Modified, `github_username` matches `github.actor` | Algorithm update | Validate + auto-merge |
-| Modified, `github_username` mismatch | Unauthorized edit | Reject with comment |
+| Modified, `github_username` mismatch and actor is not admin | Unauthorized edit | Reject with comment |
+| Modified, actor is admin | Admin override | Validate + auto-merge |
 
-**Author verification:** look up the player's `github_username` in the leaderboard by
-class name. Compare to `github.actor`. No string parsing — stored as a dedicated field.
+### Deletion (one or more files, admin batch allowed)
+
+| Case | Action |
+|------|--------|
+| Actor is admin | Remove all deleted players from leaderboard + auto-merge |
+| Actor is not admin, deleted file belongs to actor | Self-removal + auto-merge |
+| Actor is not admin, any deleted file belongs to another player | Reject with comment |
+
+**Admin check:** query the GitHub API for the actor's repository permission level.
+Admin = `admin` permission role.
+
+```bash
+gh api repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission \
+  --jq '.permission == "admin"'
+```
+
+**Deleted player handling:** player is removed entirely from `leaderboard.yaml`.
+All stats are discarded. If the player was mid-tier, they simply won't appear in
+the next scheduled run.
+
+**Author verification (modifications):** look up `github_username` by class name in
+the leaderboard. Compare to `github.actor`. No string parsing needed.
 
 **Name updates:** a modified file may change the `name` attribute freely. The workflow
-updates `display_name` in the leaderboard. Class name, github_username, and all stats
-are unchanged.
-
-**Exactly one file per PR** remains a requirement for both new and modified cases.
+updates `display_name` in the leaderboard. Class name, `github_username`, and all
+stats are unchanged.
 
 ---
 
