@@ -121,20 +121,25 @@ are unchanged.
 
 ## Entry Tier Logic
 
-New players enter at the **lowest active tier that has capacity**:
+New players always enter at **L1 or above — never inactive**. They enter the lowest
+active tier that has capacity:
 
 ```
-if inactive has capacity (< 2 × TOP_N players):
-    enter inactive
-elif L1 is active and L1 has capacity (< 2 × TOP_N players):
+if L1 is active and L1 has capacity:
     enter L1
-elif CH is active and CH has capacity (< TOP_N players):
+elif CH is active and CH has capacity:
     enter CH
 else:
     enter PRM
 ```
 
 Active = tier has ≥1 existing player (will have ≥2 once the new player joins).
+Capacity = current player count < tier capacity.
+
+**First player in L1:** If L1 currently has 0 players, it is not active. The new player
+enters CH instead. In their first scheduled run they compete in CH — if they win they
+promote to PRM; if they lose they are relegated to L1, which now has its first resident
+waiting for a second player.
 
 A player registered mid-day plays in the next scheduled run — no immediate game.
 
