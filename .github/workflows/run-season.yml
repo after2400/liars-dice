@@ -35,7 +35,7 @@ jobs:
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add leaderboard.yaml
+          git add leaderboard.yaml README.md
           if ! git diff --cached --quiet; then
             git commit -m "ci: update leaderboard [skip ci]"
             git push

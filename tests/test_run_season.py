@@ -37,10 +37,13 @@ def _make_leaderboard(players: dict) -> dict:
 
 def _run_season(lb_path: Path, summary_path: Path, n_games: int = 5) -> subprocess.CompletedProcess:
     """Run run_season.py with the given leaderboard and summary paths."""
+    readme_path = lb_path.parent / "README.md"
+    readme_path.write_text("<!-- leaderboard-start -->\n<!-- leaderboard-end -->\n")
     env = {
         **os.environ,
         "LEADERBOARD_PATH": str(lb_path),
         "SUMMARY_FILE": str(summary_path),
+        "README_PATH": str(readme_path),
         "N_GAMES": str(n_games),
         "TOP_N": "4",
     }

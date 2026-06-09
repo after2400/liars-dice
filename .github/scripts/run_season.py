@@ -100,6 +100,7 @@ def run_season(
     top_n: int,
     lb_path: str,
     summary_file: str,
+    readme_path: str = str(_REPO_ROOT / "README.md"),
 ) -> None:
     """Orchestrate a full bottom-up season run and write a markdown summary."""
     from game.components.leaderboard import apply_season_results
@@ -132,6 +133,8 @@ def run_season(
 
     _write_summary(summary_file, tier_results, skipped, n_games, lb_path)
     print(f"[done] Season summary written to {summary_file}")
+    _update_readme(readme_path, lb_path)
+    print("[done] README standings updated.")
 
 
 def _write_summary(
@@ -202,14 +205,86 @@ def _tier_rank(tier: str) -> int:
     return {"inactive": 0, "L1": 1, "CH": 2, "PRM": 3}.get(tier, -1)
 
 
+_README_START = "<!-- prettier-ignore-start -->"
+_README_END = "<!-- prettier-ignore-end -->"
+
+_TIER_LABEL = {"PRM": "Premier", "CH": "Championship", "L1": "Level 1", "inactive": "Inactive"}
+
+
+def _standings_table(tier_players: list[tuple[str, dict]], tier: str) -> list[str]:
+    lines = [
+        "| Player | Win% | Wins | Games |",
+        "|--------|------|------|-------|",
+    ]
+    for name, p in tier_players:
+        display = p.get("display_name", name)
+        ts = p.get("tier_stats", {}).get(tier, {})
+        lines.append(
+            f"| {display} | {ts.get('win_pct', 0.0)} | {ts.get('wins', 0)} | {ts.get('games', 0)} |"
+        )
+    return lines
+
+
+def _update_readme(readme_path: str, lb_path: str) -> None:
+    """Replace the <!-- leaderboard-start/end --> section in README.md with current standings."""
+    if not os.path.exists(readme_path):
+        return
+
+    data = _load_lb(lb_path)
+    players = data.get("players", {})
+
+    def _sorted_players(tier: str) -> list[tuple[str, dict]]:
+        pts = [(n, p) for n, p in players.items() if p.get("tier") == tier]
+        pts.sort(key=lambda x: -x[1].get("tier_stats", {}).get(tier, {}).get("win_pct", 0.0))
+        return pts
+
+    lines: list[str] = [_README_START, "<!-- leaderboard-start -->"]
+
+    for tier in ("PRM", "CH", "L1"):
+        label = _TIER_LABEL[tier]
+        tier_players = _sorted_players(tier)
+        lines.append(f"### {label}")
+        if tier_players:
+            lines.extend(_standings_table(tier_players, tier))
+        else:
+            lines.append(f"*No players currently in {label}.*")
+        lines.append("")
+
+    inactive_players = _sorted_players("inactive")
+    if inactive_players:
+        lines.append("<details>")
+        lines.append(f"<summary>Inactive ({len(inactive_players)} players)</summary>")
+        lines.append("")
+        lines.extend(_standings_table(inactive_players, "inactive"))
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    lines.extend(["<!-- leaderboard-end -->", _README_END])
+    block = "\n".join(lines)
+
+    with open(readme_path) as f:
+        content = f.read()
+
+    start_idx = content.find(_README_START)
+    end_idx = content.find(_README_END)
+    if start_idx == -1 or end_idx == -1:
+        return
+
+    updated = content[:start_idx] + block + content[end_idx + len(_README_END) :]
+    with open(readme_path, "w") as f:
+        f.write(updated)
+
+
 def main() -> None:
     n_games = int(os.environ.get("N_GAMES", "250"))
     top_n = int(os.environ.get("TOP_N", "4"))
     lb_path = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
     summary_file = os.environ.get("SUMMARY_FILE", "season_summary.md")
+    readme_path = os.environ.get("README_PATH", str(_REPO_ROOT / "README.md"))
 
     print(f"[run_season] n_games={n_games} top_n={top_n} lb={lb_path} summary={summary_file}")
-    run_season(n_games, top_n, lb_path, summary_file)
+    run_season(n_games, top_n, lb_path, summary_file, readme_path)
 
 
 if __name__ == "__main__":
