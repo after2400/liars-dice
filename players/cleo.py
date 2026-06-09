@@ -22,8 +22,14 @@ class Cleo:
         expected_others = unseen * (2 / 6 if face != 1 else 1 / 6)
         return own + expected_others
 
-    def algo(self, hand: list, prior_bet: Bet | None, total_dice: int,
-             bet_history: list[dict], outcomes: list[dict]) -> Bet | None:
+    def algo(
+        self,
+        hand: list,
+        prior_bet: Bet | None,
+        total_dice: int,
+        bet_history: list[dict],
+        outcomes: list[dict],
+    ) -> Bet | None:
         aggressive = random.random() < 0.5
 
         if prior_bet is None:

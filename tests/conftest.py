@@ -83,9 +83,7 @@ def lb_with_pending():
     return {
         "total_runs": 3,
         "last_updated": "2026-01-01T00:00:00Z",
-        "pending_relegation": [
-            {"player": "Alice", "from_tier": "PRM", "to_tier": "CH"}
-        ],
+        "pending_relegation": [{"player": "Alice", "from_tier": "PRM", "to_tier": "CH"}],
         "players": {
             "Alice": {
                 "display_name": "Alice",
@@ -113,6 +111,7 @@ def lb_with_pending():
 def lb_file(tmp_path, minimal_lb):
     """Write minimal_lb to a temp file and return its path."""
     import yaml
+
     path = tmp_path / "leaderboard.yaml"
     path.write_text(yaml.dump(minimal_lb, default_flow_style=False, sort_keys=False))
     return str(path)

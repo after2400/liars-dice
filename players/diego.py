@@ -32,10 +32,18 @@ class Diego:
             return 0.0
 
         # P(X >= need) where X ~ Binomial(unseen, p)
-        return sum(comb(unseen, k) * (p ** k) * ((1 - p) ** (unseen - k)) for k in range(need, unseen + 1))
+        return sum(
+            comb(unseen, k) * (p**k) * ((1 - p) ** (unseen - k)) for k in range(need, unseen + 1)
+        )
 
-    def algo(self, hand: list, prior_bet: Bet | None, total_dice: int,
-             bet_history: list[dict], outcomes: list[dict]) -> Bet | None:
+    def algo(
+        self,
+        hand: list,
+        prior_bet: Bet | None,
+        total_dice: int,
+        bet_history: list[dict],
+        outcomes: list[dict],
+    ) -> Bet | None:
 
         if prior_bet is None:
             # Open on the face with the highest expected total count

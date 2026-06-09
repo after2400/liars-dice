@@ -25,25 +25,34 @@ class Finn:
         if need > unseen:
             return 0.0
         return sum(
-            comb(unseen, k) * (p ** k) * ((1 - p) ** (unseen - k))
-            for k in range(need, unseen + 1)
+            comb(unseen, k) * (p**k) * ((1 - p) ** (unseen - k)) for k in range(need, unseen + 1)
         )
 
     def _threshold(self, total_dice: int) -> float:
         return min(0.40, 0.15 + 0.25 * (total_dice / 20.0))
 
-    def algo(self, hand: list, prior_bet: Bet | None, total_dice: int,
-             bet_history: list[dict], outcomes: list[dict]) -> Bet | None:
+    def algo(
+        self,
+        hand: list,
+        prior_bet: Bet | None,
+        total_dice: int,
+        bet_history: list[dict],
+        outcomes: list[dict],
+    ) -> Bet | None:
         if prior_bet is None:
             best_face = max(range(2, 7), key=lambda f: hand.count(f) + hand.count(1))
             own = hand.count(best_face) + hand.count(1)
             unseen = total_dice - len(hand)
-            quantity = max(1, round(own + unseen * (2 / 6) * 0.75))  # between Diego's 0.7 and Eva's 0.8
+            quantity = max(
+                1, round(own + unseen * (2 / 6) * 0.75)
+            )  # between Diego's 0.7 and Eva's 0.8
             return Bet(quantity, best_face, self.name)
 
         own = hand.count(prior_bet.face) + (hand.count(1) if prior_bet.face != 1 else 0)
 
-        if self._prob_bet_holds(hand, prior_bet.face, prior_bet.quantity, total_dice) < self._threshold(total_dice):
+        if self._prob_bet_holds(
+            hand, prior_bet.face, prior_bet.quantity, total_dice
+        ) < self._threshold(total_dice):
             return None
         if own >= 2:
             return Bet(prior_bet.quantity + 2, prior_bet.face, self.name)
