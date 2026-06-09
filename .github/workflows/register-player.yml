@@ -1,0 +1,143 @@
+name: Register Player
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "players/**"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  PYTHONPATH: .
+
+jobs:
+  register:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --no-install-project
+
+      - name: Validate and register
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOP_N: ${{ vars.TOP_N || '4' }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ACTOR: ${{ github.actor }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin main
+
+          added=$(git diff --name-only --diff-filter=A origin/main...HEAD -- 'players/*.py' || true)
+          modified=$(git diff --name-only --diff-filter=M origin/main...HEAD -- 'players/*.py' || true)
+          deleted=$(git diff --name-only --diff-filter=D origin/main...HEAD -- 'players/*.py' || true)
+
+          n_added=0; [ -n "$added" ] && n_added=$(echo "$added" | wc -l | tr -d ' ')
+          n_modified=0; [ -n "$modified" ] && n_modified=$(echo "$modified" | wc -l | tr -d ' ')
+          n_deleted=0; [ -n "$deleted" ] && n_deleted=$(echo "$deleted" | wc -l | tr -d ' ')
+
+          post_rejection() {
+            gh pr comment "$PR_NUMBER" --body "❌ $1"
+            exit 1
+          }
+
+          commit_and_merge() {
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git config user.name "github-actions[bot]"
+            git add leaderboard.yaml
+            if ! git diff --cached --quiet; then
+              git commit -m "ci: register player [skip ci]"
+              git push
+            fi
+            gh pr merge "$PR_NUMBER" --auto --squash
+          }
+
+          # Reject mixed PRs
+          if [ "$n_deleted" -gt 0 ] && [ "$((n_added + n_modified))" -gt 0 ]; then
+            post_rejection "PRs must not mix player additions/modifications with deletions."
+          fi
+          if [ "$n_added" -gt 1 ]; then
+            post_rejection "Each PR must add exactly one player file."
+          fi
+          if [ "$n_modified" -gt 1 ]; then
+            post_rejection "Each PR must modify exactly one player file."
+          fi
+
+          # ── Deletion ──
+          if [ "$n_deleted" -gt 0 ] && [ "$n_added" -eq 0 ] && [ "$n_modified" -eq 0 ]; then
+            is_admin=$(gh api "repos/${REPOSITORY}/collaborators/${ACTOR}/permission" \
+              --jq '.permission == "admin"' 2>/dev/null || echo "false")
+
+            if [ "$is_admin" != "true" ]; then
+              while IFS= read -r filepath; do
+                [ -z "$filepath" ] && continue
+                cls_stem=$(basename "$filepath" .py)
+                owner=$(uv run python .github/scripts/lb_owner.py "$cls_stem")
+                if [ "$owner" != "$ACTOR" ]; then
+                  post_rejection "You can only delete your own player files. '$filepath' belongs to '${owner}'."
+                fi
+              done <<< "$deleted"
+            fi
+
+            # shellcheck disable=SC2086
+            uv run python .github/scripts/lb_delete.py $deleted
+            commit_and_merge
+            exit 0
+          fi
+
+          # ── Addition ──
+          if [ "$n_added" -eq 1 ] && [ "$n_modified" -eq 0 ] && [ "$n_deleted" -eq 0 ]; then
+            player_file="$added"
+            output=$(PLAYER_FILE="$player_file" GITHUB_USERNAME="$ACTOR" TOP_N="$TOP_N" \
+              uv run python .github/scripts/register_player.py 2>&1)
+            rc=$?
+            echo "$output"
+            if [ "$rc" -ne 0 ]; then
+              post_rejection "Player registration failed:\`\`\`${output}\`\`\`"
+            fi
+            if echo "$output" | grep -qi "already registered"; then
+              post_rejection "A player with that class name already exists. Please choose a unique class name."
+            fi
+            commit_and_merge
+            exit 0
+          fi
+
+          # ── Modification ──
+          if [ "$n_modified" -eq 1 ] && [ "$n_added" -eq 0 ] && [ "$n_deleted" -eq 0 ]; then
+            player_file="$modified"
+            cls_stem=$(basename "$player_file" .py)
+
+            is_admin=$(gh api "repos/${REPOSITORY}/collaborators/${ACTOR}/permission" \
+              --jq '.permission == "admin"' 2>/dev/null || echo "false")
+            owner=$(uv run python .github/scripts/lb_owner.py "$cls_stem")
+
+            if [ "$is_admin" != "true" ] && [ "$owner" != "$ACTOR" ]; then
+              post_rejection "You can only modify your own player files. '$player_file' belongs to '${owner}'."
+            fi
+
+            mod_output=$(uv run python .github/scripts/lb_update_name.py "$player_file" 2>&1)
+            mod_rc=$?
+            echo "$mod_output"
+            if [ "$mod_rc" -ne 0 ]; then
+              post_rejection "Player modification failed:\`\`\`${mod_output}\`\`\`"
+            fi
+
+            commit_and_merge
+            exit 0
+          fi
+
+          post_rejection "No valid player file changes detected. PRs touching \`players/\` must add, modify, or delete \`.py\` files."
