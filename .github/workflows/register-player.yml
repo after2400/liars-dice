@@ -102,13 +102,12 @@ jobs:
           # ── Addition ──
           if [ "$n_added" -eq 1 ] && [ "$n_modified" -eq 0 ] && [ "$n_deleted" -eq 0 ]; then
             player_file="$added"
-            output=$(PLAYER_FILE="$player_file" GITHUB_USERNAME="$ACTOR" TOP_N="$TOP_N" \
-              uv run python .github/scripts/register_player.py 2>&1)
-            rc=$?
-            echo "$output"
-            if [ "$rc" -ne 0 ]; then
+            if ! output=$(PLAYER_FILE="$player_file" GITHUB_USERNAME="$ACTOR" TOP_N="$TOP_N" \
+              uv run python .github/scripts/register_player.py 2>&1); then
+              echo "$output"
               post_rejection "Player registration failed:\`\`\`${output}\`\`\`"
             fi
+            echo "$output"
             if echo "$output" | grep -qi "already registered"; then
               post_rejection "A player with that class name already exists. Please choose a unique class name."
             fi
@@ -129,12 +128,11 @@ jobs:
               post_rejection "You can only modify your own player files. '$player_file' belongs to '${owner}'."
             fi
 
-            mod_output=$(uv run python .github/scripts/lb_update_name.py "$player_file" 2>&1)
-            mod_rc=$?
-            echo "$mod_output"
-            if [ "$mod_rc" -ne 0 ]; then
+            if ! mod_output=$(uv run python .github/scripts/lb_update_name.py "$player_file" 2>&1); then
+              echo "$mod_output"
               post_rejection "Player modification failed:\`\`\`${mod_output}\`\`\`"
             fi
+            echo "$mod_output"
 
             commit_and_merge
             exit 0
