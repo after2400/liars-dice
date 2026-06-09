@@ -93,8 +93,11 @@ jobs:
               done <<< "$deleted"
             fi
 
-            # shellcheck disable=SC2086
-            uv run python .github/scripts/lb_delete.py $deleted
+            mapfile -t deleted_files <<< "$deleted"
+            if ! del_output=$(uv run python .github/scripts/lb_delete.py "${deleted_files[@]}" 2>&1); then
+              echo "$del_output"
+              post_rejection "Failed to remove player(s) from leaderboard:\`\`\`${del_output}\`\`\`"
+            fi
             commit_and_merge
             exit 0
           fi
