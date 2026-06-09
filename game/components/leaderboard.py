@@ -87,10 +87,12 @@ def update_leaderboard(
     # Update stats for competing players; create entry for new players
     for name, win_count in wins.items():
         player = data["players"].setdefault(name, {
+            "display_name": name,
+            "github_username": "",
             "date_added": now,
             "tier": tier,
             "tier_since": now,
-            "times_last_in_l1": 0,
+            "times_inactive": 0,
             "tier_stats": {},
         })
         ts = player.setdefault("tier_stats", {})
@@ -109,11 +111,93 @@ def update_leaderboard(
     # Append deferred relegations
     data["pending_relegation"].extend(pending_relegations)
 
-    # Increment times_last_in_l1 for last place in L1 runs
+    # Increment times_inactive for last place in L1 runs
     if tier == "L1" and last_place and last_place in data["players"]:
-        data["players"][last_place]["times_last_in_l1"] = (
-            data["players"][last_place].get("times_last_in_l1", 0) + 1
+        data["players"][last_place]["times_inactive"] = (
+            data["players"][last_place].get("times_inactive", 0) + 1
         )
+
+    with open(path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+
+
+_TIER_ABOVE = {"L1": "CH", "CH": "PRM", "inactive": "L1"}
+_TIER_BELOW = {"PRM": "CH", "CH": "L1", "L1": "inactive"}
+_TIER_CAPACITY = lambda tier, top_n: (
+    top_n if tier in ("PRM", "CH") else top_n * 2 if tier == "L1" else float("inf")
+)
+
+
+def apply_season_results(
+    wins: dict[str, int],
+    n_games: int,
+    tier: str,
+    top_n: int,
+    path: str = _LEADERBOARD_PATH,
+) -> None:
+    """Update stats and apply immediate promotions/relegations for a scheduled run."""
+    if os.path.exists(path):
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    else:
+        data = {}
+
+    now = _now()
+    data.setdefault("total_runs", 0)
+    data["total_runs"] += 1
+    data["last_updated"] = now
+    data.setdefault("players", {})
+
+    # Update cumulative tier_stats for competing players
+    for name, win_count in wins.items():
+        if name not in data["players"]:
+            continue
+        player = data["players"][name]
+        ts = player.setdefault("tier_stats", {})
+        ts_tier = ts.setdefault(tier, {"wins": 0, "games": 0, "win_pct": 0.0})
+        ts_tier["wins"] += win_count
+        ts_tier["games"] += n_games
+        ts_tier["win_pct"] = round(ts_tier["wins"] / ts_tier["games"] * 100, 1)
+
+    # Rank by wins desc; tiebreak on historical tier games desc, then tier_since asc
+    def _rank_key(item):
+        name, w = item
+        p = data["players"].get(name, {})
+        tier_games = p.get("tier_stats", {}).get(tier, {}).get("games", 0)
+        return (-w, -tier_games, p.get("tier_since", ""))
+
+    ranked = sorted(wins.items(), key=_rank_key)
+    players_in_tier = [name for name, _ in ranked if name in data["players"]]
+
+    tier_above = _TIER_ABOVE.get(tier)
+    tier_below = _TIER_BELOW.get(tier)
+
+    # Promote top player unconditionally
+    promoted = None
+    if tier_above and players_in_tier:
+        promoted = players_in_tier[0]
+        data["players"][promoted]["tier"] = tier_above
+        data["players"][promoted]["tier_since"] = now
+
+    # Relegate enough from the bottom to restore this tier to capacity.
+    # If a promotion occurred, relegate only the excess; otherwise always relegate at least 1.
+    if tier_below:
+        capacity = _TIER_CAPACITY(tier, top_n)
+        remaining = [p for p in players_in_tier if p != promoted]
+        if promoted:
+            excess = max(0, len(remaining) - capacity) if remaining else 0
+        else:
+            excess = max(1, len(remaining) - capacity) if remaining else 0
+        for name in reversed(remaining):
+            if excess <= 0:
+                break
+            data["players"][name]["tier"] = tier_below
+            data["players"][name]["tier_since"] = now
+            if tier_below == "inactive":
+                data["players"][name]["times_inactive"] = (
+                    data["players"][name].get("times_inactive", 0) + 1
+                )
+            excess -= 1
 
     with open(path, "w") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)
