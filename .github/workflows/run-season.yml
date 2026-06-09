@@ -1,0 +1,48 @@
+name: Run Season
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # 4am EST / 5am EDT
+  workflow_dispatch: # allow manual trigger for testing
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  run-season:
+    runs-on: ubuntu-latest
+
+    env:
+      PYTHONPATH: .
+      N_GAMES: ${{ vars.N_GAMES || '250' }}
+      TOP_N: ${{ vars.TOP_N || '4' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --no-install-project
+
+      - name: Run season script
+        run: uv run python .github/scripts/run_season.py
+
+      - name: Commit leaderboard update
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add leaderboard.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: update leaderboard [skip ci]"
+            git push
+          fi
+
+      - name: Post summary to GitHub issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ vars.SEASON_TRACKING_ISSUE || '1' }} --body-file season_summary.md
