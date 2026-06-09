@@ -74,17 +74,16 @@ def test_tier_prm_selects_only_prm_players(tmp_path):
     assert "Bruno" not in results
 
 
-def test_tier_l1_includes_inactive_players(tmp_path):
-    """--tier L1 runs L1 and inactive players together."""
+def test_tier_l1_excludes_inactive_players(tmp_path):
+    """--tier L1 runs only L1 players; inactive players are excluded."""
     lb = {
         "total_runs": 1,
-        "pending_relegation": [],
         "players": {
             "Alice": {
                 "display_name": "Alice",
                 "github_username": "",
-                "tier": "L1",
                 "date_added": "2026-01-01T00:00:00Z",
+                "tier": "L1",
                 "tier_since": "2026-01-01T00:00:00Z",
                 "times_inactive": 0,
                 "tier_stats": {"L1": {"wins": 40, "games": 100, "win_pct": 40.0}},
@@ -92,8 +91,8 @@ def test_tier_l1_includes_inactive_players(tmp_path):
             "Bruno": {
                 "display_name": "Bruno",
                 "github_username": "",
-                "tier": "inactive",
                 "date_added": "2026-01-01T00:00:00Z",
+                "tier": "inactive",
                 "tier_since": "2026-01-01T00:00:00Z",
                 "times_inactive": 2,
                 "tier_stats": {"L1": {"wins": 30, "games": 100, "win_pct": 30.0}},
@@ -101,18 +100,20 @@ def test_tier_l1_includes_inactive_players(tmp_path):
             "Cleo": {
                 "display_name": "Cleo",
                 "github_username": "",
-                "tier": "PRM",
                 "date_added": "2026-01-01T00:00:00Z",
+                "tier": "L1",
                 "tier_since": "2026-01-01T00:00:00Z",
                 "times_inactive": 0,
-                "tier_stats": {"PRM": {"wins": 50, "games": 100, "win_pct": 50.0}},
+                "tier_stats": {},
             },
         },
     }
     results = run_game(["--tier", "L1", "10", "4"], lb, tmp_path)
-    assert "Alice" in results
-    assert "Bruno" in results
-    assert "Cleo" not in results
+    # L1 run: Alice and Cleo compete; Bruno (inactive) is excluded
+    assert set(results.keys()) == {"Alice", "Cleo"}, (
+        f"Expected only L1 players, got: {set(results.keys())}"
+    )
+    assert "Bruno" not in results
 
 
 def test_results_file_written(tmp_path):

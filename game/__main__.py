@@ -13,9 +13,9 @@ def _parse_args():
     p = argparse.ArgumentParser()
     p.add_argument(
         "--tier",
-        choices=["PRM", "CH", "L1"],
+        choices=["PRM", "CH", "L1", "inactive"],
         default=None,
-        help="Run only players in this tier (L1 also includes inactive)",
+        help="Run only players in this tier",
     )
     p.add_argument("--results-file", default=None, help="Write wins dict as JSON to this path")
     p.add_argument("n_games", type=int, nargs="?", default=1)
@@ -73,24 +73,18 @@ _lb_players = _lb_data.get("players", {})
 all_players = import_player_classes_from_dir(str(project_root / "players"))
 
 if args.tier:
-    include_tiers = {args.tier}
-    if args.tier == "L1":
-        include_tiers.add("inactive")
-
     if args.tier in ("PRM", "CH"):
         # Registered tier players + unregistered challengers (not yet in leaderboard)
         players = [
             p
             for p in all_players
-            if _lb_players.get(type(p).__name__, {}).get("tier") in include_tiers
+            if _lb_players.get(type(p).__name__, {}).get("tier") == args.tier
             or type(p).__name__ not in _lb_players
         ]
     else:
-        # L1: registered L1/inactive only — challengers never enter L1 directly
+        # L1 and inactive: registered players in that exact tier only
         players = [
-            p
-            for p in all_players
-            if _lb_players.get(type(p).__name__, {}).get("tier") in include_tiers
+            p for p in all_players if _lb_players.get(type(p).__name__, {}).get("tier") == args.tier
         ]
 else:
     # Local run with no tier filter: include all known players

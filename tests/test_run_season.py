@@ -150,3 +150,36 @@ def test_writes_summary_file(tmp_path):
     # Should mention player names
     assert "Alice" in summary
     assert "Bruno" in summary
+
+
+# ---------------------------------------------------------------------------
+# Test 4: Inactive tier runs separately when there are ≥2 inactive players
+# ---------------------------------------------------------------------------
+
+
+def test_runs_inactive_tier_separately(tmp_path):
+    """Inactive players run their own separate game before L1."""
+    lb_path = tmp_path / "leaderboard.yaml"
+    summary_path = tmp_path / "summary.md"
+
+    # 2 inactive players (Alice, Bruno are real player classes)
+    lb = _make_leaderboard({"Alice": "inactive", "Bruno": "inactive"})
+    lb_path.write_text(yaml.dump(lb, default_flow_style=False, sort_keys=False))
+
+    result = _run_season(lb_path, summary_path, n_games=5)
+
+    assert result.returncode == 0, (
+        f"Script failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+    )
+
+    updated = yaml.safe_load(lb_path.read_text())
+
+    # At least one of Alice/Bruno should have inactive tier_stats updated
+    alice_stats = updated["players"]["Alice"].get("tier_stats", {}).get("inactive", {})
+    bruno_stats = updated["players"]["Bruno"].get("tier_stats", {}).get("inactive", {})
+    assert alice_stats.get("games", 0) == 5 or bruno_stats.get("games", 0) == 5, (
+        "Expected inactive tier stats to be recorded after running the tier"
+    )
+    # Both should have games recorded
+    assert alice_stats.get("games", 0) == 5, f"Alice should have 5 games, got {alice_stats}"
+    assert bruno_stats.get("games", 0) == 5, f"Bruno should have 5 games, got {bruno_stats}"
