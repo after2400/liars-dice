@@ -44,9 +44,9 @@ def _detect_entry_tier(lb: dict, top_n: int) -> str:
     l1_count = sum(1 for p in players.values() if p.get("tier") == "L1")
     ch_count = sum(1 for p in players.values() if p.get("tier") == "CH")
 
-    if l1_count >= 1:
+    if l1_count >= 1 and l1_count < top_n * 2:
         return "L1"
-    if ch_count >= 1:
+    if ch_count >= 1 and ch_count < top_n:
         return "CH"
     return "PRM"
 
