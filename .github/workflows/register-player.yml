@@ -3,8 +3,6 @@ name: Register Player
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "players/**"
 
 permissions:
   contents: write
