@@ -42,6 +42,14 @@ jobs:
 
           git fetch origin main
 
+          # If the PR touches any files outside players/, it's not a player registration PR — skip.
+          all_changed=$(git diff --name-only origin/main...HEAD || true)
+          non_player=$(echo "$all_changed" | grep -v '^players/' || true)
+          if [ -n "$non_player" ]; then
+            echo "PR touches non-player files — not a player registration PR, skipping."
+            exit 0
+          fi
+
           added=$(git diff --name-only --diff-filter=A origin/main...HEAD -- 'players/*.py' || true)
           modified=$(git diff --name-only --diff-filter=M origin/main...HEAD -- 'players/*.py' || true)
           deleted=$(git diff --name-only --diff-filter=D origin/main...HEAD -- 'players/*.py' || true)
