@@ -63,6 +63,9 @@ def main():
         sys.path.insert(0, "")
 
     spec = importlib.util.spec_from_file_location(module_name, player_file)
+    if spec is None or spec.loader is None:
+        print(f"ERROR: Cannot load {player_file} as a Python module.")
+        sys.exit(1)
     module = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(module)

@@ -244,3 +244,52 @@ def test_register_enters_ch_when_l1_empty(tmp_path):
     assert rc == 0, out
     lb_result = yaml.safe_load((tmp_path / "leaderboard.yaml").read_text())
     assert lb_result["players"]["Bruno"]["tier"] == "CH"
+
+
+def test_stdout_contains_entry_tier(tmp_path):
+    lb = {"total_runs": 0, "players": {}}
+    player_file = REPO_ROOT / "players" / "alice.py"
+    rc, out = run_register(player_file, lb, tmp_path, top_n=4)
+    assert rc == 0, out
+    assert "entry_tier=PRM" in out
+
+
+def test_stdout_entry_tier_when_already_registered(tmp_path):
+    lb = {
+        "total_runs": 0,
+        "players": {
+            "Alice": {
+                "display_name": "Alice",
+                "github_username": "someone",
+                "tier": "CH",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "date_added": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
+        },
+    }
+    player_file = REPO_ROOT / "players" / "alice.py"
+    rc, out = run_register(player_file, lb, tmp_path)
+    assert rc == 0, out
+    assert "entry_tier=CH" in out
+
+
+def test_register_rejects_name_too_long(tmp_path):
+    player_py = tmp_path / "toolong.py"
+    player_py.write_text("class Toolong:\n    name = 'A' * 21\n")
+    # Write the name as a literal string with 21 chars
+    player_py.write_text("class Toolong:\n    name = 'ABCDEFGHIJKLMNOPQRSTU'\n")
+    lb = {"total_runs": 0, "players": {}}
+    rc, out = run_register(str(player_py), lb, tmp_path, top_n=4)
+    assert rc == 1, out
+    assert "ERROR" in out
+
+
+def test_register_rejects_name_with_parens(tmp_path):
+    player_py = tmp_path / "withparens.py"
+    player_py.write_text("class Withparens:\n    name = 'Bad (name)'\n")
+    lb = {"total_runs": 0, "players": {}}
+    rc, out = run_register(str(player_py), lb, tmp_path, top_n=4)
+    assert rc == 1, out
+    assert "ERROR" in out
