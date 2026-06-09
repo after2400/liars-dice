@@ -1,5 +1,5 @@
 total_runs: 3
-last_updated: '2026-06-08T20:41:19Z'
+last_updated: '2026-06-09T18:13:20Z'
 players:
   Alice:
     display_name: Alice
@@ -61,3 +61,11 @@ players:
         wins: 68
         games: 250
         win_pct: 27.2
+  Eva:
+    display_name: Eva
+    github_username: after2400
+    date_added: '2026-06-09T18:13:20Z'
+    tier: CH
+    tier_since: '2026-06-09T18:13:20Z'
+    times_inactive: 0
+    tier_stats: {}
