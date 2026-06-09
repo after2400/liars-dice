@@ -1,0 +1,75 @@
+name: Update Leaderboard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "players/*.py"
+
+permissions:
+  contents: write
+
+env:
+  PYTHONPATH: .
+
+jobs:
+  update-leaderboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --no-install-project
+
+      - name: Update leaderboard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          added=$(git diff --name-only --diff-filter=A HEAD~1 HEAD -- 'players/*.py' || true)
+          modified=$(git diff --name-only --diff-filter=M HEAD~1 HEAD -- 'players/*.py' || true)
+          deleted=$(git diff --name-only --diff-filter=D HEAD~1 HEAD -- 'players/*.py' || true)
+
+          if [ -n "$added" ]; then
+            # Resolve the PR author from the merge commit
+            actor=$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/pulls" \
+              --jq '.[0].user.login' 2>/dev/null || echo "")
+            if [ -z "$actor" ]; then
+              # Fallback: parse PR number from squash commit message (e.g. "Add Eva (#6)")
+              pr_number=$(git log -1 --pretty=%s | grep -oE '#[0-9]+' | tr -d '#' | head -1 || echo "")
+              if [ -n "$pr_number" ]; then
+                actor=$(gh api "repos/${REPOSITORY}/pulls/${pr_number}" \
+                  --jq '.user.login' 2>/dev/null || echo "unknown")
+              else
+                actor="unknown"
+              fi
+            fi
+            PLAYER_FILE="$added" GITHUB_USERNAME="$actor" \
+              uv run python .github/scripts/register_player.py
+          fi
+
+          if [ -n "$modified" ]; then
+            uv run python .github/scripts/lb_update_name.py "$modified"
+          fi
+
+          if [ -n "$deleted" ]; then
+            mapfile -t deleted_files <<< "$deleted"
+            uv run python .github/scripts/lb_delete.py "${deleted_files[@]}"
+          fi
+
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add leaderboard.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: update leaderboard [skip ci]"
+            git push
+          fi
