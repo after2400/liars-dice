@@ -1,0 +1,25 @@
+---
+# Run 'pre-commit install' and 'pre-commit install --hook-type commit-msg' to activate.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.13
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+      - id: ruff-format
+        stages: [pre-commit]
+
+  - repo: local
+    hooks:
+      - id: commitlint
+        name: commitlint
+        language: system
+        entry: commitlint --edit
+        stages: [commit-msg]
+      - id: prettier
+        name: prettier
+        language: system
+        entry: prettier --write --ignore-unknown
+        types_or: [markdown, yaml, json]
+        stages: [pre-commit]

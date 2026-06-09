@@ -1,5 +1,5 @@
 import yaml
-import pytest
+
 from game.components.leaderboard import (
     apply_pending_relegation,
     detect_phase,
@@ -7,20 +7,23 @@ from game.components.leaderboard import (
     update_leaderboard,
 )
 
-
 # --- apply_pending_relegation ---
+
 
 def test_apply_pending_moves_player_to_new_tier(lb_with_pending):
     result = apply_pending_relegation(lb_with_pending)
     assert result["players"]["Alice"]["tier"] == "CH"
 
+
 def test_apply_pending_updates_tier_since(lb_with_pending):
     result = apply_pending_relegation(lb_with_pending)
     assert result["players"]["Alice"]["tier_since"] != "2026-01-01T00:00:00Z"
 
+
 def test_apply_pending_clears_list(lb_with_pending):
     result = apply_pending_relegation(lb_with_pending)
     assert result["pending_relegation"] == []
+
 
 def test_apply_pending_empty_list_is_noop(minimal_lb):
     result = apply_pending_relegation(minimal_lb)
@@ -30,22 +33,33 @@ def test_apply_pending_empty_list_is_noop(minimal_lb):
 
 # --- detect_phase ---
 
+
 def test_detect_phase_1_when_below_top_n(minimal_lb):
     assert detect_phase(minimal_lb, top_n=4) == 1
 
+
 def test_detect_phase_1_when_equal_to_top_n():
     # total == top_n means PRM is exactly full; next entrant still plays PRM and triggers relegation
-    data = {"players": {"A": {"tier": "PRM"}, "B": {"tier": "PRM"},
-                        "C": {"tier": "PRM"}, "D": {"tier": "PRM"}}}
+    data = {
+        "players": {
+            "A": {"tier": "PRM"},
+            "B": {"tier": "PRM"},
+            "C": {"tier": "PRM"},
+            "D": {"tier": "PRM"},
+        }
+    }
     assert detect_phase(data, top_n=4) == 1
+
 
 def test_detect_phase_2_when_between(full_two_tier_lb):
     # 4 total players, TOP_N=2: 4 > 2 and 4 <= 4 → phase 2
     assert detect_phase(full_two_tier_lb, top_n=2) == 2
 
+
 def test_detect_phase_3_when_above_double(full_two_tier_lb):
     # 4 total players, TOP_N=1: 4 > 2 → phase 3
     assert detect_phase(full_two_tier_lb, top_n=1) == 3
+
 
 def test_detect_phase_counts_inactive():
     data = {
@@ -59,12 +73,15 @@ def test_detect_phase_counts_inactive():
 
 # --- get_tier_players ---
 
+
 def test_get_tier_players_returns_correct_names(full_two_tier_lb):
     prm = get_tier_players(full_two_tier_lb, "PRM")
     assert set(prm) == {"Alice", "Bruno"}
 
+
 def test_get_tier_players_empty_when_none(minimal_lb):
     assert get_tier_players(minimal_lb, "CH") == []
+
 
 def test_get_tier_players_includes_inactive():
     data = {"players": {"X": {"tier": "inactive"}, "Y": {"tier": "PRM"}}}
@@ -72,6 +89,7 @@ def test_get_tier_players_includes_inactive():
 
 
 # --- update_leaderboard ---
+
 
 def test_update_stats_for_competing_players(lb_file):
     update_leaderboard(
@@ -83,12 +101,14 @@ def test_update_stats_for_competing_players(lb_file):
     with open(lb_file) as f:
         result = yaml.safe_load(f)
     prm = result["players"]["Alice"]["tier_stats"]["PRM"]
-    assert prm["wins"] == 100   # 40 + 60
+    assert prm["wins"] == 100  # 40 + 60
     assert prm["games"] == 200  # 100 + 100
     assert prm["win_pct"] == 50.0
 
+
 def test_update_does_not_touch_non_competing_players(tmp_path, full_two_tier_lb):
     import yaml as _yaml
+
     path = str(tmp_path / "lb2.yaml")
     (tmp_path / "lb2.yaml").write_text(
         _yaml.dump(full_two_tier_lb, default_flow_style=False, sort_keys=False)
@@ -103,6 +123,7 @@ def test_update_does_not_touch_non_competing_players(tmp_path, full_two_tier_lb)
         result = _yaml.safe_load(f)
     assert result["players"]["Alice"]["tier_stats"]["PRM"]["games"] == 100  # unchanged
 
+
 def test_promotions_change_tier_immediately(lb_file):
     update_leaderboard(
         wins={"Alice": 60, "Bruno": 40},
@@ -114,6 +135,7 @@ def test_promotions_change_tier_immediately(lb_file):
     with open(lb_file) as f:
         result = yaml.safe_load(f)
     assert result["players"]["Bruno"]["tier"] == "CH"
+
 
 def test_pending_relegation_added_to_list(lb_file):
     update_leaderboard(
@@ -128,6 +150,7 @@ def test_pending_relegation_added_to_list(lb_file):
     assert len(result["pending_relegation"]) == 1
     assert result["pending_relegation"][0]["player"] == "Bruno"
 
+
 def test_times_inactive_incremented(lb_file):
     update_leaderboard(
         wins={"Alice": 60, "Bruno": 40},
@@ -140,6 +163,7 @@ def test_times_inactive_incremented(lb_file):
         result = yaml.safe_load(f)
     assert result["players"]["Bruno"]["times_inactive"] == 1
 
+
 def test_times_inactive_not_incremented_for_other_tiers(lb_file):
     update_leaderboard(
         wins={"Alice": 60, "Bruno": 40},
@@ -151,6 +175,7 @@ def test_times_inactive_not_incremented_for_other_tiers(lb_file):
     with open(lb_file) as f:
         result = yaml.safe_load(f)
     assert result["players"]["Bruno"]["times_inactive"] == 0
+
 
 def test_total_runs_incremented(lb_file):
     update_leaderboard(
@@ -190,12 +215,8 @@ def test_update_creates_new_player_with_defaults(lb_file):
 def test_apply_pending_silently_ignores_missing_player():
     """A pending entry for a non-existent player is consumed without error."""
     data = {
-        "pending_relegation": [
-            {"player": "Ghost", "from_tier": "PRM", "to_tier": "CH"}
-        ],
-        "players": {
-            "Alice": {"tier": "PRM", "tier_since": "2026-01-01T00:00:00Z"}
-        },
+        "pending_relegation": [{"player": "Ghost", "from_tier": "PRM", "to_tier": "CH"}],
+        "players": {"Alice": {"tier": "PRM", "tier_since": "2026-01-01T00:00:00Z"}},
     }
     result = apply_pending_relegation(data)
     assert result["pending_relegation"] == []  # consumed
@@ -236,20 +257,34 @@ def test_times_inactive_incremented_on_l1_last_place(lb_file):
 def test_apply_season_results_promotes_top_to_tier_above(tmp_path):
     """apply_season_results moves the top player up immediately."""
     from game.components.leaderboard import apply_season_results
+
     lb = {
         "total_runs": 1,
         "players": {
-            "Alice": {"display_name": "Alice", "github_username": "", "tier": "CH",
-                      "tier_since": "2026-01-01T00:00:00Z", "date_added": "2026-01-01T00:00:00Z",
-                      "times_inactive": 0, "tier_stats": {}},
-            "Bruno": {"display_name": "Bruno", "github_username": "", "tier": "CH",
-                      "tier_since": "2026-01-01T00:00:00Z", "date_added": "2026-01-01T00:00:00Z",
-                      "times_inactive": 0, "tier_stats": {}},
+            "Alice": {
+                "display_name": "Alice",
+                "github_username": "",
+                "tier": "CH",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "date_added": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
+            "Bruno": {
+                "display_name": "Bruno",
+                "github_username": "",
+                "tier": "CH",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "date_added": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
         },
         "last_updated": "2026-01-01T00:00:00Z",
     }
     path = str(tmp_path / "lb.yaml")
     import yaml as _yaml
+
     (tmp_path / "lb.yaml").write_text(_yaml.dump(lb))
 
     apply_season_results(
@@ -261,34 +296,60 @@ def test_apply_season_results_promotes_top_to_tier_above(tmp_path):
     )
     with open(path) as f:
         result = _yaml.safe_load(f)
-    assert result["players"]["Alice"]["tier"] == "PRM"   # top CH → PRM
-    assert result["players"]["Bruno"]["tier"] == "CH"    # stays
+    assert result["players"]["Alice"]["tier"] == "PRM"  # top CH → PRM
+    assert result["players"]["Bruno"]["tier"] == "CH"  # stays
 
 
 def test_apply_season_results_promotes_even_when_tier_above_at_capacity(tmp_path):
     """Promotion is unconditional — capacity in tier above is not checked."""
     from game.components.leaderboard import apply_season_results
+
     lb = {
         "total_runs": 1,
         "players": {
-            "Alice": {"display_name": "Alice", "github_username": "", "tier": "CH",
-                      "tier_since": "2026-01-01T00:00:00Z", "date_added": "2026-01-01T00:00:00Z",
-                      "times_inactive": 0, "tier_stats": {}},
-            "Bruno": {"display_name": "Bruno", "github_username": "", "tier": "CH",
-                      "tier_since": "2026-01-01T00:00:00Z", "date_added": "2026-01-01T00:00:00Z",
-                      "times_inactive": 0, "tier_stats": {}},
+            "Alice": {
+                "display_name": "Alice",
+                "github_username": "",
+                "tier": "CH",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "date_added": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
+            "Bruno": {
+                "display_name": "Bruno",
+                "github_username": "",
+                "tier": "CH",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "date_added": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
             # PRM is already at capacity (top_n=2)
-            "Cleo": {"display_name": "Cleo", "github_username": "", "tier": "PRM",
-                     "tier_since": "2026-01-01T00:00:00Z", "date_added": "2026-01-01T00:00:00Z",
-                     "times_inactive": 0, "tier_stats": {}},
-            "Diego": {"display_name": "Diego", "github_username": "", "tier": "PRM",
-                      "tier_since": "2026-01-01T00:00:00Z", "date_added": "2026-01-01T00:00:00Z",
-                      "times_inactive": 0, "tier_stats": {}},
+            "Cleo": {
+                "display_name": "Cleo",
+                "github_username": "",
+                "tier": "PRM",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "date_added": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
+            "Diego": {
+                "display_name": "Diego",
+                "github_username": "",
+                "tier": "PRM",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "date_added": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
         },
         "last_updated": "2026-01-01T00:00:00Z",
     }
     path = str(tmp_path / "lb.yaml")
     import yaml as _yaml
+
     (tmp_path / "lb.yaml").write_text(_yaml.dump(lb))
 
     apply_season_results(
@@ -307,20 +368,34 @@ def test_apply_season_results_promotes_even_when_tier_above_at_capacity(tmp_path
 def test_apply_season_results_relegates_bottom(tmp_path):
     """apply_season_results moves the bottom player down immediately."""
     from game.components.leaderboard import apply_season_results
+
     lb = {
         "total_runs": 1,
         "players": {
-            "Alice": {"display_name": "Alice", "github_username": "", "tier": "PRM",
-                      "tier_since": "2026-01-01T00:00:00Z", "date_added": "2026-01-01T00:00:00Z",
-                      "times_inactive": 0, "tier_stats": {}},
-            "Bruno": {"display_name": "Bruno", "github_username": "", "tier": "PRM",
-                      "tier_since": "2026-01-01T00:00:00Z", "date_added": "2026-01-01T00:00:00Z",
-                      "times_inactive": 0, "tier_stats": {}},
+            "Alice": {
+                "display_name": "Alice",
+                "github_username": "",
+                "tier": "PRM",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "date_added": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
+            "Bruno": {
+                "display_name": "Bruno",
+                "github_username": "",
+                "tier": "PRM",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "date_added": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
         },
         "last_updated": "2026-01-01T00:00:00Z",
     }
     path = str(tmp_path / "lb.yaml")
     import yaml as _yaml
+
     (tmp_path / "lb.yaml").write_text(_yaml.dump(lb))
 
     apply_season_results(
@@ -332,5 +407,5 @@ def test_apply_season_results_relegates_bottom(tmp_path):
     )
     with open(path) as f:
         result = _yaml.safe_load(f)
-    assert result["players"]["Bruno"]["tier"] == "CH"    # bottom PRM → CH
-    assert result["players"]["Alice"]["tier"] == "PRM"   # stays
+    assert result["players"]["Bruno"]["tier"] == "CH"  # bottom PRM → CH
+    assert result["players"]["Alice"]["tier"] == "PRM"  # stays

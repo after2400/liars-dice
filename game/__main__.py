@@ -2,18 +2,22 @@ import argparse
 import json
 import logging
 import os
-import yaml
 from pathlib import Path
+
+import yaml
 
 project_root = Path(__file__).parent.parent
 
 
 def _parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--tier", choices=["PRM", "CH", "L1"], default=None,
-                   help="Run only players in this tier (L1 also includes inactive)")
-    p.add_argument("--results-file", default=None,
-                   help="Write wins dict as JSON to this path")
+    p.add_argument(
+        "--tier",
+        choices=["PRM", "CH", "L1"],
+        default=None,
+        help="Run only players in this tier (L1 also includes inactive)",
+    )
+    p.add_argument("--results-file", default=None, help="Write wins dict as JSON to this path")
     p.add_argument("n_games", type=int, nargs="?", default=1)
     p.add_argument("top_n", type=int, nargs="?", default=4)
     return p.parse_args()
@@ -52,7 +56,7 @@ logging.basicConfig(level=logging.DEBUG, handlers=[file_handler, console_handler
 
 # --- Imports after logging setup ---
 
-from game.components.series import run_series, format_results  # noqa: E402
+from game.components.series import format_results, run_series  # noqa: E402
 from game.components.utils import import_player_classes_from_dir  # noqa: E402
 
 # --- Main ---
@@ -75,22 +79,28 @@ if args.tier:
 
     if args.tier in ("PRM", "CH"):
         # Registered tier players + unregistered challengers (not yet in leaderboard)
-        players = [p for p in all_players
-                   if _lb_players.get(p.name, {}).get("tier") in include_tiers
-                   or p.name not in _lb_players]
+        players = [
+            p
+            for p in all_players
+            if _lb_players.get(type(p).__name__, {}).get("tier") in include_tiers
+            or type(p).__name__ not in _lb_players
+        ]
     else:
         # L1: registered L1/inactive only — challengers never enter L1 directly
-        players = [p for p in all_players
-                   if _lb_players.get(p.name, {}).get("tier") in include_tiers]
+        players = [
+            p
+            for p in all_players
+            if _lb_players.get(type(p).__name__, {}).get("tier") in include_tiers
+        ]
 else:
     # Local run with no tier filter: include all known players
-    players = [p for p in all_players if p.name in _lb_players] or all_players
+    players = [p for p in all_players if type(p).__name__ in _lb_players] or all_players
 
 if len(players) < 2:
     print(f"[skip] Only {len(players)} player(s) in --tier {args.tier} — no game run.")
     raise SystemExit(0)
 
-print(f"Playing: {[p.name for p in players]}")
+print(f"Playing: {[type(p).__name__ for p in players]}")
 
 wins = run_series(players, N_GAMES)
 print(format_results(wins, N_GAMES))

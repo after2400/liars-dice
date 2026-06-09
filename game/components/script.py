@@ -1,10 +1,10 @@
-import random as r
 import logging
+import random as r
+
+from game.components.bets import Bet, bet_grader, bet_validator
+from game.components.utils import FACES
 
 logger = logging.getLogger(__name__)
-
-from game.components.utils import FACES
-from game.components.bets import Bet, bet_validator, bet_grader
 
 
 def game_orchestrator(
@@ -71,7 +71,7 @@ def game_orchestrator(
         prev_bidder: int | None = None
         loser: int | None = None
         round_winner: int | None = None  # winner of the liar challenge; leads next round
-        wilds = True        # flips to False once someone bids on 1s
+        wilds = True  # flips to False once someone bids on 1s
         ones_allowed = None  # set after first bid: True if opened on 1s, False otherwise
 
         while loser is None:
@@ -80,8 +80,11 @@ def game_orchestrator(
 
             try:
                 action = player.algo(
-                    hands[player_idx], current_bet, total_dice,
-                    bet_history, completed_outcomes,
+                    hands[player_idx],
+                    current_bet,
+                    total_dice,
+                    bet_history,
+                    completed_outcomes,
                 )
             except Exception as exc:
                 logger.error(f"{player.name} raised an exception ({exc}) - penalised")
@@ -109,16 +112,18 @@ def game_orchestrator(
                         logger.info(f"Bet fails - {players[prev_bidder].name} loses a die")
                         loser = prev_bidder
                         round_winner = player_idx
-                    completed_outcomes.append({
-                        "game": game_id,
-                        "round": round_num,
-                        "hands": {players[i].name: hands[i] for i in active_list},
-                        "final_bet": current_bet,
-                        "bidder": players[prev_bidder].name,
-                        "challenger": player.name,
-                        "bet_held": bet_held,
-                        "loser": players[loser].name,
-                    })
+                    completed_outcomes.append(
+                        {
+                            "game": game_id,
+                            "round": round_num,
+                            "hands": {players[i].name: hands[i] for i in active_list},
+                            "final_bet": current_bet,
+                            "bidder": players[prev_bidder].name,
+                            "challenger": player.name,
+                            "bet_held": bet_held,
+                            "loser": players[loser].name,
+                        }
+                    )
             else:
                 # Player makes a new bid
                 if ones_allowed is False and action.face == 1:
@@ -129,13 +134,22 @@ def game_orchestrator(
                     loser = player_idx
                 else:
                     if ones_allowed is None:
-                        ones_allowed = (action.face == 1)
+                        ones_allowed = action.face == 1
                     current_bet = action
                     prev_bidder = player_idx
-                    bet_history.append({"game": game_id, "round": round_num, "player": player.name, "bet": current_bet})
+                    bet_history.append(
+                        {
+                            "game": game_id,
+                            "round": round_num,
+                            "player": player.name,
+                            "bet": current_bet,
+                        }
+                    )
                     if current_bet.face == 1 and wilds:
                         wilds = False
-                        logger.info(f"  {player.name} bets: [{current_bet}]  (1s are no longer wild)")
+                        logger.info(
+                            f"  {player.name} bets: [{current_bet}]  (1s are no longer wild)"
+                        )
                     else:
                         logger.info(f"  {player.name} bets: [{current_bet}]")
                     step += 1

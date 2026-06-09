@@ -1,6 +1,7 @@
 import os
-import yaml
 from datetime import datetime, timezone
+
+import yaml
 
 _LEADERBOARD_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "leaderboard.yaml")
@@ -39,11 +40,7 @@ def detect_phase(data: dict, top_n: int) -> int:
 
 def get_tier_players(data: dict, tier: str) -> list[str]:
     """Return player names whose tier matches the given value."""
-    return [
-        name
-        for name, p in data.get("players", {}).items()
-        if p.get("tier") == tier
-    ]
+    return [name for name, p in data.get("players", {}).items() if p.get("tier") == tier]
 
 
 def update_leaderboard(
@@ -86,15 +83,18 @@ def update_leaderboard(
 
     # Update stats for competing players; create entry for new players
     for name, win_count in wins.items():
-        player = data["players"].setdefault(name, {
-            "display_name": name,
-            "github_username": "",
-            "date_added": now,
-            "tier": tier,
-            "tier_since": now,
-            "times_inactive": 0,
-            "tier_stats": {},
-        })
+        player = data["players"].setdefault(
+            name,
+            {
+                "display_name": name,
+                "github_username": "",
+                "date_added": now,
+                "tier": tier,
+                "tier_since": now,
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
+        )
         ts = player.setdefault("tier_stats", {})
         ts_tier = ts.setdefault(tier, {"wins": 0, "games": 0, "win_pct": 0.0})
         ts_tier["wins"] += win_count
@@ -123,9 +123,14 @@ def update_leaderboard(
 
 _TIER_ABOVE = {"L1": "CH", "CH": "PRM", "inactive": "L1"}
 _TIER_BELOW = {"PRM": "CH", "CH": "L1", "L1": "inactive"}
-_TIER_CAPACITY = lambda tier, top_n: (
-    top_n if tier in ("PRM", "CH") else top_n * 2 if tier == "L1" else float("inf")
-)
+
+
+def _TIER_CAPACITY(tier: str, top_n: int) -> float:
+    if tier in ("PRM", "CH"):
+        return top_n
+    if tier == "L1":
+        return top_n * 2
+    return float("inf")
 
 
 def apply_season_results(

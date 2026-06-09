@@ -1,8 +1,9 @@
-from game.components.bets import Bet
-
 import logging
 
+from game.components.bets import Bet
+
 logger = logging.getLogger(__name__)
+
 
 class Alice:
     """
@@ -12,9 +13,14 @@ class Alice:
 
     name = "Alice"
 
-    def algo(self, hand: list, prior_bet: Bet | None, total_dice: int,
-             bet_history: list[dict], outcomes: list[dict]) -> Bet | None:
-
+    def algo(
+        self,
+        hand: list,
+        prior_bet: Bet | None,
+        total_dice: int,
+        bet_history: list[dict],
+        outcomes: list[dict],
+    ) -> Bet | None:
         # Expected count of any non-1 face across all dice (1s are wild, so ~1/3 chance per die)
         expected = total_dice / 3
 

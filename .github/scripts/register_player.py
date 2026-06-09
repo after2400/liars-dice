@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Validate a player file and register it in leaderboard.yaml.
+
+Environment variables:
+  PLAYER_FILE       path to the player .py file (e.g. players/fred.py)
+  GITHUB_USERNAME   the PR author's GitHub login (github.actor)
+  TOP_N             league capacity per tier (int, default 4)
+
+Exits 0 on success, 1 on validation failure.
+Prints "entry_tier=<tier>" to stdout for the workflow to capture.
+"""
+
+import importlib.util
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+import yaml
+
+LEADERBOARD_PATH = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
+MAX_NAME_LEN = 20
+
+
+def _now():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _load_lb():
+    if os.path.exists(LEADERBOARD_PATH):
+        with open(LEADERBOARD_PATH) as f:
+            return yaml.safe_load(f) or {}
+    return {"players": {}, "total_runs": 0, "last_updated": _now()}
+
+
+def _save_lb(data):
+    data["last_updated"] = _now()
+    with open(LEADERBOARD_PATH, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+
+
+def _detect_entry_tier(lb: dict, top_n: int) -> str:
+    players = lb.get("players", {})
+    l1_count = sum(1 for p in players.values() if p.get("tier") == "L1")
+    ch_count = sum(1 for p in players.values() if p.get("tier") == "CH")
+
+    if l1_count >= 1:
+        return "L1"
+    if ch_count >= 1:
+        return "CH"
+    return "PRM"
+
+
+def main():
+    player_file = os.environ["PLAYER_FILE"]
+    github_username = os.environ["GITHUB_USERNAME"]
+    top_n = int(os.environ.get("TOP_N", "4"))
+
+    module_name = Path(player_file).stem  # e.g. "fred" from "players/fred.py"
+
+    # Ensure the repo root (cwd) is on sys.path so player files can import 'game'
+    if "" not in sys.path and "." not in sys.path:
+        sys.path.insert(0, "")
+
+    spec = importlib.util.spec_from_file_location(module_name, player_file)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except Exception as e:
+        print(f"ERROR: Failed to import {player_file}: {e}")
+        sys.exit(1)
+
+    # Find class matching filename (case-insensitive)
+    player_class = next(
+        (
+            getattr(module, name)
+            for name in dir(module)
+            if name.lower() == module_name.lower() and isinstance(getattr(module, name), type)
+        ),
+        None,
+    )
+    if player_class is None:
+        print(
+            f"ERROR: No class matching '{module_name}' found in {player_file}. "
+            f"Class name must match filename (e.g. class Fred in fred.py)."
+        )
+        sys.exit(1)
+
+    class_name = player_class.__name__
+    display_name = getattr(player_class, "name", class_name)
+
+    # Validate display name
+    if len(display_name) > MAX_NAME_LEN:
+        print(f"ERROR: name attribute '{display_name}' exceeds {MAX_NAME_LEN} characters.")
+        sys.exit(1)
+    if "(" in display_name or ")" in display_name:
+        print("ERROR: name attribute may not contain parentheses (reserved for username suffix).")
+        sys.exit(1)
+
+    lb = _load_lb()
+    players = lb.setdefault("players", {})
+
+    if class_name in players:
+        print(f"Player {class_name} is already registered.")
+        print(f"entry_tier={players[class_name]['tier']}")
+        return
+
+    entry_tier = _detect_entry_tier(lb, top_n)
+    now = _now()
+    players[class_name] = {
+        "display_name": display_name,
+        "github_username": github_username,
+        "date_added": now,
+        "tier": entry_tier,
+        "tier_since": now,
+        "times_inactive": 0,
+        "tier_stats": {},
+    }
+
+    _save_lb(lb)
+    print(f"Registered {class_name} (display: {display_name}) as {github_username} in {entry_tier}")
+    print(f"entry_tier={entry_tier}")
+
+
+if __name__ == "__main__":
+    main()
