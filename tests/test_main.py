@@ -33,14 +33,17 @@ def test_tier_prm_selects_only_prm_players(tmp_path):
         "total_runs": 1,
         "pending_relegation": [],
         "players": {
-            "Alice": {"tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
-                      "tier_since": "2026-01-01T00:00:00Z", "times_last_in_l1": 0,
+            "Alice": {"display_name": "Alice", "github_username": "",
+                      "tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
+                      "tier_since": "2026-01-01T00:00:00Z", "times_inactive": 0,
                       "tier_stats": {"PRM": {"wins": 40, "games": 100, "win_pct": 40.0}}},
-            "Diego": {"tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
-                      "tier_since": "2026-01-01T00:00:00Z", "times_last_in_l1": 0,
+            "Diego": {"display_name": "Diego", "github_username": "",
+                      "tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
+                      "tier_since": "2026-01-01T00:00:00Z", "times_inactive": 0,
                       "tier_stats": {"PRM": {"wins": 30, "games": 100, "win_pct": 30.0}}},
-            "Bruno": {"tier": "CH", "date_added": "2026-01-01T00:00:00Z",
-                      "tier_since": "2026-01-01T00:00:00Z", "times_last_in_l1": 0,
+            "Bruno": {"display_name": "Bruno", "github_username": "",
+                      "tier": "CH", "date_added": "2026-01-01T00:00:00Z",
+                      "tier_since": "2026-01-01T00:00:00Z", "times_inactive": 0,
                       "tier_stats": {"CH": {"wins": 30, "games": 100, "win_pct": 30.0}}},
         },
     }
@@ -56,14 +59,17 @@ def test_tier_l1_includes_inactive_players(tmp_path):
         "total_runs": 1,
         "pending_relegation": [],
         "players": {
-            "Alice": {"tier": "L1", "date_added": "2026-01-01T00:00:00Z",
-                      "tier_since": "2026-01-01T00:00:00Z", "times_last_in_l1": 0,
+            "Alice": {"display_name": "Alice", "github_username": "",
+                      "tier": "L1", "date_added": "2026-01-01T00:00:00Z",
+                      "tier_since": "2026-01-01T00:00:00Z", "times_inactive": 0,
                       "tier_stats": {"L1": {"wins": 40, "games": 100, "win_pct": 40.0}}},
-            "Bruno": {"tier": "inactive", "date_added": "2026-01-01T00:00:00Z",
-                      "tier_since": "2026-01-01T00:00:00Z", "times_last_in_l1": 2,
+            "Bruno": {"display_name": "Bruno", "github_username": "",
+                      "tier": "inactive", "date_added": "2026-01-01T00:00:00Z",
+                      "tier_since": "2026-01-01T00:00:00Z", "times_inactive": 2,
                       "tier_stats": {"L1": {"wins": 30, "games": 100, "win_pct": 30.0}}},
-            "Cleo": {"tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
-                     "tier_since": "2026-01-01T00:00:00Z", "times_last_in_l1": 0,
+            "Cleo": {"display_name": "Cleo", "github_username": "",
+                     "tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
+                     "tier_since": "2026-01-01T00:00:00Z", "times_inactive": 0,
                      "tier_stats": {"PRM": {"wins": 50, "games": 100, "win_pct": 50.0}}},
         },
     }
@@ -79,11 +85,13 @@ def test_results_file_written(tmp_path):
         "total_runs": 1,
         "pending_relegation": [],
         "players": {
-            "Alice": {"tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
-                      "tier_since": "2026-01-01T00:00:00Z", "times_last_in_l1": 0,
+            "Alice": {"display_name": "Alice", "github_username": "",
+                      "tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
+                      "tier_since": "2026-01-01T00:00:00Z", "times_inactive": 0,
                       "tier_stats": {"PRM": {"wins": 40, "games": 100, "win_pct": 40.0}}},
-            "Bruno": {"tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
-                      "tier_since": "2026-01-01T00:00:00Z", "times_last_in_l1": 0,
+            "Bruno": {"display_name": "Bruno", "github_username": "",
+                      "tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
+                      "tier_since": "2026-01-01T00:00:00Z", "times_inactive": 0,
                       "tier_stats": {"PRM": {"wins": 30, "games": 100, "win_pct": 30.0}}},
         },
     }
@@ -98,11 +106,13 @@ def test_no_leaderboard_update_written(tmp_path):
         "total_runs": 1,
         "pending_relegation": [],
         "players": {
-            "Alice": {"tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
-                      "tier_since": "2026-01-01T00:00:00Z", "times_last_in_l1": 0,
+            "Alice": {"display_name": "Alice", "github_username": "",
+                      "tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
+                      "tier_since": "2026-01-01T00:00:00Z", "times_inactive": 0,
                       "tier_stats": {"PRM": {"wins": 40, "games": 100, "win_pct": 40.0}}},
-            "Bruno": {"tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
-                      "tier_since": "2026-01-01T00:00:00Z", "times_last_in_l1": 0,
+            "Bruno": {"display_name": "Bruno", "github_username": "",
+                      "tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
+                      "tier_since": "2026-01-01T00:00:00Z", "times_inactive": 0,
                       "tier_stats": {"PRM": {"wins": 30, "games": 100, "win_pct": 30.0}}},
         },
     }
@@ -118,3 +128,22 @@ def test_no_leaderboard_update_written(tmp_path):
         cwd=REPO_ROOT, capture_output=True, check=True, env=env,
     )
     assert lb_path.read_text() == original_content
+
+
+def test_class_name_used_as_leaderboard_key(tmp_path):
+    """Game results dict uses class name (type(p).__name__), not p.name attribute."""
+    lb = {
+        "total_runs": 1,
+        "players": {
+            "Alice": {"display_name": "Alice", "github_username": "",
+                      "tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
+                      "tier_since": "2026-01-01T00:00:00Z", "times_inactive": 0,
+                      "tier_stats": {"PRM": {"wins": 40, "games": 100, "win_pct": 40.0}}},
+            "Bruno": {"display_name": "Bruno", "github_username": "",
+                      "tier": "PRM", "date_added": "2026-01-01T00:00:00Z",
+                      "tier_since": "2026-01-01T00:00:00Z", "times_inactive": 0,
+                      "tier_stats": {"PRM": {"wins": 30, "games": 100, "win_pct": 30.0}}},
+        },
+    }
+    results = run_game(["5", "4"], lb, tmp_path)
+    assert set(results.keys()) == {"Alice", "Bruno"}

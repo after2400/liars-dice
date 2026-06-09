@@ -1,55 +1,61 @@
 total_runs: 3
 last_updated: '2026-06-08T20:41:19Z'
-pending_relegation:
-- player: Cleo
-  from_tier: PRM
-  to_tier: CH
 players:
   Alice:
+    display_name: Alice
+    github_username: ''
     date_added: '2026-05-22T15:47:31Z'
     tier: PRM
     tier_since: '2026-05-22T15:47:31Z'
-    times_last_in_l1: 0
+    times_inactive: 0
     tier_stats:
       PRM:
         wins: 127
         games: 450
         win_pct: 28.2
   Bruno:
+    display_name: Bruno
+    github_username: ''
     date_added: '2026-05-22T15:47:31Z'
     tier: PRM
     tier_since: '2026-05-22T15:47:31Z'
-    times_last_in_l1: 0
+    times_inactive: 0
     tier_stats:
       PRM:
         wins: 90
         games: 450
         win_pct: 20.0
   Cleo:
+    display_name: Cleo
+    github_username: ''
     date_added: '2026-05-22T15:47:31Z'
-    tier: PRM
-    tier_since: '2026-05-22T15:47:31Z'
-    times_last_in_l1: 0
+    tier: CH
+    tier_since: '2026-06-08T20:41:19Z'
+    times_inactive: 0
     tier_stats:
       PRM:
         wins: 5
         games: 450
         win_pct: 1.1
   Diego:
+    display_name: Diego
+    github_username: ''
     date_added: '2026-05-22T16:10:13Z'
     tier: PRM
     tier_since: '2026-05-22T16:10:13Z'
-    times_last_in_l1: 0
+    times_inactive: 0
     tier_stats:
       PRM:
         wins: 160
         games: 350
         win_pct: 45.7
   Finn:
+    display_name: Finn
+    github_username: after2400
     date_added: '2026-06-08T20:41:19Z'
     tier: PRM
     tier_since: '2026-06-08T20:41:19Z'
-    times_last_in_l1: 0
+    times_inactive: 0
     tier_stats:
       PRM:
         wins: 68

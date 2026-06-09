@@ -128,7 +128,7 @@ def test_pending_relegation_added_to_list(lb_file):
     assert len(result["pending_relegation"]) == 1
     assert result["pending_relegation"][0]["player"] == "Bruno"
 
-def test_times_last_in_l1_incremented(lb_file):
+def test_times_inactive_incremented(lb_file):
     update_leaderboard(
         wins={"Alice": 60, "Bruno": 40},
         n_games=100,
@@ -138,9 +138,9 @@ def test_times_last_in_l1_incremented(lb_file):
     )
     with open(lb_file) as f:
         result = yaml.safe_load(f)
-    assert result["players"]["Bruno"]["times_last_in_l1"] == 1
+    assert result["players"]["Bruno"]["times_inactive"] == 1
 
-def test_times_last_in_l1_not_incremented_for_other_tiers(lb_file):
+def test_times_inactive_not_incremented_for_other_tiers(lb_file):
     update_leaderboard(
         wins={"Alice": 60, "Bruno": 40},
         n_games=100,
@@ -150,7 +150,7 @@ def test_times_last_in_l1_not_incremented_for_other_tiers(lb_file):
     )
     with open(lb_file) as f:
         result = yaml.safe_load(f)
-    assert result["players"]["Bruno"]["times_last_in_l1"] == 0
+    assert result["players"]["Bruno"]["times_inactive"] == 0
 
 def test_total_runs_incremented(lb_file):
     update_leaderboard(
@@ -181,7 +181,9 @@ def test_update_creates_new_player_with_defaults(lb_file):
     assert ch["games"] == 100
     assert ch["win_pct"] == 40.0
     assert np["tier"] == "CH"
-    assert np["times_last_in_l1"] == 0
+    assert np["times_inactive"] == 0
+    assert np["display_name"] == "NewPlayer"
+    assert np["github_username"] == ""
     assert "date_added" in np
 
 
