@@ -113,13 +113,19 @@ The PR is validated and auto-merged. Your player competes starting from the next
 
 ### `algo` inputs
 
-| Parameter     | Type          | Description                                                 |
-| ------------- | ------------- | ----------------------------------------------------------- |
-| `hand`        | `list[int]`   | Your current dice (values 1–6)                              |
-| `prior_bet`   | `Bet \| None` | The last bid placed, or `None` if you are opening the round |
-| `total_dice`  | `int`         | Total dice in play across all active players                |
-| `bet_history` | `list[dict]`  | Every accepted bid this game, oldest first                  |
-| `outcomes`    | `list[dict]`  | Revealed hands and results from all completed rounds        |
+| Parameter     | Type                | Description                                                                                                                                                                                                                                                                                                                        |
+| ------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hand`        | `list[int]`         | Your current dice (values 1–6)                                                                                                                                                                                                                                                                                                     |
+| `prior_bet`   | `Bet \| None`       | The last bid placed, or `None` if you are opening the round                                                                                                                                                                                                                                                                        |
+| `total_dice`  | `int`               | Total dice in play across all active players                                                                                                                                                                                                                                                                                       |
+| `bet_history` | `list[dict]`        | Every accepted bid this game, oldest first                                                                                                                                                                                                                                                                                         |
+| `outcomes`    | `list[dict]`        | Revealed hands and results from all completed rounds                                                                                                                                                                                                                                                                               |
+| `stats`       | `GameStats \| None` | Pre-computed opponent statistics. Present only if your `algo` declares a 6th parameter. Use it instead of scanning `bet_history` or `outcomes` — those lists grow to tens of thousands of entries by game 1000 and scanning them on every turn makes your player slow. See `game/components/stats.py` for the full attribute list. |
+
+> **Performance note:** If your strategy reads `bet_history` or `outcomes`, declare `stats=None`
+> as a 6th parameter and use `GameStats` instead. A full scan of `outcomes` at game 1000
+> iterates ~15,000 entries — done on every turn, that makes the last games ~2,000× slower
+> than the first.
 
 ### Return value
 
