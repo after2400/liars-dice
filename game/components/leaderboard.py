@@ -184,15 +184,14 @@ def apply_season_results(
         data["players"][promoted]["tier"] = tier_above
         data["players"][promoted]["tier_since"] = now
 
-    # Relegate if the tier started at or above capacity (always at least 1 from a full cohort).
-    # Don't relegate if the tier ran below capacity — thin tiers should grow, not shrink.
+    # Relegate only if remaining players exceed capacity after promotion.
+    # If the tier ran at exactly capacity and promoted one out, remaining = capacity-1 — no
+    # excess, no relegation. Relegation only triggers when the tier is genuinely overcrowded
+    # (e.g. someone was promoted in from below before this tier ran).
     if tier_below:
         capacity = _TIER_CAPACITY(tier, top_n)
         remaining = [p for p in players_in_tier if p != promoted]
-        if remaining and len(players_in_tier) >= capacity:
-            excess = max(1, len(remaining) - capacity)
-        else:
-            excess = 0
+        excess = max(0, len(remaining) - capacity)
         for name in reversed(remaining):
             if excess <= 0:
                 break

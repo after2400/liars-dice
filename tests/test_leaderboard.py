@@ -255,7 +255,7 @@ def test_times_inactive_incremented_on_l1_last_place(lb_file):
 
 
 def test_apply_season_results_promotes_top_to_tier_above(tmp_path):
-    """apply_season_results moves the top player up immediately."""
+    """Top player promotes; bottom stays when tier ran at capacity with no overcrowding."""
     from game.components.leaderboard import apply_season_results
 
     lb = {
@@ -297,7 +297,7 @@ def test_apply_season_results_promotes_top_to_tier_above(tmp_path):
     with open(path) as f:
         result = _yaml.safe_load(f)
     assert result["players"]["Alice"]["tier"] == "PRM"  # top CH → PRM
-    assert result["players"]["Bruno"]["tier"] == "L1"  # bottom always relegates
+    assert result["players"]["Bruno"]["tier"] == "CH"  # no excess — stays in CH
 
 
 def test_apply_season_results_promotes_even_when_tier_above_at_capacity(tmp_path):
@@ -365,8 +365,8 @@ def test_apply_season_results_promotes_even_when_tier_above_at_capacity(tmp_path
     assert result["players"]["Alice"]["tier"] == "PRM"
 
 
-def test_apply_season_results_relegates_bottom(tmp_path):
-    """apply_season_results moves the bottom player down immediately."""
+def test_apply_season_results_no_relegation_from_prm_at_exact_capacity(tmp_path):
+    """PRM at exact capacity with no CH promotion: both players stay."""
     from game.components.leaderboard import apply_season_results
 
     lb = {
@@ -407,12 +407,12 @@ def test_apply_season_results_relegates_bottom(tmp_path):
     )
     with open(path) as f:
         result = _yaml.safe_load(f)
-    assert result["players"]["Bruno"]["tier"] == "CH"  # bottom PRM → CH
     assert result["players"]["Alice"]["tier"] == "PRM"  # stays
+    assert result["players"]["Bruno"]["tier"] == "PRM"  # no excess — stays
 
 
-def test_apply_season_results_relegates_bottom_even_when_promotion_restores_capacity(tmp_path):
-    """When CH has capacity+1 players, promoting the top still relegates the bottom."""
+def test_apply_season_results_no_relegation_when_promotion_restores_capacity(tmp_path):
+    """CH at capacity+1: promoting the top brings it back to capacity — no further relegation."""
     import yaml as _yaml
 
     from game.components.leaderboard import apply_season_results
@@ -428,7 +428,7 @@ def test_apply_season_results_relegates_bottom_even_when_promotion_restores_capa
             "tier_stats": {},
         }
 
-    # top_n=4, so CH capacity=4. Start with 5 in CH (capacity+1).
+    # top_n=4, so CH capacity=4. Start with 5 in CH (e.g. L1 promoted someone in).
     lb = {
         "total_runs": 1,
         "players": {
@@ -454,12 +454,54 @@ def test_apply_season_results_relegates_bottom_even_when_promotion_restores_capa
         result = _yaml.safe_load(f)
 
     assert result["players"]["P1"]["tier"] == "PRM"  # top promotes
-    assert (
-        result["players"]["P5"]["tier"] == "L1"
-    )  # bottom relegates even though P1 leaving restored capacity
+    assert result["players"]["P2"]["tier"] == "CH"  # remaining 4 = capacity, no excess
+    assert result["players"]["P3"]["tier"] == "CH"
+    assert result["players"]["P4"]["tier"] == "CH"
+    assert result["players"]["P5"]["tier"] == "CH"  # stays — promotion restored capacity
+
+
+def test_apply_season_results_relegates_when_truly_overcrowded(tmp_path):
+    """CH at capacity+2: after promoting top, still 1 player over — relegate that one."""
+    import yaml as _yaml
+
+    from game.components.leaderboard import apply_season_results
+
+    def _player(tier):
+        return {
+            "display_name": "",
+            "github_username": "",
+            "tier": tier,
+            "tier_since": "2026-01-01T00:00:00Z",
+            "date_added": "2026-01-01T00:00:00Z",
+            "times_inactive": 0,
+            "tier_stats": {},
+        }
+
+    # top_n=4, so CH capacity=4. Start with 6 in CH (capacity+2).
+    lb = {
+        "total_runs": 1,
+        "players": {f"P{i}": _player("CH") for i in range(1, 7)},
+        "last_updated": "2026-01-01T00:00:00Z",
+    }
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(_yaml.dump(lb))
+
+    apply_season_results(
+        wins={"P1": 60, "P2": 50, "P3": 40, "P4": 30, "P5": 10, "P6": 0},
+        n_games=100,
+        tier="CH",
+        top_n=4,
+        path=path,
+    )
+    with open(path) as f:
+        result = _yaml.safe_load(f)
+
+    assert result["players"]["P1"]["tier"] == "PRM"  # top promotes
+    assert result["players"]["P6"]["tier"] == "L1"  # 1 excess after promotion → relegated
     assert result["players"]["P2"]["tier"] == "CH"
     assert result["players"]["P3"]["tier"] == "CH"
     assert result["players"]["P4"]["tier"] == "CH"
+    assert result["players"]["P5"]["tier"] == "CH"  # exactly at capacity now
 
 
 def test_apply_season_results_no_relegation_when_tier_below_capacity(tmp_path):
