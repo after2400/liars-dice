@@ -6,7 +6,7 @@
 
 **Architecture:** `GameStats` lives in `game/components/stats.py` and is created once per `run_series()` call. It is updated incrementally inside `game_orchestrator()` after each bid and each round outcome. `game_orchestrator()` inspects each player's `algo` signature via `inspect.signature`; players that declare a 6th parameter receive the `stats` object, all others are called with the existing 5-arg signature.
 
-**Tech Stack:** Python 3.12+, `collections.defaultdict`, `inspect`, `uv run pytest`
+**Tech Stack:** Python 3.11+, `collections.defaultdict`, `inspect`, `uv run pytest`
 
 **IMPORTANT — always use `uv run python` and `uv run pytest`, never bare `python` or `pytest`.**
 
