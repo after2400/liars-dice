@@ -41,17 +41,20 @@ class Zara:
         total_dice: int,
         bet_history: list[dict],
         outcomes: list[dict],
+        stats=None,
     ) -> Bet | None:
         if prior_bet is None:
             best_face = max(range(2, 7), key=lambda f: hand.count(f) + hand.count(1))
             own = hand.count(best_face) + hand.count(1)
             unseen = total_dice - len(hand)
-            quantity = max(
-                1, round(own + unseen * (2 / 6) * 0.75)
-            )  # between Diego's 0.7 and Eva's 0.8
+            quantity = max(1, round(own + unseen * (2 / 6) * 0.75))
             return Bet(quantity, best_face, self.name)
 
-        bluff_rate = self._bluff_rate(prior_bet.player, outcomes)
+        if stats is not None:
+            bluff_rate = stats.bluff_rate.get(prior_bet.player, 0.5)
+        else:
+            bluff_rate = self._bluff_rate(prior_bet.player, outcomes)
+
         if self._prob_bet_holds(
             hand, prior_bet.face, prior_bet.quantity, total_dice
         ) < self._threshold(bluff_rate):
