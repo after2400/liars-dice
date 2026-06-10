@@ -64,9 +64,9 @@ class Sloane:
         total_dice: int,
         bet_history: list[dict],
         outcomes: list[dict],
+        stats=None,
     ) -> Bet | None:
         if prior_bet is None:
-            # Open round: conservative opening like Diego, slightly aggressive on strong faces
             best_face = max(range(2, 7), key=lambda f: hand.count(f) + hand.count(1))
             own = hand.count(best_face) + hand.count(1)
             unseen = total_dice - len(hand)
@@ -74,27 +74,40 @@ class Sloane:
             quantity = max(1, round(own + expected_others * 0.7))
             return Bet(quantity, best_face, self.name)
 
-        # Calculate adjusted threshold
         p_holds = self._prob_bet_holds(hand, prior_bet.face, prior_bet.quantity, total_dice)
 
-        # We need game and round indices from bet_history to compute momentum
-        # Since we don't have them explicitly in algo args, we infer from the last entry of bet_history
-        if not bet_history:
-            game, round_num = 0, 0
-        else:
-            last_entry = bet_history[-1]
-            game, round_num = last_entry["game"], last_entry["round"]
+        if stats is not None:
+            face_bluff_rate = stats.bluff_rate_by_face.get(prior_bet.player, {}).get(
+                prior_bet.face, 0.5
+            )
+            delta_bias = (0.5 - (1 - face_bluff_rate)) * 0.2
 
-        delta_bias = self._calculate_delta_bias(prior_bet.player, prior_bet.face, outcomes)
-        delta_momentum = self._calculate_delta_momentum(bet_history, game, round_num)
-        delta_sig = self._calculate_delta_signature(
-            prior_bet.player, prior_bet.face, prior_bet.quantity, outcomes
-        )
+            delta_momentum = (1.0 - stats.current_round_velocity) * 0.1
+
+            mean_qty = stats.mean_held_quantity_by_face.get(prior_bet.player, {}).get(
+                prior_bet.face, 0
+            )
+            if mean_qty > 0:
+                ratio = prior_bet.quantity / mean_qty
+                delta_sig = min(0.1, (ratio - 1.5) * 0.05) if ratio > 1.5 else 0.0
+            else:
+                delta_sig = 0.0
+        else:
+            if not bet_history:
+                game, round_num = 0, 0
+            else:
+                last_entry = bet_history[-1]
+                game, round_num = last_entry["game"], last_entry["round"]
+            delta_bias = self._calculate_delta_bias(prior_bet.player, prior_bet.face, outcomes)
+            delta_momentum = self._calculate_delta_momentum(bet_history, game, round_num)
+            delta_sig = self._calculate_delta_signature(
+                prior_bet.player, prior_bet.face, prior_bet.quantity, outcomes
+            )
 
         threshold_eff = 0.30 + delta_bias + delta_momentum + delta_sig
 
         if p_holds < threshold_eff:
-            return None  # Call liar
+            return None
 
         # Raising strategy (Diego-style)
         own_on_face = hand.count(prior_bet.face) + (hand.count(1) if prior_bet.face != 1 else 0)
