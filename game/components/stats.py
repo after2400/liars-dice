@@ -52,7 +52,8 @@ class GameStats:
 
     def update_bet(self, bet_entry: dict, is_opening_bid: bool, total_dice: int) -> None:
         """Call after each accepted bid. Updates face_bias, bid_increment, opening_aggression,
-        and current_round_velocity. Does NOT update bluff/hold counts (those need outcome data)."""
+        and current_round_velocity. Does NOT update bluff/hold counts (those need outcome data).
+        Also updates challenge_rate denominator (each bid counts as a turn for challenge-rate tracking)."""
         player = bet_entry["player"]
         bet = bet_entry["bet"]
 

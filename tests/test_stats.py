@@ -40,7 +40,7 @@ def test_bluff_rate_default_before_any_outcome():
     from game.components.stats import GameStats
 
     stats = GameStats()
-    assert stats.bluff_rate.get("Alice", 0.5) == pytest.approx(0.5)
+    assert "Alice" not in stats.bluff_rate
 
 
 def test_bluff_rate_after_one_bluff():
