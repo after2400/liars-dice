@@ -1,6 +1,6 @@
 # Liar's Dice League
 
-A Python engine for running Liar's Dice games between algorithmic players. Players compete in a tiered league — submit a PR to join, and a daily scheduled run plays the games and updates standings.
+A Python engine for running Liar's Dice games between algorithmic players. Players compete in a tiered league — submit a PR to join, and a weekly scheduled run plays the games and updates standings (extra runs trigger automatically when a player file changes).
 
 ## Current Standings
 
@@ -18,19 +18,19 @@ A Python engine for running Liar's Dice games between algorithmic players. Playe
 | Player | Win % in CH | Wins in CH | Win % Total | Total Wins | Games |
 |--------|----------------|----------------|-------------|------------|-------|
 | Remy | 20.1 | 604 | 20.1 | 604 | 3000 |
+| Bruno | 15.2 | 152 | 12.1 | 419 | 1000 |
 | Alice | 12.2 | 243 | 13.2 | 457 | 2000 |
 | Finn | 0.0 | 0 | 14.0 | 455 | 0 |
 
 ### Level 1
 | Player | Win % in L1 | Wins in L1 | Win % Total | Total Wins | Games |
 |--------|----------------|----------------|-------------|------------|-------|
-| Bruno | 0.0 | 0 | 12.1 | 419 | 0 |
 | Cleo | 0.0 | 0 | 0.3 | 7 | 0 |
 
 <!-- leaderboard-end -->
 <!-- prettier-ignore-end -->
 
-_Updated daily at 9am UTC. Full history in the [season tracking issue](https://github.com/after2400/liars-dice/issues/4)._
+_Updated weekly (Mondays at 9am UTC) or whenever a player file is added/modified. Full history in the [season tracking issue](https://github.com/after2400/liars-dice/issues/4)._
 
 ---
 
@@ -45,8 +45,9 @@ Two workflows replace the old per-PR game model:
 - Commits the leaderboard update and auto-merges the PR
 - No games run immediately
 
-**`run-season.yml`** — runs daily at 9am UTC (`0 9 * * *`)
+**`run-season.yml`** — cron fires daily at 9am UTC; a guard job decides whether to actually run
 
+- Runs on Mondays (weekly cadence) or when any `players/*.py` file was added/modified in the last 24h; `workflow_dispatch` always runs
 - Plays `N_GAMES` (default 1000) games in each active tier, bottom-up: `inactive → L1 → CH → PRM`
 - Promotions and relegations are applied between tiers (so a player promoted from L1 can compete in CH the same day)
 - Commits the updated leaderboard and posts a summary to the season tracking issue
@@ -68,7 +69,7 @@ Capacities scale with `TOP_N` (repo variable, default 4, max 8):
 
 **Entry tier:** new players enter the lowest active tier that has capacity (L1 if possible, else CH, else PRM). A player registered mid-day plays in the next scheduled run.
 
-**Promotion / relegation (per daily run):**
+**Promotion / relegation (per season run):**
 
 - Top player in each tier promotes to the tier above
 - Bottom player(s) relegate to the tier below
@@ -101,7 +102,7 @@ class Fred:
         ...
 ```
 
-The PR is validated and auto-merged. Your player competes starting from the next daily run.
+The PR is validated and auto-merged. Your player competes starting from the next scheduled run.
 
 **Modifying your player:** open a PR that modifies your existing file. The workflow verifies authorship (your `github_username` in the leaderboard must match the PR author) and auto-merges.
 
@@ -231,19 +232,16 @@ game/
     bets.py            # Bet class, bet_validator, bet_grader
     series.py          # series runner and results formatter
     leaderboard.py     # leaderboard read/write, apply_season_results
+    stats.py           # GameStats incremental stats (passed as 6th algo arg)
     utils.py           # player loader
 
-players/
-  alice.py             # balanced strategy
-  bruno.py             # aggressive strategy
-  cleo.py              # cautious strategy
-  diego.py             # hand-anchored strategy
-  finn.py              # adaptive threshold strategy
+players/               # one .py file per player — see full list on GitHub
+  ...                  # https://github.com/after2400/liars-dice/tree/main/players
 
 .github/
   workflows/
     register-player.yml  # PR validation, registration, auto-merge
-    run-season.yml       # daily scheduled season runner
+    run-season.yml       # weekly/conditional season runner (guard + run jobs)
     lint.yml             # ruff + commitlint on push/PR
   scripts/
     register_player.py   # validates player file, writes leaderboard entry

@@ -307,7 +307,7 @@ def _update_readme(readme_path: str, lb_path: str) -> None:
 
 
 def main() -> None:
-    n_games = int(os.environ.get("N_GAMES", "250"))
+    n_games = int(os.environ.get("N_GAMES", "1000"))
     top_n = int(os.environ.get("TOP_N", "4"))
     lb_path = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
     summary_file = os.environ.get("SUMMARY_FILE", "season_summary.md")

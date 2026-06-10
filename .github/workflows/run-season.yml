@@ -49,7 +49,7 @@ jobs:
 
     env:
       PYTHONPATH: .
-      N_GAMES: ${{ vars.N_GAMES || '250' }}
+      N_GAMES: ${{ vars.N_GAMES || '1000' }}
       TOP_N: ${{ vars.TOP_N || '4' }}
 
     steps:
