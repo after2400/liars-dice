@@ -40,7 +40,7 @@ Two workflows replace the old per-PR game model:
 
 **`register-player.yml`** — triggered when a PR touches `players/`
 
-- Validates the player file (class name matches filename, display name ≤ 20 chars)
+- Validates the player file (class name matches filename, display name ≤ 25 chars)
 - Registers the player in `leaderboard.yaml` at the appropriate entry tier
 - Commits the leaderboard update and auto-merges the PR
 - No games run immediately
@@ -83,7 +83,7 @@ Open a PR that adds a single `.py` file to `players/`. The file must:
 
 1. Be named after the class it contains — `fred.py` must define `class Fred`
 2. Implement the `algo` method (see API below)
-3. Optionally set a `name` attribute (display name, ≤ 20 chars, no parentheses)
+3. Optionally set a `name` attribute (display name, ≤ 25 chars, no parentheses)
 
 ```python
 from game.components.bets import Bet

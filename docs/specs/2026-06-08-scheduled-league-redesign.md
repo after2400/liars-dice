@@ -19,6 +19,7 @@ Decouple game execution from player registration. PRs add players to the league;
 ### Two workflows replace the current one
 
 **`register-player.yml`** — triggered by PR to `main` touching `players/*`
+
 1. Validate the PR (see PR Validation)
 2. Detect entry tier (see Entry Tier Logic)
 3. Register player in `leaderboard.yaml` (see Leaderboard Schema)
@@ -27,6 +28,7 @@ Decouple game execution from player registration. PRs add players to the league;
 6. No games run
 
 **`run-season.yml`** — triggered on a daily schedule (`0 9 * * *` UTC — 4am EST, 5am EDT)
+
 1. Run each active tier in bottom-up order: **inactive → L1 → CH → PRM**
    - Active = has ≥2 players
    - Run `N_GAMES` (250) games per tier
@@ -40,12 +42,12 @@ Decouple game execution from player registration. PRs add players to the league;
 
 Capacities scale with `TOP_N` (GitHub repo variable, starts at 4, max 8):
 
-| Tier     | Capacity    | Notes                                        |
-|----------|-------------|----------------------------------------------|
-| PRM      | `TOP_N`     | Premier Division                             |
-| CH       | `TOP_N`     | Championship                                 |
-| L1       | `2 × TOP_N` | League One                                   |
-| inactive | unlimited   | Daily game with up to `2 × TOP_N` players    |
+| Tier     | Capacity    | Notes                                     |
+| -------- | ----------- | ----------------------------------------- |
+| PRM      | `TOP_N`     | Premier Division                          |
+| CH       | `TOP_N`     | Championship                              |
+| L1       | `2 × TOP_N` | League One                                |
+| inactive | unlimited   | Daily game with up to `2 × TOP_N` players |
 
 ---
 
@@ -55,14 +57,14 @@ Player files must define a class with a `make_bid` method. The `name` attribute 
 
 ```python
 class Fred:
-    name = "Fred the Magnificent"  # optional display name, max 20 chars
+    name = "Fred the Magnificent"  # optional display name, max 25 chars
                                    # defaults to class name if omitted
 
     def make_bid(self, ...):
         ...
 ```
 
-- `name` must be ≤20 characters, alphanumeric + spaces + basic punctuation
+- `name` must be ≤25 characters, alphanumeric + spaces + basic punctuation
 - Parentheses are reserved (used for the username suffix in display)
 - The class name (i.e. `Fred`) is the stable identifier — it must match the filename (`fred.py`)
 
@@ -74,13 +76,13 @@ The leaderboard key is the **class name** (stable, immutable). Display name and 
 
 ```yaml
 players:
-  Fred:                              # key = class name
+  Fred: # key = class name
     display_name: Fred the Magnificent
     github_username: after2400
-    date_added: '2026-06-08T00:00:00Z'
+    date_added: "2026-06-08T00:00:00Z"
     tier: PRM
-    tier_since: '2026-06-08T00:00:00Z'
-    times_inactive: 0                # replaces times_last_in_l1
+    tier_since: "2026-06-08T00:00:00Z"
+    times_inactive: 0 # replaces times_last_in_l1
     tier_stats:
       PRM:
         wins: 60
@@ -103,21 +105,21 @@ deletions with additions or modifications is rejected outright.
 
 ### Addition / modification (exactly one file)
 
-| Diff filter | Case | Action |
-|-------------|------|--------|
-| Added, class name not in leaderboard | New player | Register + auto-merge |
-| Added, class name already in leaderboard | Duplicate name | Reject with comment |
-| Modified, `github_username` matches `github.actor` | Algorithm update | Validate + auto-merge |
-| Modified, `github_username` mismatch and actor is not admin | Unauthorized edit | Reject with comment |
-| Modified, actor is admin | Admin override | Validate + auto-merge |
+| Diff filter                                                 | Case              | Action                |
+| ----------------------------------------------------------- | ----------------- | --------------------- |
+| Added, class name not in leaderboard                        | New player        | Register + auto-merge |
+| Added, class name already in leaderboard                    | Duplicate name    | Reject with comment   |
+| Modified, `github_username` matches `github.actor`          | Algorithm update  | Validate + auto-merge |
+| Modified, `github_username` mismatch and actor is not admin | Unauthorized edit | Reject with comment   |
+| Modified, actor is admin                                    | Admin override    | Validate + auto-merge |
 
 ### Deletion (one or more files, admin batch allowed)
 
-| Case | Action |
-|------|--------|
-| Actor is admin | Remove all deleted players from leaderboard + auto-merge |
-| Actor is not admin, deleted file belongs to actor | Self-removal + auto-merge |
-| Actor is not admin, any deleted file belongs to another player | Reject with comment |
+| Case                                                           | Action                                                   |
+| -------------------------------------------------------------- | -------------------------------------------------------- |
+| Actor is admin                                                 | Remove all deleted players from leaderboard + auto-merge |
+| Actor is not admin, deleted file belongs to actor              | Self-removal + auto-merge                                |
+| Actor is not admin, any deleted file belongs to another player | Reject with comment                                      |
 
 **Admin check:** query the GitHub API for the actor's repository permission level.
 Admin = `admin` permission role.
@@ -175,19 +177,23 @@ within a single scheduled run.
 ### Per-tier rules (per daily run)
 
 **inactive:**
+
 - Up to `2 × TOP_N` players participate (selection criteria: see Open Questions)
 - Top player → promoted to L1 (if L1 has capacity)
 - No relegation out of inactive
 
 **L1:**
+
 - Top player → promoted to CH (if CH has capacity)
 - Bottom player → relegated to inactive; `times_inactive` incremented
 
 **CH:**
+
 - Top player → promoted to PRM (if PRM has capacity)
 - Bottom player → relegated to L1 (if L1 has capacity)
 
 **PRM:**
+
 - Bottom player → relegated to CH (if CH has capacity)
 - No promotion out of PRM
 
@@ -226,6 +232,7 @@ table reflects the player's **current tier** only.
 ### Per-run results (to implement)
 
 Each daily run posts a summary showing:
+
 - Standings table with cumulative tier win%
 - This run's results (wins out of `N_GAMES`, win% for this run only)
 - Promotions and relegations that occurred
@@ -234,15 +241,15 @@ Each daily run posts a summary showing:
 
 ## Decisions
 
-| Topic | Decision |
-|-------|----------|
-| Schedule | `0 9 * * *` UTC (4am EST / 5am EDT) |
-| Churn | Single-run results for promotion/relegation; revisit with rolling average if too volatile |
-| Tier capacities | PRM = `TOP_N`, CH = `TOP_N`, L1 = `2 × TOP_N`, inactive = unlimited (capped at `2 × TOP_N` for daily game) |
-| Max TOP_N | 8 (giving PRM=8, CH=8, L1=16) |
-| N_GAMES | 250 per tier per daily run |
-| Leaderboard key | Class name (stable); display name stored separately |
-| `times_last_in_l1` | Renamed to `times_inactive` |
+| Topic              | Decision                                                                                                   |
+| ------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Schedule           | `0 9 * * *` UTC (4am EST / 5am EDT)                                                                        |
+| Churn              | Single-run results for promotion/relegation; revisit with rolling average if too volatile                  |
+| Tier capacities    | PRM = `TOP_N`, CH = `TOP_N`, L1 = `2 × TOP_N`, inactive = unlimited (capped at `2 × TOP_N` for daily game) |
+| Max TOP_N          | 8 (giving PRM=8, CH=8, L1=16)                                                                              |
+| N_GAMES            | 250 per tier per daily run                                                                                 |
+| Leaderboard key    | Class name (stable); display name stored separately                                                        |
+| `times_last_in_l1` | Renamed to `times_inactive`                                                                                |
 
 ---
 

@@ -41,8 +41,8 @@ if cls is None:
 class_name = cls.__name__
 display_name = getattr(cls, "name", class_name)
 
-if len(display_name) > 20:
-    print(f"ERROR: name '{display_name}' exceeds 20 characters")
+if len(display_name) > 25:
+    print(f"ERROR: name '{display_name}' exceeds 25 characters")
     sys.exit(1)
 if "(" in display_name or ")" in display_name:
     print("ERROR: name may not contain parentheses")

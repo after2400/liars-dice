@@ -261,9 +261,8 @@ def test_stdout_entry_tier_when_already_registered(tmp_path):
 
 def test_register_rejects_name_too_long(tmp_path):
     player_py = tmp_path / "toolong.py"
-    player_py.write_text("class Toolong:\n    name = 'A' * 21\n")
-    # Write the name as a literal string with 21 chars
-    player_py.write_text("class Toolong:\n    name = 'ABCDEFGHIJKLMNOPQRSTU'\n")
+    # A 26-char name, one over the 25-char limit.
+    player_py.write_text("class Toolong:\n    name = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'\n")
     lb = {"total_runs": 0, "players": {}}
     rc, out = run_register(
         str(player_py),

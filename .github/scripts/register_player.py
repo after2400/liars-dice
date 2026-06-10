@@ -18,7 +18,7 @@ from pathlib import Path
 import yaml
 
 LEADERBOARD_PATH = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
-MAX_NAME_LEN = 20
+MAX_NAME_LEN = 25
 
 
 def _now():
