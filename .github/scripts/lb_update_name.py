@@ -12,6 +12,11 @@ from pathlib import Path
 
 import yaml
 
+# Ensure the repo root is importable so 'game' (used here and by player files) resolves.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from game.validate import validate_display_name  # noqa: E402
+
 player_file = sys.argv[1]
 p = Path(player_file)
 
@@ -41,11 +46,9 @@ if cls is None:
 class_name = cls.__name__
 display_name = getattr(cls, "name", class_name)
 
-if len(display_name) > 25:
-    print(f"ERROR: name '{display_name}' exceeds 25 characters")
-    sys.exit(1)
-if "(" in display_name or ")" in display_name:
-    print("ERROR: name may not contain parentheses")
+name_error = validate_display_name(display_name)
+if name_error:
+    print(f"ERROR: {name_error}")
     sys.exit(1)
 
 with open("leaderboard.yaml") as f:

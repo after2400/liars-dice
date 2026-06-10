@@ -10,6 +10,22 @@ import importlib.util
 import sys
 from pathlib import Path
 
+MAX_NAME_LEN = 25
+
+
+def validate_display_name(name: str) -> str | None:
+    """Return an error message if `name` is an invalid display name, else None.
+
+    The single source of truth for the display-name rules. Imported by the
+    registration and rename scripts so the length limit and the parenthesis
+    rule can never drift apart across the three places that enforce them.
+    """
+    if len(name) > MAX_NAME_LEN:
+        return f"name '{name}' exceeds {MAX_NAME_LEN} characters"
+    if "(" in name or ")" in name:
+        return "name may not contain parentheses (reserved for username suffix)"
+    return None
+
 
 def validate(player_file: str) -> None:
     path = Path(player_file)
@@ -52,6 +68,12 @@ def validate(player_file: str) -> None:
 
     if not callable(getattr(instance, "algo", None)):
         print("ERROR: Player class does not define an 'algo' method")
+        sys.exit(1)
+
+    display_name = getattr(player_class, "name", player_class.__name__)
+    name_error = validate_display_name(display_name)
+    if name_error:
+        print(f"ERROR: {name_error}")
         sys.exit(1)
 
     print(f"OK: {module_name} imported and instantiated successfully")

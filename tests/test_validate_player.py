@@ -88,6 +88,36 @@ def test_missing_class(tmp_path):
     assert "ERROR" in result.stdout
 
 
+def test_name_too_long(tmp_path):
+    """A display name over the limit exits 1 (shared rule from game.validate)."""
+    f = tmp_path / "toolong.py"
+    f.write_text(
+        "class Toolong:\n"
+        "    name = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'\n"  # 26 chars, over the 25 limit
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+    assert "exceeds" in result.stdout
+
+
+def test_name_with_parens(tmp_path):
+    """A display name containing parentheses exits 1."""
+    f = tmp_path / "withparens.py"
+    f.write_text(
+        "class Withparens:\n"
+        "    name = 'Bad (name)'\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+    assert "parentheses" in result.stdout
+
+
 def test_real_player_alice():
     """Real player alice.py passes validation."""
     result = _run(REPO_ROOT / "players" / "alice.py")

@@ -18,7 +18,6 @@ from pathlib import Path
 import yaml
 
 LEADERBOARD_PATH = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
-MAX_NAME_LEN = 25
 
 
 def _now():
@@ -55,9 +54,12 @@ def main():
     github_username = os.environ["GITHUB_USERNAME"]
     module_name = Path(player_file).stem  # e.g. "fred" from "players/fred.py"
 
-    # Ensure the repo root (cwd) is on sys.path so player files can import 'game'
+    # Ensure the repo root (cwd) is on sys.path so player files (and the
+    # game.validate import below) can resolve 'game'.
     if "" not in sys.path and "." not in sys.path:
         sys.path.insert(0, "")
+
+    from game.validate import validate_display_name
 
     spec = importlib.util.spec_from_file_location(module_name, player_file)
     if spec is None or spec.loader is None:
@@ -89,12 +91,10 @@ def main():
     class_name = player_class.__name__
     display_name = getattr(player_class, "name", class_name)
 
-    # Validate display name
-    if len(display_name) > MAX_NAME_LEN:
-        print(f"ERROR: name attribute '{display_name}' exceeds {MAX_NAME_LEN} characters.")
-        sys.exit(1)
-    if "(" in display_name or ")" in display_name:
-        print("ERROR: name attribute may not contain parentheses (reserved for username suffix).")
+    # Validate display name (shared rules live in game.validate)
+    name_error = validate_display_name(display_name)
+    if name_error:
+        print(f"ERROR: {name_error}")
         sys.exit(1)
 
     lb = _load_lb()
