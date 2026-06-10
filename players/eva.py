@@ -31,8 +31,10 @@ class Eva:
         total = held + failed
         return held / total if total > 0 else 0.5
 
-    def _threshold(self, reliability: float) -> float:
-        return 0.30 - (reliability - 0.5) * 0.30
+    def _threshold(self, bluff_rate: float) -> float:
+        # Equivalent to original formula with reliability = 1 - bluff_rate:
+        # 0.30 - (reliability - 0.5) * 0.30  →  0.30 + (bluff_rate - 0.5) * 0.30
+        return 0.30 + (bluff_rate - 0.5) * 0.30
 
     def algo(
         self,
@@ -41,20 +43,23 @@ class Eva:
         total_dice: int,
         bet_history: list[dict],
         outcomes: list[dict],
+        stats=None,
     ) -> Bet | None:
         if prior_bet is None:
             best_face = max(range(2, 7), key=lambda f: hand.count(f) + hand.count(1))
             own = hand.count(best_face) + hand.count(1)
             unseen = total_dice - len(hand)
-            quantity = max(
-                1, round(own + unseen * (2 / 6) * 0.8)
-            )  # slightly more aggressive than Diego's 0.7
+            quantity = max(1, round(own + unseen * (2 / 6) * 0.8))
             return Bet(quantity, best_face, self.name)
 
-        reliability = self._reliability(prior_bet.player, outcomes)
-        threshold = self._threshold(reliability)
+        if stats is not None:
+            bluff_rate = stats.bluff_rate.get(prior_bet.player, 0.5)
+        else:
+            bluff_rate = 1 - self._reliability(prior_bet.player, outcomes)
 
-        if self._prob_bet_holds(hand, prior_bet.face, prior_bet.quantity, total_dice) < threshold:
+        if self._prob_bet_holds(
+            hand, prior_bet.face, prior_bet.quantity, total_dice
+        ) < self._threshold(bluff_rate):
             return None
 
         own = hand.count(prior_bet.face) + (hand.count(1) if prior_bet.face != 1 else 0)
