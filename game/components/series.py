@@ -1,5 +1,7 @@
 import logging
 
+from game.components.stats import GameStats
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,6 +20,7 @@ def run_series(players: list, n_games: int) -> dict[str, int]:
     wins = {type(p).__name__: 0 for p in players}
     bet_history: list[dict] = []
     outcomes: list[dict] = []
+    stats = GameStats()
 
     for game_num in range(1, n_games + 1):
         # Reset file logs so gamelog.log reflects only the current game
@@ -27,7 +30,7 @@ def run_series(players: list, n_games: int) -> dict[str, int]:
                 handler.stream.truncate(0)
 
         winner = game_orchestrator(
-            players, game_id=game_num, bet_history=bet_history, outcomes=outcomes
+            players, game_id=game_num, bet_history=bet_history, outcomes=outcomes, stats=stats
         )
         wins[type(winner).__name__] += 1
         logger.info(f"Game {game_num}/{n_games}: {type(winner).__name__} wins")

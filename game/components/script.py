@@ -1,3 +1,4 @@
+import inspect
 import logging
 import random as r
 
@@ -12,6 +13,7 @@ def game_orchestrator(
     game_id: int = 1,
     bet_history: list[dict] | None = None,
     outcomes: list[dict] | None = None,
+    stats=None,
 ):
     """Plays a complete game of Liar's Dice between N players.
 
@@ -30,6 +32,7 @@ def game_orchestrator(
     Returns:
         The winning player object.
     """
+    _wants_stats = {p: len(inspect.signature(p.algo).parameters) >= 6 for p in players}
     logger.info("=== New Game ===")
     r.shuffle(players)
     logger.info(f"Players: {', '.join(p.name for p in players)}")
@@ -79,13 +82,23 @@ def game_orchestrator(
             player = players[player_idx]
 
             try:
-                action = player.algo(
-                    hands[player_idx],
-                    current_bet,
-                    total_dice,
-                    bet_history,
-                    completed_outcomes,
-                )
+                if stats is not None and _wants_stats[player]:
+                    action = player.algo(
+                        hands[player_idx],
+                        current_bet,
+                        total_dice,
+                        bet_history,
+                        completed_outcomes,
+                        stats,
+                    )
+                else:
+                    action = player.algo(
+                        hands[player_idx],
+                        current_bet,
+                        total_dice,
+                        bet_history,
+                        completed_outcomes,
+                    )
             except Exception as exc:
                 logger.error(f"{player.name} raised an exception ({exc}) - penalised")
                 loser = player_idx
@@ -124,6 +137,9 @@ def game_orchestrator(
                             "loser": players[loser].name,
                         }
                     )
+                    if stats is not None:
+                        stats.update_outcome(completed_outcomes[-1])
+                        stats.reset_round(round_num + 1)
             else:
                 # Player makes a new bid
                 if ones_allowed is False and action.face == 1:
@@ -145,6 +161,12 @@ def game_orchestrator(
                             "bet": current_bet,
                         }
                     )
+                    if stats is not None:
+                        stats.update_bet(
+                            bet_history[-1],
+                            is_opening_bid=(step == 0),
+                            total_dice=total_dice,
+                        )
                     if current_bet.face == 1 and wilds:
                         wilds = False
                         logger.info(
