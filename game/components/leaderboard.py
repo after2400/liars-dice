@@ -177,12 +177,18 @@ def apply_season_results(
     tier_above = _TIER_ABOVE.get(tier)
     tier_below = _TIER_BELOW.get(tier)
 
+    movements: list[str] = []
+
+    def _display(name: str) -> str:
+        return data["players"][name].get("display_name", name)
+
     # Promote top player unconditionally
     promoted = None
     if tier_above and players_in_tier:
         promoted = players_in_tier[0]
         data["players"][promoted]["tier"] = tier_above
         data["players"][promoted]["tier_since"] = now
+        movements.append(f"Promoted: {_display(promoted)} → {tier_above}")
 
     # Relegate only if remaining players exceed capacity after promotion.
     # If the tier ran at exactly capacity and promoted one out, remaining = capacity-1 — no
@@ -201,7 +207,10 @@ def apply_season_results(
                 data["players"][name]["times_inactive"] = (
                     data["players"][name].get("times_inactive", 0) + 1
                 )
+            movements.append(f"Relegated: {_display(name)} → {tier_below}")
             excess -= 1
 
     with open(path, "w") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+
+    return movements

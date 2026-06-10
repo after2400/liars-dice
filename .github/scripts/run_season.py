@@ -128,7 +128,9 @@ def run_season(
             continue
 
         tier_results[tier] = wins
-        apply_season_results(wins, n_games, tier, top_n, path=lb_path)
+        movements = apply_season_results(wins, n_games, tier, top_n, path=lb_path)
+        for m in movements:
+            print(f"  {m}")
         print(f"[done] {tier}: leaderboard updated.")
 
     _write_summary(summary_file, tier_results, skipped, n_games, lb_path)
@@ -182,7 +184,11 @@ def _write_summary(
         lines.append("## Game Results")
         lines.append("")
 
-        for tier in ran_tiers:
+        for i, tier in enumerate(ran_tiers):
+            if i > 0:
+                lines.append("---")
+                lines.append("")
+
             wins = tier_results[tier]
             label = _TIER_LABEL.get(tier, tier)
             lines.append("<details>")
@@ -197,6 +203,8 @@ def _write_summary(
                 win_pct = round(win_count / n_games * 100, 1) if n_games else 0.0
                 lines.append(f"| {display} | {win_count} | {win_pct}% |")
 
+            lines.append("")
+            lines.append("</details>")
             lines.append("")
 
             movements = []
@@ -213,9 +221,6 @@ def _write_summary(
                 lines.append(m)
             if movements:
                 lines.append("")
-
-            lines.append("</details>")
-            lines.append("")
 
     if skipped:
         skipped_str = ", ".join(f"{t} (< 2 players)" for t in skipped)
