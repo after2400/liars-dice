@@ -243,14 +243,18 @@ def test_stats_passed_to_six_arg_player(tmp_path):
     """A player declaring a 6th arg receives a non-None GameStats instance."""
     import textwrap
 
+    from game.components.series import run_series
+    from game.components.stats import GameStats
+    from game.components.utils import import_player_classes_from_dir
+
     player_src = textwrap.dedent("""
         from game.components.bets import Bet
 
         class Spy:
             name = "Spy"
+            received_stats = []
             def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, stats=None):
-                from game.components.stats import GameStats
-                assert isinstance(stats, GameStats), f"expected GameStats, got {type(stats)}"
+                Spy.received_stats.append(stats)
                 if prior_bet is None:
                     return Bet(1, 2, self.name)
                 return None
@@ -260,9 +264,6 @@ def test_stats_passed_to_six_arg_player(tmp_path):
     player_dir.mkdir()
     (player_dir / "spy.py").write_text(player_src)
     (player_dir / "__init__.py").write_text("")
-
-    from game.components.series import run_series
-    from game.components.utils import import_player_classes_from_dir
 
     players = import_player_classes_from_dir(str(player_dir))
     assert len(players) == 1
@@ -277,6 +278,10 @@ def test_stats_passed_to_six_arg_player(tmp_path):
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
 
-    wins = run_series(players + [AlwaysBid()], n_games=1)
-    # If the assertion inside Spy.algo fired, run_series would have raised.
-    assert set(wins.keys()) == {"Spy", "AlwaysBid"}
+    run_series(players + [AlwaysBid()], n_games=1)
+
+    spy_cls = players[0].__class__
+    assert len(spy_cls.received_stats) > 0, "Spy.algo was never called"
+    assert all(isinstance(s, GameStats) for s in spy_cls.received_stats), (
+        f"Expected GameStats on every call, got: {spy_cls.received_stats}"
+    )
