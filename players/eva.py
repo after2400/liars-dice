@@ -53,7 +53,7 @@ class Eva:
             return Bet(quantity, best_face, self.name)
 
         if stats is not None:
-            bluff_rate = stats.bluff_rate.get(prior_bet.player, 0.5)
+            bluff_rate = stats.raw_bluff_rate.get(prior_bet.player, 0.5)
         else:
             bluff_rate = 1 - self._reliability(prior_bet.player, outcomes)
 

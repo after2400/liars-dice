@@ -77,7 +77,7 @@ class Sloane:
         p_holds = self._prob_bet_holds(hand, prior_bet.face, prior_bet.quantity, total_dice)
 
         if stats is not None:
-            face_bluff_rate = stats.bluff_rate_by_face.get(prior_bet.player, {}).get(
+            face_bluff_rate = stats.raw_bluff_rate_by_face.get(prior_bet.player, {}).get(
                 prior_bet.face, 0.5
             )
             delta_bias = (0.5 - (1 - face_bluff_rate)) * 0.2

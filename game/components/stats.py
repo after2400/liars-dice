@@ -12,6 +12,8 @@ class GameStats:
         # Public: per-player bluff behavior
         self.bluff_rate: dict[str, float] = {}
         self.bluff_rate_by_face: dict[str, dict[int, float]] = {}
+        self.raw_bluff_rate: dict[str, float] = {}
+        self.raw_bluff_rate_by_face: dict[str, dict[int, float]] = {}
         self.challenge_rate: dict[str, float] = {}
         self.challenge_success_rate: dict[str, float] = {}
 
@@ -125,6 +127,21 @@ class GameStats:
             bf = self._bluff_by_face[bidder][f]
             hf = self._hold_by_face[bidder][f]
             self.bluff_rate_by_face[bidder][f] = (bf + 1) / (bf + hf + 2)
+
+        # raw_bluff_rate: unsmoothed failed / (failed + held); absent until first outcome
+        bluffs_raw = self._bluff_counts[bidder]
+        holds_raw = self._hold_counts[bidder]
+        if bluffs_raw + holds_raw > 0:
+            self.raw_bluff_rate[bidder] = bluffs_raw / (bluffs_raw + holds_raw)
+
+        # raw_bluff_rate_by_face: unsmoothed per face; only store face that just changed
+        face = final_bet.face
+        bf_raw = self._bluff_by_face[bidder][face]
+        hf_raw = self._hold_by_face[bidder][face]
+        if bf_raw + hf_raw > 0:
+            if bidder not in self.raw_bluff_rate_by_face:
+                self.raw_bluff_rate_by_face[bidder] = {}
+            self.raw_bluff_rate_by_face[bidder][face] = bf_raw / (bf_raw + hf_raw)
 
         # mean_held_quantity_by_face (only for held bids)
         if bet_held:

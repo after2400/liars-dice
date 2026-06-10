@@ -166,3 +166,44 @@ def test_rounds_with_hand_accumulates_across_rounds():
     stats.update_outcome(_outcome("Alice", "Bruno", 2, 2, bet_held=True, hands=hands))
     stats.update_outcome(_outcome("Alice", "Bruno", 2, 2, bet_held=False, hands=hands))
     assert stats.rounds_with_hand["Alice"] == 2
+
+
+# --- raw_bluff_rate ---
+
+
+def test_raw_bluff_rate_absent_before_outcomes():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    assert "Alice" not in stats.raw_bluff_rate
+
+
+def test_raw_bluff_rate_is_unsmoothed():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    # 3 bluffs, 1 hold -> raw = 3/4 = 0.75; Laplace would be 4/6 ≈ 0.667
+    for _ in range(3):
+        stats.update_outcome(_outcome("Alice", "Bruno", 3, 5, bet_held=False))
+    stats.update_outcome(_outcome("Alice", "Bruno", 3, 5, bet_held=True))
+    assert stats.raw_bluff_rate["Alice"] == pytest.approx(3 / 4)
+
+
+def test_raw_bluff_rate_by_face_is_unsmoothed():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    # 2 bluffs on face 3, 1 hold on face 3 -> raw = 2/3; Laplace would be 3/5
+    for _ in range(2):
+        stats.update_outcome(_outcome("Alice", "Bruno", 3, 5, bet_held=False))
+    stats.update_outcome(_outcome("Alice", "Bruno", 3, 5, bet_held=True))
+    assert stats.raw_bluff_rate_by_face["Alice"][3] == pytest.approx(2 / 3)
+
+
+def test_raw_bluff_rate_by_face_no_entry_when_no_data_for_face():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    stats.update_outcome(_outcome("Alice", "Bruno", 3, 5, bet_held=False))
+    # face 2 has no data — should have no entry (caller uses .get with 0.5 default)
+    assert stats.raw_bluff_rate_by_face.get("Alice", {}).get(2) is None
