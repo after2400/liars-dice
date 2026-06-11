@@ -245,3 +245,77 @@ def apply_season_results(
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
     return movements
+
+
+def settle_relegations(
+    tier_results: dict[str, dict[str, int]],
+    top_n: int,
+    path: str = _LEADERBOARD_PATH,
+) -> list[str]:
+    """Top-down relegation settlement, run once after a full bottom-up season.
+
+    Walks PRM → CH → L1. Each tier sheds its excess over capacity into the tier
+    below, choosing the worst performers who actually PLAYED that tier this run.
+    A player relegated into a tier during this pass (a "parachutist") holds a
+    protected seat and is not re-relegated the same night.
+
+    tier_results: {tier: {player: win_count}} for this run's games — used to
+        rank who played worst in each tier.
+    Returns "Relegated: <name> → <tier>" movement strings, in cascade order.
+    """
+    if os.path.exists(path):
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    else:
+        data = {}
+
+    now = _now()
+    data.setdefault("players", {})
+    players = data["players"]
+    display_names = build_display_names(players)
+
+    parachutists: dict[str, set[str]] = {}
+    movements: list[str] = []
+
+    for tier in ("PRM", "CH", "L1"):
+        tier_below = _TIER_BELOW.get(tier)
+        if tier_below is None:
+            continue
+        capacity = _TIER_CAPACITY(tier, top_n)
+        residents = [n for n, p in players.items() if p.get("tier") == tier]
+        excess = int(len(residents) - capacity)
+        if excess <= 0:
+            continue
+
+        protected = parachutists.get(tier, set())
+        this_season = tier_results.get(tier, {})
+        candidates = [n for n in residents if n in this_season and n not in protected]
+
+        # Worst-first ordering. Python's sort is stable, so sort by the
+        # least-significant key first: tier_since DESC (newest first), then by
+        # (this-season wins ASC, total tier games ASC).
+        candidates.sort(key=lambda n: players[n].get("tier_since", ""), reverse=True)
+        candidates.sort(
+            key=lambda n: (
+                this_season[n],
+                players[n].get("tier_stats", {}).get(tier, {}).get("games", 0),
+            )
+        )
+
+        assert len(candidates) >= excess, (
+            f"{tier} over capacity by {excess} but only {len(candidates)} "
+            f"relegation candidate(s) — upstream invariant broken"
+        )
+
+        for name in candidates[:excess]:
+            players[name]["tier"] = tier_below
+            players[name]["tier_since"] = now
+            if tier_below == "inactive":
+                players[name]["times_inactive"] = players[name].get("times_inactive", 0) + 1
+            parachutists.setdefault(tier_below, set()).add(name)
+            movements.append(f"Relegated: {display_names.get(name, name)} → {tier_below}")
+
+    with open(path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+
+    return movements

@@ -673,3 +673,169 @@ def test_build_display_names_no_op_on_current_leaderboard():
     result = build_display_names(players)
     for cn, p in players.items():
         assert result[cn] == p.get("display_name", cn)  # bare, no suffix added
+
+
+# --- settle_relegations ---
+
+
+def _p(tier, since="2026-01-01T00:00:00Z", games=0):
+    """Minimal player record for settlement tests."""
+    return {
+        "display_name": None,  # filled in by caller via dict key below
+        "github_username": "",
+        "date_added": "2026-01-01T00:00:00Z",
+        "tier": tier,
+        "tier_since": since,
+        "times_inactive": 0,
+        "tier_stats": {tier: {"wins": 0, "games": games, "win_pct": 0.0}} if games else {},
+    }
+
+
+def _write(tmp_path, players):
+    for name, rec in players.items():
+        rec["display_name"] = name
+    data = {"total_runs": 1, "last_updated": "2026-01-01T00:00:00Z", "players": players}
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(yaml.dump(data))
+    return path
+
+
+def test_settle_cascade_one_pass(tmp_path):
+    """PRM overflow drops to CH; CH then overflows and drops its worst player to L1."""
+    from game.components.leaderboard import settle_relegations
+
+    players = {
+        # PRM has 5 (one too many): Remy is the parachutee-to-be (worst this run)
+        "Diego": _p("PRM"),
+        "Eva": _p("PRM"),
+        "Sloane": _p("PRM"),
+        "Zara": _p("PRM"),
+        "Remy": _p("PRM"),
+        # CH has 4 incl. Cleo (promoted in this run, flopped); Alice/Bruno/Finn natives
+        "Alice": _p("CH"),
+        "Bruno": _p("CH"),
+        "Finn": _p("CH"),
+        "Cleo": _p("CH"),
+        # L1 under capacity
+        "Pyro": _p("L1"),
+        "Topper": _p("L1"),
+    }
+    path = _write(tmp_path, players)
+    tier_results = {
+        "PRM": {"Sloane": 240, "Eva": 235, "Zara": 217, "Diego": 202, "Remy": 106},
+        "CH": {"Remy": 337, "Finn": 312, "Alice": 194, "Bruno": 153, "Cleo": 4},
+        "L1": {"Cleo": 471, "Topper": 444, "Pyro": 85},
+    }
+    moves = settle_relegations(tier_results, top_n=4, path=path)
+
+    with open(path) as f:
+        result = yaml.safe_load(f)["players"]
+    assert result["Remy"]["tier"] == "CH"  # PRM → CH
+    assert result["Cleo"]["tier"] == "L1"  # CH → L1 (worst CH player)
+    assert {n for n, p in result.items() if p["tier"] == "PRM"} == {
+        "Diego",
+        "Eva",
+        "Sloane",
+        "Zara",
+    }
+    assert {n for n, p in result.items() if p["tier"] == "CH"} == {"Alice", "Bruno", "Finn", "Remy"}
+    assert {n for n, p in result.items() if p["tier"] == "L1"} == {"Pyro", "Topper", "Cleo"}
+    assert moves == ["Relegated: Remy → CH", "Relegated: Cleo → L1"]
+
+
+def test_settle_protects_parachutist(tmp_path):
+    """A player dropped from above is not re-dropped; the worst native drops instead."""
+    from game.components.leaderboard import settle_relegations
+
+    players = {
+        "Diego": _p("PRM"),
+        "Eva": _p("PRM"),
+        "Sloane": _p("PRM"),
+        "Zara": _p("PRM"),
+        "Remy": _p("PRM"),
+        "Alice": _p("CH"),
+        "Bruno": _p("CH"),
+        "Finn": _p("CH"),
+        "Cleo": _p("CH"),
+        "Pyro": _p("L1"),
+        "Topper": _p("L1"),
+    }
+    path = _write(tmp_path, players)
+    # Remy wins CH big (337) — if he were eligible in CH he'd be safe anyway; the point is
+    # he is excluded as a parachutist, so the worst native (Cleo) drops even though Remy
+    # also has a CH result this run.
+    tier_results = {
+        "PRM": {"Sloane": 240, "Eva": 235, "Zara": 217, "Diego": 202, "Remy": 106},
+        "CH": {"Remy": 337, "Finn": 312, "Alice": 194, "Bruno": 153, "Cleo": 4},
+    }
+    settle_relegations(tier_results, top_n=4, path=path)
+    with open(path) as f:
+        result = yaml.safe_load(f)["players"]
+    assert result["Remy"]["tier"] == "CH"  # stayed where he parachuted
+    assert result["Cleo"]["tier"] == "L1"  # native worst dropped
+
+
+def test_settle_no_relegation_at_capacity(tmp_path):
+    """Tiers at or under capacity shed nobody."""
+    from game.components.leaderboard import settle_relegations
+
+    players = {
+        "Alice": _p("PRM"),
+        "Bruno": _p("PRM"),
+        "Cleo": _p("CH"),
+        "Diego": _p("CH"),
+    }
+    path = _write(tmp_path, players)
+    tier_results = {"PRM": {"Alice": 70, "Bruno": 30}, "CH": {"Cleo": 60, "Diego": 40}}
+    moves = settle_relegations(tier_results, top_n=2, path=path)
+    assert moves == []
+    with open(path) as f:
+        result = yaml.safe_load(f)["players"]
+    assert all(
+        result[n]["tier"] == t
+        for n, t in {"Alice": "PRM", "Bruno": "PRM", "Cleo": "CH", "Diego": "CH"}.items()
+    )
+
+
+def test_settle_l1_to_inactive_only_when_over_double(tmp_path):
+    """L1 relegates to inactive only past TOP_N×2, and increments times_inactive."""
+    from game.components.leaderboard import settle_relegations
+
+    # TOP_N=2 → L1 capacity 4. Five L1 players → one drops to inactive.
+    players = {f"P{i}": _p("L1") for i in range(5)}
+    path = _write(tmp_path, players)
+    tier_results = {"L1": {"P0": 50, "P1": 40, "P2": 30, "P3": 20, "P4": 5}}
+    moves = settle_relegations(tier_results, top_n=2, path=path)
+    with open(path) as f:
+        result = yaml.safe_load(f)["players"]
+    assert result["P4"]["tier"] == "inactive"  # worst L1 player
+    assert result["P4"]["times_inactive"] == 1
+    assert moves == ["Relegated: P4 → inactive"]
+
+
+def test_settle_movement_uses_disambiguated_name(tmp_path):
+    """Movement strings render disambiguated display names for shared names."""
+    from game.components.leaderboard import settle_relegations
+
+    players = {
+        "Eva": _p("PRM"),
+        "Zara": _p("PRM"),
+        "Sloane": _p("PRM"),
+        "Diego": _p("PRM"),
+        "Remy": _p("PRM"),
+        "Alice": _p("CH"),
+        "Bruno": _p("CH"),
+    }
+    for name, rec in players.items():
+        rec["display_name"] = name
+    # Two players share display_name "Twin" so the suffix logic engages.
+    players["Remy"]["display_name"] = "Twin"
+    players["Alice"]["display_name"] = "Twin"
+    players["Remy"]["github_username"] = "remy_gh"
+    data = {"total_runs": 1, "last_updated": "2026-01-01T00:00:00Z", "players": players}
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(yaml.dump(data))
+
+    tier_results = {"PRM": {"Eva": 50, "Zara": 40, "Sloane": 30, "Diego": 20, "Remy": 5}}
+    moves = settle_relegations(tier_results, top_n=4, path=path)
+    assert moves == ["Relegated: Twin (remy_gh) → CH"]
