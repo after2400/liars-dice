@@ -663,3 +663,25 @@ def test_apply_season_results_movement_uses_disambiguated_name(tmp_path):
 
     # TopperA wins most → promoted; message uses the disambiguated name.
     assert "Promoted: Topper (alice) → PRM" in movements
+
+
+def test_build_display_names_no_op_on_current_leaderboard():
+    """Every current display name is unique, so the helper adds no suffixes.
+
+    This test will (correctly) start failing if a duplicate display_name is ever
+    registered — that is expected, and means the helper should now be adding
+    disambiguating suffixes.
+    """
+    from pathlib import Path
+
+    import yaml as _yaml
+
+    from game.components.leaderboard import build_display_names
+
+    repo_root = Path(__file__).parent.parent
+    data = _yaml.safe_load((repo_root / "leaderboard.yaml").read_text())
+    players = data["players"]
+
+    result = build_display_names(players)
+    for cn, p in players.items():
+        assert result[cn] == p.get("display_name", cn)  # bare, no suffix added
