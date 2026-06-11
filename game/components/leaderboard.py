@@ -283,7 +283,7 @@ def settle_relegations(
             continue
         capacity = _TIER_CAPACITY(tier, top_n)
         residents = [n for n, p in players.items() if p.get("tier") == tier]
-        excess = int(len(residents) - capacity)
+        excess = len(residents) - capacity
         if excess <= 0:
             continue
 

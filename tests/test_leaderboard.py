@@ -761,12 +761,12 @@ def test_settle_protects_parachutist(tmp_path):
         "Topper": _p("L1"),
     }
     path = _write(tmp_path, players)
-    # Remy wins CH big (337) — if he were eligible in CH he'd be safe anyway; the point is
-    # he is excluded as a parachutist, so the worst native (Cleo) drops even though Remy
-    # also has a CH result this run.
+    # Remy is relegated PRM→CH (parachutist) AND has the worst CH result this run (2).
+    # Without protection he'd be the one dropped to L1; protection excludes him, so the
+    # worst NATIVE player (Cleo, 4) drops instead. This fails if the `protected` check is removed.
     tier_results = {
         "PRM": {"Sloane": 240, "Eva": 235, "Zara": 217, "Diego": 202, "Remy": 106},
-        "CH": {"Remy": 337, "Finn": 312, "Alice": 194, "Bruno": 153, "Cleo": 4},
+        "CH": {"Finn": 312, "Alice": 194, "Bruno": 153, "Cleo": 4, "Remy": 2},
     }
     settle_relegations(tier_results, top_n=4, path=path)
     with open(path) as f:
