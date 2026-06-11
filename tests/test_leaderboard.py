@@ -454,49 +454,6 @@ def test_apply_season_results_no_relegation_when_promotion_restores_capacity(tmp
     assert result["players"]["P5"]["tier"] == "CH"  # stays — promotion restored capacity
 
 
-def test_apply_season_results_relegates_when_truly_overcrowded(tmp_path):
-    """CH at capacity+2: after promoting top, still 1 player over — relegate that one."""
-
-    from game.components.leaderboard import apply_season_results
-
-    def _player(tier):
-        return {
-            "display_name": "",
-            "github_username": "",
-            "tier": tier,
-            "tier_since": "2026-01-01T00:00:00Z",
-            "date_added": "2026-01-01T00:00:00Z",
-            "times_inactive": 0,
-            "tier_stats": {},
-        }
-
-    # top_n=4, so CH capacity=4. Start with 6 in CH (capacity+2).
-    lb = {
-        "total_runs": 1,
-        "players": {f"P{i}": _player("CH") for i in range(1, 7)},
-        "last_updated": "2026-01-01T00:00:00Z",
-    }
-    path = str(tmp_path / "lb.yaml")
-    (tmp_path / "lb.yaml").write_text(yaml.dump(lb))
-
-    apply_season_results(
-        wins={"P1": 60, "P2": 50, "P3": 40, "P4": 30, "P5": 10, "P6": 0},
-        n_games=100,
-        tier="CH",
-        top_n=4,
-        path=path,
-    )
-    with open(path) as f:
-        result = yaml.safe_load(f)
-
-    assert result["players"]["P1"]["tier"] == "PRM"  # top promotes
-    assert result["players"]["P6"]["tier"] == "L1"  # 1 excess after promotion → relegated
-    assert result["players"]["P2"]["tier"] == "CH"
-    assert result["players"]["P3"]["tier"] == "CH"
-    assert result["players"]["P4"]["tier"] == "CH"
-    assert result["players"]["P5"]["tier"] == "CH"  # exactly at capacity now
-
-
 def test_apply_season_results_no_relegation_when_tier_below_capacity(tmp_path):
     """L1 (or any thin tier) does not force a relegation when started below capacity."""
 
@@ -839,3 +796,48 @@ def test_settle_movement_uses_disambiguated_name(tmp_path):
     tier_results = {"PRM": {"Eva": 50, "Zara": 40, "Sloane": 30, "Diego": 20, "Remy": 5}}
     moves = settle_relegations(tier_results, top_n=4, path=path)
     assert moves == ["Relegated: Twin (remy_gh) → CH"]
+
+
+def test_apply_season_results_does_not_relegate_when_overcrowded(tmp_path):
+    """apply_season_results promotes the winner but never relegates — even when overcrowded."""
+    from game.components.leaderboard import apply_season_results
+
+    def _player(tier):
+        return {
+            "display_name": None,
+            "github_username": "",
+            "tier": tier,
+            "tier_since": "2026-01-01T00:00:00Z",
+            "date_added": "2026-01-01T00:00:00Z",
+            "times_inactive": 0,
+            "tier_stats": {},
+        }
+
+    # CH overcrowded: 4 players, capacity TOP_N=2.
+    # After promoting Alice the old code would see remaining=3 > capacity=2 → excess=1
+    # and would relegate Cleo.  The new code must NOT do that.
+    players = {
+        "Alice": _player("CH"),
+        "Bruno": _player("CH"),
+        "Cleo": _player("CH"),
+        "Dana": _player("CH"),
+    }
+    for n, rec in players.items():
+        rec["display_name"] = n
+    lb = {"total_runs": 1, "last_updated": "2026-01-01T00:00:00Z", "players": players}
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(yaml.dump(lb))
+
+    apply_season_results(
+        wins={"Alice": 70, "Bruno": 20, "Cleo": 10, "Dana": 5},
+        n_games=100,
+        tier="CH",
+        top_n=2,
+        path=path,
+    )
+    with open(path) as f:
+        result = yaml.safe_load(f)["players"]
+    assert result["Alice"]["tier"] == "PRM"  # winner still promoted
+    assert result["Bruno"]["tier"] == "CH"  # NOT relegated
+    assert result["Cleo"]["tier"] == "CH"  # NOT relegated (settlement's job now)
+    assert result["Dana"]["tier"] == "CH"  # NOT relegated
