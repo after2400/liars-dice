@@ -198,11 +198,11 @@ def test_runs_inactive_tier_separately(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _load_run_season():
+def _load_run_season(module_name="run_season"):
     """Import run_season.py as a module (main() is guarded, so this is side-effect free)."""
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location("run_season", SCRIPT)
+    spec = importlib.util.spec_from_file_location(module_name, SCRIPT)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -312,20 +312,9 @@ def test_standings_games_column_shows_total_games_not_current_tier():
 # ---------------------------------------------------------------------------
 
 
-def _load_run_season_mod():
-    """Load run_season.py by path into a fresh module object."""
-    import importlib.util
-
-    script = REPO_ROOT / ".github" / "scripts" / "run_season.py"
-    spec = importlib.util.spec_from_file_location("run_season_e2e", script)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def _player(tier):
+def _player(name, tier):
     return {
-        "display_name": None,
+        "display_name": name,
         "github_username": "",
         "date_added": "2026-01-01T00:00:00Z",
         "tier": tier,
@@ -337,23 +326,21 @@ def _player(tier):
 
 def test_run_season_rebalances_in_one_run(tmp_path, monkeypatch):
     """Full bottom-up promotion + top-down settlement produces a balanced ladder."""
-    run_season_mod = _load_run_season_mod()
+    run_season_mod = _load_run_season("run_season_e2e")
 
     players = {
-        "Diego": _player("PRM"),
-        "Eva": _player("PRM"),
-        "Sloane": _player("PRM"),
-        "Zara": _player("PRM"),
-        "Alice": _player("CH"),
-        "Bruno": _player("CH"),
-        "Finn": _player("CH"),
-        "Remy": _player("CH"),
-        "Cleo": _player("L1"),
-        "Pyro": _player("L1"),
-        "Topper": _player("L1"),
+        "Diego": _player("Diego", "PRM"),
+        "Eva": _player("Eva", "PRM"),
+        "Sloane": _player("Sloane", "PRM"),
+        "Zara": _player("Zara", "PRM"),
+        "Alice": _player("Alice", "CH"),
+        "Bruno": _player("Bruno", "CH"),
+        "Finn": _player("Finn", "CH"),
+        "Remy": _player("Remy", "CH"),
+        "Cleo": _player("Cleo", "L1"),
+        "Pyro": _player("Pyro", "L1"),
+        "Topper": _player("Topper", "L1"),
     }
-    for n, rec in players.items():
-        rec["display_name"] = n
     lb_path = str(tmp_path / "leaderboard.yaml")
     (tmp_path / "leaderboard.yaml").write_text(
         yaml.dump({"total_runs": 0, "last_updated": "x", "players": players})
