@@ -13,6 +13,8 @@ export default {
         "leaderboard", // leaderboard schema and data
         "scripts", // .github/scripts/
         "tests", // test-only changes
+        "specs", // docs/specs/ design docs
+        "plans", // docs/plans/ implementation plans
       ],
     ],
     "scope-empty": [1, "never"], // warn if no scope provided
