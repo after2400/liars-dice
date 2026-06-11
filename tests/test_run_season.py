@@ -200,6 +200,8 @@ def test_runs_inactive_tier_separately(tmp_path):
 
 def _load_run_season(module_name="run_season"):
     """Import run_season.py as a module (main() is guarded, so this is side-effect free)."""
+    # Distinct module_name lets a test load an isolated second copy of the
+    # script (same name would collide in sys.modules and share monkeypatches).
     import importlib.util
 
     spec = importlib.util.spec_from_file_location(module_name, SCRIPT)

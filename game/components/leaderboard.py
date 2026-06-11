@@ -145,6 +145,7 @@ def settle_relegations(
 
     now = _now()
     data.setdefault("players", {})
+    data["last_updated"] = now
     players = data["players"]
     display_names = build_display_names(players)
 
