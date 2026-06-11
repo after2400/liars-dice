@@ -8,7 +8,7 @@
 # correct
 uv run python -m game ...
 uv run python .github/scripts/register_player.py
-uv run pytest tests/ -v
+uv run pytest -v
 
 # wrong — do not use
 python3 script.py
@@ -21,6 +21,11 @@ This applies everywhere: shell commands, CI scripts, subagent prompts, code revi
 ## Testing
 
 Run the full test suite with:
+
 ```bash
-uv run pytest tests/ -v
+uv run pytest -v
 ```
+
+This collects both `tests/` and `examples/tests/` via the `testpaths` setting in
+`pyproject.toml` — pass no path so the example player's tests run too. Don't pass
+`tests/` explicitly or the `examples/` template tests are skipped.

@@ -16,4 +16,4 @@ select = ["E", "F", "W", "I"]   # pycodestyle errors, pyflakes, isort
 ignore = ["E501"]                # line length handled by formatter
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "examples/tests"]
