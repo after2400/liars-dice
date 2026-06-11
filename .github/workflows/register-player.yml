@@ -143,21 +143,14 @@ jobs:
           fi
 
           # ── Addition ──
+          # The validate job (needs: validate) already imported and vetted the
+          # player file. This privileged step must NOT execute player code, so
+          # it only checks uniqueness against leaderboard.yaml by class name.
           if [ "$n_added" -eq 1 ] && [ "$n_modified" -eq 0 ] && [ "$n_deleted" -eq 0 ]; then
             player_file="$added"
-            # Validate against a temp leaderboard — don't write to the real one pre-merge
-            tmp_lb=$(mktemp)
-            cp leaderboard.yaml "$tmp_lb"
-            if ! output=$(PLAYER_FILE="$player_file" GITHUB_USERNAME="$ACTOR" \
-              LEADERBOARD_PATH="$tmp_lb" \
-              uv run python .github/scripts/register_player.py 2>&1); then
-              echo "$output"
-              rm -f "$tmp_lb"
-              post_rejection "Player validation failed:\`\`\`${output}\`\`\`"
-            fi
-            rm -f "$tmp_lb"
-            echo "$output"
-            if echo "$output" | grep -qi "already registered"; then
+            cls_stem=$(basename "$player_file" .py)
+            exists=$(uv run python .github/scripts/lb_has_player.py "$cls_stem")
+            if [ "$exists" = "true" ]; then
               post_rejection "A player with that class name already exists. Please choose a unique class name."
             fi
             gh pr merge "$PR_NUMBER" --auto --squash
