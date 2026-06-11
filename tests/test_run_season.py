@@ -281,3 +281,27 @@ def test_readme_disambiguates_duplicate_names(tmp_path):
 
     assert "Topper (alice)" in text
     assert "Topper (bob)" in text
+
+
+# ---------------------------------------------------------------------------
+# Test 5: standings Games column shows total games across all tiers
+# ---------------------------------------------------------------------------
+
+
+def test_standings_games_column_shows_total_games_not_current_tier():
+    """The 'Games' column (totals group) must show total games across all tiers,
+    not just the current tier's games."""
+    mod = _load_run_season()
+    # Eva: 3000 games in CH + 2000 in PRM = 5000 total; 1057+433 = 1490 total wins.
+    player = {
+        "tier_stats": {
+            "CH": {"wins": 1057, "games": 3000, "win_pct": 35.2},
+            "PRM": {"wins": 433, "games": 2000, "win_pct": 21.6},
+        }
+    }
+    rows = mod._standings_table([("Eva", player)], "PRM", {"Eva": "Eva"})
+    data_row = rows[2]  # rows[0]=header, rows[1]=separator, rows[2]=first data row
+    # Totals group must be internally consistent: Total Wins=1490, Games=5000, Win% Total=29.8.
+    assert data_row.endswith("| 29.8 | 1490 | 5000 |")
+    # Must NOT show the current-tier (PRM) games of 2000 in the totals Games column.
+    assert "| 1490 | 2000 |" not in data_row

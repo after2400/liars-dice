@@ -259,7 +259,7 @@ def _standings_table(
         total_games = sum(t.get("games", 0) for t in p.get("tier_stats", {}).values())
         total_win_pct = round(total_wins / total_games * 100, 1) if total_games else 0.0
         lines.append(
-            f"| {display} | {ts.get('win_pct', 0.0)} | {ts.get('wins', 0)} | {total_win_pct} | {total_wins} | {ts.get('games', 0)} |"
+            f"| {display} | {ts.get('win_pct', 0.0)} | {ts.get('wins', 0)} | {total_win_pct} | {total_wins} | {total_games} |"
         )
     return lines
 
