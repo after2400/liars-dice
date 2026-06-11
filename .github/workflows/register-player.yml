@@ -4,15 +4,16 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: write
-  pull-requests: write
-
 env:
   PYTHONPATH: .
 
 jobs:
   validate:
+    # Executes contributor code (game.validate imports the player file), so it
+    # holds no PAT and only a read-scoped GITHUB_TOKEN. It can comment on the PR.
+    permissions:
+      contents: read
+      pull-requests: write
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
@@ -63,6 +64,10 @@ jobs:
           done <<< "$changed"
 
   register:
+    # Holds LEADERBOARD_PAT and runs no contributor code. Privileged operations
+    # use the PAT (GH_TOKEN); its own GITHUB_TOKEN only needs checkout read.
+    permissions:
+      contents: read
     needs: validate
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
