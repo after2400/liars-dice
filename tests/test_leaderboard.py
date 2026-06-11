@@ -542,3 +542,89 @@ def test_apply_season_results_no_relegation_when_tier_below_capacity(tmp_path):
 
     assert result["players"]["P1"]["tier"] == "CH"  # top promotes
     assert result["players"]["P2"]["tier"] == "L1"  # stays — L1 is below capacity, no relegation
+
+
+# --- build_display_names ---
+
+
+def test_build_display_names_unique_names_unsuffixed():
+    from game.components.leaderboard import build_display_names
+
+    players = {
+        "Alice": {"display_name": "Alice", "github_username": "x"},
+        "Bruno": {"display_name": "Bruno", "github_username": "y"},
+    }
+    assert build_display_names(players) == {"Alice": "Alice", "Bruno": "Bruno"}
+
+
+def test_build_display_names_distinct_usernames_get_suffix():
+    from game.components.leaderboard import build_display_names
+
+    players = {
+        "TopperA": {"display_name": "Topper", "github_username": "after2400"},
+        "TopperB": {"display_name": "Topper", "github_username": "jschmoe"},
+    }
+    assert build_display_names(players) == {
+        "TopperA": "Topper (after2400)",
+        "TopperB": "Topper (jschmoe)",
+    }
+
+
+def test_build_display_names_empty_username_falls_back_to_class():
+    from game.components.leaderboard import build_display_names
+
+    players = {
+        "TopperA": {"display_name": "Topper", "github_username": "after2400"},
+        "TopperB": {"display_name": "Topper", "github_username": ""},
+    }
+    assert build_display_names(players) == {
+        "TopperA": "Topper (after2400)",
+        "TopperB": "Topper (TopperB)",
+    }
+
+
+def test_build_display_names_both_empty_use_class():
+    from game.components.leaderboard import build_display_names
+
+    players = {
+        "TopperA": {"display_name": "Topper", "github_username": ""},
+        "TopperB": {"display_name": "Topper", "github_username": ""},
+    }
+    assert build_display_names(players) == {
+        "TopperA": "Topper (TopperA)",
+        "TopperB": "Topper (TopperB)",
+    }
+
+
+def test_build_display_names_same_author_uses_class():
+    from game.components.leaderboard import build_display_names
+
+    players = {
+        "TopperA": {"display_name": "Topper", "github_username": "after2400"},
+        "TopperB": {"display_name": "Topper", "github_username": "after2400"},
+    }
+    assert build_display_names(players) == {
+        "TopperA": "Topper (TopperA)",
+        "TopperB": "Topper (TopperB)",
+    }
+
+
+def test_build_display_names_mixed_collision_and_unique():
+    from game.components.leaderboard import build_display_names
+
+    players = {
+        "TopperA": {"display_name": "Topper", "github_username": "after2400"},
+        "TopperB": {"display_name": "Topper", "github_username": "jschmoe"},
+        "Alice": {"display_name": "Alice", "github_username": ""},
+    }
+    result = build_display_names(players)
+    assert result["Alice"] == "Alice"
+    assert result["TopperA"] == "Topper (after2400)"
+    assert result["TopperB"] == "Topper (jschmoe)"
+
+
+def test_build_display_names_missing_display_name_uses_class():
+    from game.components.leaderboard import build_display_names
+
+    players = {"Solo": {"github_username": "x"}}
+    assert build_display_names(players) == {"Solo": "Solo"}

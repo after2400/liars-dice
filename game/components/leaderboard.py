@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from datetime import datetime, timezone
 
 import yaml
@@ -6,6 +7,34 @@ import yaml
 _LEADERBOARD_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "leaderboard.yaml")
 )
+
+
+def build_display_names(players: dict) -> dict[str, str]:
+    """Map each class name (leaderboard key) to its render string.
+
+    A name is suffixed only when 2+ players share the same display_name. The
+    suffix is the github_username when it is non-empty AND unique within the
+    colliding group; otherwise it falls back to the class name, which is always
+    unique. Unique names render bare.
+    """
+    names = {cn: p.get("display_name", cn) for cn, p in players.items()}
+
+    groups: dict[str, list[str]] = defaultdict(list)
+    for cn, name in names.items():
+        groups[name].append(cn)
+
+    result: dict[str, str] = {}
+    for cn, name in names.items():
+        if len(groups[name]) <= 1:
+            result[cn] = name
+            continue
+        username = players[cn].get("github_username") or ""
+        same_username_count = sum(
+            (players[s].get("github_username") or "") == username for s in groups[name]
+        )
+        username_unique = bool(username) and same_username_count == 1
+        result[cn] = f"{name} ({username if username_unique else cn})"
+    return result
 
 
 def _now() -> str:
