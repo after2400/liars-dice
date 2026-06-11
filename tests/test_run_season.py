@@ -191,3 +191,93 @@ def test_runs_inactive_tier_separately(tmp_path):
     # Both should have games recorded
     assert alice_stats.get("games", 0) == 5, f"Alice should have 5 games, got {alice_stats}"
     assert bruno_stats.get("games", 0) == 5, f"Bruno should have 5 games, got {bruno_stats}"
+
+
+# ---------------------------------------------------------------------------
+# Task 3: duplicate-name disambiguation in summary + README rendering
+# ---------------------------------------------------------------------------
+
+
+def _load_run_season():
+    """Import run_season.py as a module (main() is guarded, so this is side-effect free)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("run_season", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_summary_disambiguates_duplicate_names(tmp_path):
+    rs = _load_run_season()
+    lb_path = tmp_path / "lb.yaml"
+    summary = tmp_path / "summary.md"
+    data = {
+        "total_runs": 1,
+        "players": {
+            "TopperA": {
+                "display_name": "Topper",
+                "github_username": "alice",
+                "tier": "PRM",
+                "tier_stats": {"PRM": {"wins": 5, "games": 10, "win_pct": 50.0}},
+            },
+            "TopperB": {
+                "display_name": "Topper",
+                "github_username": "bob",
+                "tier": "PRM",
+                "tier_stats": {"PRM": {"wins": 3, "games": 10, "win_pct": 30.0}},
+            },
+            "Solo": {
+                "display_name": "Solo",
+                "github_username": "",
+                "tier": "PRM",
+                "tier_stats": {"PRM": {"wins": 1, "games": 10, "win_pct": 10.0}},
+            },
+        },
+    }
+    lb_path.write_text(yaml.dump(data))
+
+    rs._write_summary(str(summary), {}, [], 10, str(lb_path))
+    text = summary.read_text()
+
+    assert "Topper (alice)" in text
+    assert "Topper (bob)" in text
+    assert "Solo (" not in text  # unique name stays bare
+
+
+def test_readme_disambiguates_duplicate_names(tmp_path):
+    rs = _load_run_season()
+    lb_path = tmp_path / "lb.yaml"
+    readme = tmp_path / "README.md"
+    readme.write_text(
+        "intro\n"
+        "<!-- prettier-ignore-start -->\n"
+        "<!-- leaderboard-start -->\n"
+        "OLD\n"
+        "<!-- leaderboard-end -->\n"
+        "<!-- prettier-ignore-end -->\n"
+        "footer\n"
+    )
+    data = {
+        "players": {
+            "TopperA": {
+                "display_name": "Topper",
+                "github_username": "alice",
+                "tier": "PRM",
+                "tier_stats": {"PRM": {"win_pct": 50.0}},
+            },
+            "TopperB": {
+                "display_name": "Topper",
+                "github_username": "bob",
+                "tier": "PRM",
+                "tier_stats": {"PRM": {"win_pct": 30.0}},
+            },
+        },
+    }
+    lb_path.write_text(yaml.dump(data))
+
+    rs._update_readme(str(readme), str(lb_path))
+    text = readme.read_text()
+
+    assert "Topper (alice)" in text
+    assert "Topper (bob)" in text

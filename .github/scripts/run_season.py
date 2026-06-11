@@ -147,9 +147,12 @@ def _write_summary(
     lb_path: str,
 ) -> None:
     """Write a markdown season summary: final standings + collapsed per-tier game results."""
+    from game.components.leaderboard import build_display_names
+
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     data = _load_lb(lb_path)
     players = data.get("players", {})
+    display_names = build_display_names(players)
 
     lines: list[str] = [f"# Season Summary — {today}", ""]
 
@@ -165,14 +168,14 @@ def _write_summary(
         )
         lines.append(f"### {label}")
         if tier_players:
-            lines.extend(_standings_table(tier_players, tier))
+            lines.extend(_standings_table(tier_players, tier, display_names))
         else:
             lines.append(f"*No players currently in {label}.*")
         lines.append("")
 
     inactive_players = [(n, p) for n, p in players.items() if p.get("tier") == "inactive"]
     if inactive_players:
-        names = ", ".join(p.get("display_name", n) for n, p in inactive_players)
+        names = ", ".join(display_names.get(n, n) for n, _ in inactive_players)
         lines.append(f"*Inactive: {names}*")
         lines.append("")
 
@@ -198,8 +201,7 @@ def _write_summary(
             lines.append("|--------|------|-------|")
 
             for class_name, win_count in sorted(wins.items(), key=lambda x: -x[1]):
-                p = players.get(class_name, {})
-                display = p.get("display_name", class_name)
+                display = display_names.get(class_name, class_name)
                 win_pct = round(win_count / n_games * 100, 1) if n_games else 0.0
                 lines.append(f"| {display} | {win_count} | {win_pct}% |")
 
@@ -211,7 +213,7 @@ def _write_summary(
             for class_name in wins:
                 p = players.get(class_name, {})
                 current_tier = p.get("tier", tier)
-                display = p.get("display_name", class_name)
+                display = display_names.get(class_name, class_name)
                 if current_tier != tier:
                     direction = (
                         "Promoted" if _tier_rank(current_tier) > _tier_rank(tier) else "Relegated"
@@ -242,13 +244,15 @@ _README_END = "<!-- prettier-ignore-end -->"
 _TIER_LABEL = {"PRM": "Premier", "CH": "Championship", "L1": "Level 1", "inactive": "Inactive"}
 
 
-def _standings_table(tier_players: list[tuple[str, dict]], tier: str) -> list[str]:
+def _standings_table(
+    tier_players: list[tuple[str, dict]], tier: str, display_names: dict[str, str]
+) -> list[str]:
     lines = [
         f"| Player | Win % in {tier} | Wins in {tier} | Win % Total | Total Wins | Games |",
         "|--------|----------------|----------------|-------------|------------|-------|",
     ]
     for name, p in tier_players:
-        display = p.get("display_name", name)
+        display = display_names.get(name, name)
         ts = p.get("tier_stats", {}).get(tier, {})
         all_stats = p.get("tier_stats", {}).values()
         total_wins = sum(t.get("wins", 0) for t in all_stats)
@@ -265,8 +269,11 @@ def _update_readme(readme_path: str, lb_path: str) -> None:
     if not os.path.exists(readme_path):
         return
 
+    from game.components.leaderboard import build_display_names
+
     data = _load_lb(lb_path)
     players = data.get("players", {})
+    display_names = build_display_names(players)
 
     def _sorted_players(tier: str) -> list[tuple[str, dict]]:
         pts = [(n, p) for n, p in players.items() if p.get("tier") == tier]
@@ -280,7 +287,7 @@ def _update_readme(readme_path: str, lb_path: str) -> None:
         tier_players = _sorted_players(tier)
         lines.append(f"### {label}")
         if tier_players:
-            lines.extend(_standings_table(tier_players, tier))
+            lines.extend(_standings_table(tier_players, tier, display_names))
         else:
             lines.append(f"*No players currently in {label}.*")
         lines.append("")
@@ -290,7 +297,7 @@ def _update_readme(readme_path: str, lb_path: str) -> None:
         lines.append("<details>")
         lines.append(f"<summary>Inactive ({len(inactive_players)} players)</summary>")
         lines.append("")
-        lines.extend(_standings_table(inactive_players, "inactive"))
+        lines.extend(_standings_table(inactive_players, "inactive", display_names))
         lines.append("")
         lines.append("</details>")
         lines.append("")
