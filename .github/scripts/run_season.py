@@ -103,7 +103,7 @@ def run_season(
     readme_path: str = str(_REPO_ROOT / "README.md"),
 ) -> None:
     """Orchestrate a full bottom-up season run and write a markdown summary."""
-    from game.components.leaderboard import apply_season_results
+    from game.components.leaderboard import apply_season_results, settle_relegations
 
     tier_order = ["inactive", "L1", "CH", "PRM"]
     skipped: list[str] = []
@@ -132,6 +132,12 @@ def run_season(
         for m in movements:
             print(f"  {m}")
         print(f"[done] {tier}: leaderboard updated.")
+
+    relegations = settle_relegations(tier_results, top_n, path=lb_path)
+    if relegations:
+        print("[settle] cross-tier relegations:")
+        for m in relegations:
+            print(f"  {m}")
 
     _write_summary(summary_file, tier_results, skipped, n_games, lb_path)
     print(f"[done] Season summary written to {summary_file}")
