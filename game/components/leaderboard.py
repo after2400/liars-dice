@@ -208,8 +208,10 @@ def apply_season_results(
 
     movements: list[str] = []
 
+    display_names = build_display_names(data["players"])
+
     def _display(name: str) -> str:
-        return data["players"][name].get("display_name", name)
+        return display_names.get(name, name)
 
     # Promote top player unconditionally
     promoted = None

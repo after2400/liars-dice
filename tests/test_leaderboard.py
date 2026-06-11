@@ -628,3 +628,38 @@ def test_build_display_names_missing_display_name_uses_class():
 
     players = {"Solo": {"github_username": "x"}}
     assert build_display_names(players) == {"Solo": "Solo"}
+
+
+def test_apply_season_results_movement_uses_disambiguated_name(tmp_path):
+    import yaml as _yaml
+
+    from game.components.leaderboard import apply_season_results
+
+    path = str(tmp_path / "lb.yaml")
+    data = {
+        "total_runs": 0,
+        "players": {
+            "TopperA": {
+                "display_name": "Topper",
+                "github_username": "alice",
+                "tier": "CH",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "tier_stats": {},
+            },
+            "TopperB": {
+                "display_name": "Topper",
+                "github_username": "bob",
+                "tier": "CH",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "tier_stats": {},
+            },
+        },
+    }
+    (tmp_path / "lb.yaml").write_text(_yaml.dump(data))
+
+    movements = apply_season_results(
+        {"TopperA": 10, "TopperB": 2}, n_games=10, tier="CH", top_n=4, path=path
+    )
+
+    # TopperA wins most → promoted; message uses the disambiguated name.
+    assert "Promoted: Topper (alice) → PRM" in movements
