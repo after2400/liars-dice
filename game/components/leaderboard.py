@@ -168,8 +168,8 @@ def apply_season_results(
     tier: str,
     top_n: int,
     path: str = _LEADERBOARD_PATH,
-) -> None:
-    """Update stats and apply immediate promotions/relegations for a scheduled run."""
+) -> list[str]:
+    """Update stats and apply the immediate promotion for a scheduled run."""
     if os.path.exists(path):
         with open(path) as f:
             data = yaml.safe_load(f) or {}
@@ -213,7 +213,6 @@ def apply_season_results(
         return display_names.get(name, name)
 
     # Promote top player unconditionally
-    promoted = None
     if tier_above and players_in_tier:
         promoted = players_in_tier[0]
         data["players"][promoted]["tier"] = tier_above
