@@ -82,9 +82,9 @@ Within a tier's candidate pool, worst-first order is `(this_season_wins ASC, tot
 
 ### Edge cases
 
-- **Excess exceeds the candidate pool** (all remaining residents are parachutists or did not play — only reachable if a tier received more than one drop from above): after exhausting played candidates, relegate the remaining excess from the protected/non-playing residents, worst-first by `(historical tier win_pct ASC, tier_since DESC)`. This is a rare safety valve, not the normal path.
+- **Excess exceeds the candidate pool** (a tier is over capacity but every remaining resident is a parachutist or did not play): this is only reachable if a tier received more than one drop from above in a single night, which cannot happen while every tier above relegates at most one. We therefore do **not** handle it — `settle_relegations` asserts the candidate pool is large enough to cover the excess (e.g. `assert len(candidates) >= excess`). If the assertion ever fires, an upstream invariant has broken and we want the loud failure, not a silent guess.
 - **Skipped tier receiving a drop:** a tier with `< 2` players cannot exceed `TOP_N` (for `TOP_N ≥ 2`) even after receiving one parachutist, so settlement simply finds `excess <= 0` and does nothing. No special handling needed.
-- **`tier_results` missing a tier** (tier skipped this run): its players are treated as non-playing; the candidate pool is empty and the edge-case fallback above applies if (and only if) the tier is somehow over capacity.
+- **`tier_results` missing a tier** (tier skipped this run): its players are treated as non-playing; combined with the skipped-tier point above, the tier is not over capacity, so settlement does nothing and the assertion is not reached.
 
 ## Components and changes
 
@@ -92,7 +92,10 @@ Within a tier's candidate pool, worst-first order is `(this_season_wins ASC, tot
 
 - **`apply_season_results`**: remove the relegation block (current lines ~224–242) and the now-unused `tier_below` lookup. Keep stats accumulation, the unconditional top-player promotion, `total_runs`/`last_updated` bookkeeping, and the per-call file write. Continues to return the (promotion-only) movements list.
 - **`settle_relegations(tier_results, top_n, path)`**: new function as specified in Phase B.
-- **Delete `apply_pending_relegation`** and the `pending_relegation` list handling: this is the deferred-relegation mechanism this design explicitly rejects. It is dead at runtime (referenced only by tests).
+- **Delete the dead code this design supersedes or that is unreachable at runtime** (each is referenced only by tests today; nothing else in the codebase imports them):
+  - `apply_pending_relegation` and the `pending_relegation` list handling — the deferred-relegation mechanism this design explicitly rejects.
+  - `update_leaderboard` — the older, superseded season driver (its `pending_relegations` / `last_place` parameters belong to abandoned approaches).
+  - `detect_phase` — phase detection that nothing calls; phase-gated movement is not part of this (or any current) behavior.
 
 ### `.github/scripts/run_season.py`
 
@@ -108,15 +111,14 @@ Within a tier's candidate pool, worst-first order is `(this_season_wins ASC, tot
   3. **No relegation at/under capacity.**
   4. **L1 → inactive only when L1 > TOP_N × 2**, and `times_inactive` increments on that drop.
   5. **Movement strings use disambiguated display names** (mirrors the existing display-name test).
-- Remove the `apply_pending_relegation` tests.
+- Remove the tests for the deleted functions: `apply_pending_relegation`, `update_leaderboard`, and `detect_phase`. Drop any test fixtures left unused after their removal.
 
 Run the full suite with `uv run pytest -v` (collects `tests/` and `examples/tests/`).
 
 ## Out of scope
 
 - **Promotion logic** is unchanged. Only relegation moves to the settlement pass.
-- **`detect_phase`** stays as-is. It is dead at runtime today; phase-gated promotion/relegation is a separate question, not this bug.
-- **`update_leaderboard`** (the older, superseded driver, dead at runtime) is left untouched. Removing it is unrelated cleanup for a possible follow-up PR.
+- **Phase-gated movement** as a behavior. Deleting `detect_phase` removes the only (unused) scaffolding for it; whether early-population runs should suppress promotion/relegation is a separate design question, not this bug.
 
 ## Worked example (today's real state: PRM=4, CH=4, L1=3, inactive=0; TOP_N=4)
 
