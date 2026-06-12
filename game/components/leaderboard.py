@@ -50,6 +50,32 @@ _TIER_ABOVE = {"L1": "CH", "CH": "PRM", "inactive": "L1"}
 _TIER_BELOW = {"PRM": "CH", "CH": "L1", "L1": "inactive"}
 
 
+def tier_capacities(n_players: int) -> dict[str, int]:
+    """Return target capacity per tier for n_players total registered players."""
+    if n_players <= 24:
+        return {"PRM": 4, "CH": 4, "L1": max(0, n_players - 8), "DED": 0}
+    if n_players <= 32:
+        pairs = (n_players - 24) // 2
+        extra = (n_players - 24) % 2
+        return {"PRM": 4 + pairs, "CH": 4 + pairs, "L1": 16 + extra, "DED": 0}
+    return {"PRM": 8, "CH": 8, "L1": 16, "DED": n_players - 32}
+
+
+def detect_entry_tier(lb: dict) -> str:
+    """Return the lowest-prestige tier with capacity for the next registered player."""
+    players = lb.get("players", {})
+    n_after = len(players) + 1
+    caps = tier_capacities(n_after)
+    counts: dict[str, int] = {}
+    for p in players.values():
+        t = p.get("tier", "")
+        counts[t] = counts.get(t, 0) + 1
+    for tier in ("L1", "CH", "PRM", "DED"):
+        if caps.get(tier, 0) > 0 and counts.get(tier, 0) < caps[tier]:
+            return tier
+    return "PRM"
+
+
 def _TIER_CAPACITY(tier: str, top_n: int) -> float:
     if tier in ("PRM", "CH"):
         return top_n
