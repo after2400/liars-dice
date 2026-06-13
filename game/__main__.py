@@ -23,6 +23,12 @@ def _parse_args():
         action="store_true",
         help="Suppress per-game result lines; show only the final summary table",
     )
+    p.add_argument(
+        "--players",
+        nargs="+",
+        default=None,
+        help="Run exactly these player class names (overrides --tier)",
+    )
     p.add_argument("n_games", type=int, nargs="?", default=1)
     p.add_argument("top_n", type=int, nargs="?", default=4)
     return p.parse_args()
@@ -82,7 +88,10 @@ _lb_players = _lb_data.get("players", {})
 
 all_players = import_player_classes_from_dir(str(project_root / "players"))
 
-if args.tier:
+if args.players:
+    player_names = set(args.players)
+    players = [p for p in all_players if type(p).__name__ in player_names]
+elif args.tier:
     if args.tier in ("PRM", "CH"):
         # Registered tier players + unregistered challengers (not yet in leaderboard)
         players = [

@@ -239,6 +239,46 @@ def test_class_name_used_as_leaderboard_key(tmp_path):
     assert set(results.keys()) == {"Alice", "Bruno"}
 
 
+def test_players_flag_runs_exactly_named_players(tmp_path):
+    """--players runs exactly the named class names, ignoring tier."""
+    lb = {
+        "total_runs": 1,
+        "players": {
+            "Alice": {
+                "display_name": "Alice",
+                "github_username": "",
+                "tier": "inactive",  # would be excluded by any tier filter
+                "date_added": "2026-01-01T00:00:00Z",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
+            "Bruno": {
+                "display_name": "Bruno",
+                "github_username": "",
+                "tier": "inactive",
+                "date_added": "2026-01-01T00:00:00Z",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
+            "Cleo": {
+                "display_name": "Cleo",
+                "github_username": "",
+                "tier": "inactive",
+                "date_added": "2026-01-01T00:00:00Z",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
+        },
+    }
+    results = run_game(["5", "3", "--players", "Alice", "Bruno"], lb, tmp_path)
+    assert set(results.keys()) == {"Alice", "Bruno"}
+    assert "Cleo" not in results
+    assert sum(results.values()) == 5
+
+
 def test_stats_passed_to_six_arg_player(tmp_path):
     """A player declaring a 6th arg receives a non-None GameStats instance."""
     import textwrap
