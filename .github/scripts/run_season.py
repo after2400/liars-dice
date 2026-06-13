@@ -34,6 +34,8 @@ if _repo_root_str not in sys.path:
 
 import yaml  # noqa: E402
 
+_DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
+
 
 def _load_lb(path: str) -> dict:
     if os.path.exists(path):
@@ -328,6 +330,9 @@ def _update_readme(readme_path: str, lb_path: str) -> None:
 
 def _post_season_summary(issue_number: int, summary_file: str) -> None:
     """Post the season summary markdown to the given GitHub issue."""
+    if _DRY_RUN:
+        print(f"[dry-run] would post summary to issue #{issue_number}")
+        return
     result = subprocess.run(
         ["gh", "issue", "comment", str(issue_number), "--body-file", summary_file],
         capture_output=True,

@@ -34,6 +34,13 @@ _repo_root_str = str(_REPO_ROOT)
 if _repo_root_str not in sys.path:
     sys.path.insert(0, _repo_root_str)
 
+_DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
+
+
+def _today() -> date:
+    raw = os.environ.get("TODAY")
+    return date.fromisoformat(raw) if raw else date.today()
+
 
 # ---------------------------------------------------------------------------
 # Utilities
@@ -42,14 +49,14 @@ if _repo_root_str not in sys.path:
 
 def current_quarter(today: date | None = None) -> str:
     """Return e.g. '2026-Q3' for the quarter containing today."""
-    d = today or date.today()
+    d = today or _today()
     q = (d.month - 1) // 3 + 1
     return f"{d.year}-Q{q}"
 
 
 def is_tournament_monday(today: date | None = None) -> bool:
     """Return True if today is the first Monday of a new quarter."""
-    d = today or date.today()
+    d = today or _today()
     if d.weekday() != 0:  # 0 = Monday
         return False
     return d.month in (1, 4, 7, 10) and d.day <= 7
@@ -245,6 +252,9 @@ def assign_placements(lb_path: str, n_games: int) -> None:
 
 def _gh_create_issue(title: str, repo: str) -> int:
     """Create a GitHub issue and return its number."""
+    if _DRY_RUN:
+        print(f"[dry-run] would create issue: {title!r} in {repo}")
+        return 0
     result = subprocess.run(
         [
             "gh",
@@ -269,6 +279,9 @@ def _gh_create_issue(title: str, repo: str) -> int:
 
 def _gh_post_comment(issue_number: int, body_file: str, repo: str) -> None:
     """Post a comment to a GitHub issue from a file."""
+    if _DRY_RUN:
+        print(f"[dry-run] would post comment to issue #{issue_number} in {repo}")
+        return
     result = subprocess.run(
         ["gh", "issue", "comment", str(issue_number), "--repo", repo, "--body-file", body_file],
         capture_output=True,

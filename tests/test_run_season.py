@@ -397,3 +397,11 @@ def test_run_season_reads_issue_number_from_leaderboard(tmp_path, monkeypatch):
 
     run_season_mod._post_season_from_lb(str(lb_path), str(tmp_path / "summary.md"))
     assert captured["issue"] == 99
+
+
+def test_dry_run_skips_post_season_summary(monkeypatch, capsys):
+    monkeypatch.setenv("DRY_RUN", "1")
+    rs = _load_run_season("run_season_dry")
+    rs._post_season_summary(77, "/tmp/summary.md")
+    out = capsys.readouterr().out
+    assert "[dry-run]" in out

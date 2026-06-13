@@ -355,3 +355,65 @@ def test_write_tournament_summary_contains_tier_placements(tmp_path):
     assert "Alice" in text
     assert "## Pool Results" in text
     assert "500" in text  # Alice's wins
+
+
+def test_today_reads_env_var(monkeypatch):
+    monkeypatch.setenv("TODAY", "2026-07-07")
+    # _today() is a free function — test it directly
+    import importlib.util
+    import pathlib
+
+    spec = importlib.util.spec_from_file_location(
+        "reset_season_today",
+        pathlib.Path(__file__).parent.parent / ".github/scripts/reset_season.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod._today() == date(2026, 7, 7)
+
+
+def test_today_falls_back_to_real_date(monkeypatch):
+    monkeypatch.delenv("TODAY", raising=False)
+    import importlib.util
+    import pathlib
+
+    spec = importlib.util.spec_from_file_location(
+        "reset_season_today2",
+        pathlib.Path(__file__).parent.parent / ".github/scripts/reset_season.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod._today() == date.today()
+
+
+def test_dry_run_skips_gh_create_issue(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("DRY_RUN", "1")
+    import importlib.util
+    import pathlib
+
+    spec = importlib.util.spec_from_file_location(
+        "reset_season_dry",
+        pathlib.Path(__file__).parent.parent / ".github/scripts/reset_season.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    result = mod._gh_create_issue("Test Issue", "owner/repo")
+    assert result == 0
+    out = capsys.readouterr().out
+    assert "[dry-run]" in out
+
+
+def test_dry_run_skips_gh_post_comment(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("DRY_RUN", "1")
+    import importlib.util
+    import pathlib
+
+    spec = importlib.util.spec_from_file_location(
+        "reset_season_dry2",
+        pathlib.Path(__file__).parent.parent / ".github/scripts/reset_season.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod._gh_post_comment(42, str(tmp_path / "body.md"), "owner/repo")
+    out = capsys.readouterr().out
+    assert "[dry-run]" in out
