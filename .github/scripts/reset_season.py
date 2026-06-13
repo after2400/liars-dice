@@ -39,7 +39,12 @@ _DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
 
 def _today() -> date:
     raw = os.environ.get("TODAY")
-    return date.fromisoformat(raw) if raw else date.today()
+    if not raw:
+        return date.today()
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        raise ValueError(f"TODAY env var must be YYYY-MM-DD, got: {raw!r}") from None
 
 
 # ---------------------------------------------------------------------------
@@ -317,11 +322,12 @@ def create_season_issue(lb_path: str, quarter: str, summary_file: str) -> None:
             f"[warn] summary_file not found — skipping comment on #{issue_number}", file=sys.stderr
         )
 
-    data["current_season_issue"] = issue_number
-    state["issue_created"] = True
-    data["tournament_state"] = state
-    _save_lb(data, lb_path)
-    print(f"[done] current_season_issue set to {issue_number}")
+    if not _DRY_RUN:
+        data["current_season_issue"] = issue_number
+        state["issue_created"] = True
+        data["tournament_state"] = state
+        _save_lb(data, lb_path)
+        print(f"[done] current_season_issue set to {issue_number}")
 
 
 def _write_tournament_summary(summary_file: str, lb_path: str, quarter: str) -> None:
