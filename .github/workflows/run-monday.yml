@@ -101,6 +101,10 @@ jobs:
           git add leaderboard.yaml README.md
           if ! git diff --cached --quiet; then
             git commit -m "ci: update leaderboard [skip ci]"
-            git pull --rebase
-            git push
+            if [ -z "${DRY_RUN:-}" ]; then
+              git pull --rebase
+              git push
+            else
+              echo "[dry-run] skipping git push"
+            fi
           fi
