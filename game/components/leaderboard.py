@@ -73,7 +73,7 @@ def detect_entry_tier(lb: dict) -> str:
     for tier in ("L1", "CH", "PRM", "DED"):
         if caps.get(tier, 0) > 0 and counts.get(tier, 0) < caps[tier]:
             return tier
-    return "PRM"
+    return "DED"
 
 
 def _TIER_CAPACITY(tier: str, top_n: int) -> float:

@@ -707,3 +707,16 @@ def test_detect_entry_tier_phase3_returns_ded():
     players.update({f"L{i}": {"tier": "L1"} for i in range(16)})
     lb = {"players": players}
     assert detect_entry_tier(lb) == "DED"
+
+
+def test_detect_entry_tier_fallback_returns_ded():
+    from game.components.leaderboard import detect_entry_tier
+
+    # Pathological state: all tiers overcrowded — fallback must return DED not PRM
+    players = {f"P{i}": {"tier": "PRM"} for i in range(10)}
+    players.update({f"C{i}": {"tier": "CH"} for i in range(10)})
+    players.update({f"L{i}": {"tier": "L1"} for i in range(20)})
+    # 40 players, all overcrowded. tier_capacities(41) = {PRM:8,CH:8,L1:16,DED:9}
+    # counts: PRM=10 >= 8, CH=10 >= 8, L1=20 >= 16, but DED=0 < 9 → DED
+    lb = {"players": players}
+    assert detect_entry_tier(lb) == "DED"
