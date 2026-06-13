@@ -46,9 +46,7 @@ jobs:
           fi
 
           IS_TOURNAMENT=$(uv run python -c "
-          from datetime import date
-          import sys
-          sys.path.insert(0, '.')
+          __file__ = '.github/scripts/reset_season.py'
           exec(open('.github/scripts/reset_season.py').read())
           print('true' if is_tournament_monday() else 'false')
           " 2>/dev/null || echo "false")
