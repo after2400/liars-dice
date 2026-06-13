@@ -194,3 +194,50 @@ def run_pools(lb_path: str, n_games: int) -> None:
     data["tournament_state"] = state
     _save_lb(data, lb_path)
     print(f"[done] run_pools: {n_pools} pool(s) complete")
+
+
+def assign_placements(lb_path: str, n_games: int) -> None:
+    """Assign tier placements from pool_results, top-down by win count.
+
+    Always re-derives from pool_results — safe to re-run.
+    """
+    from game.components.leaderboard import tier_capacities
+
+    data = _load_lb(lb_path)
+    state = data.get("tournament_state") or {}
+    pool_results = state.get("pool_results", {})
+
+    if not pool_results:
+        print(
+            "[warn] assign_placements: no pool_results found — run run_pools() first",
+            file=sys.stderr,
+        )
+        return
+
+    # Flatten pool results: {player: total_wins}
+    all_wins: dict[str, int] = {}
+    for wins in pool_results.values():
+        all_wins.update(wins)
+
+    # Rank all players by wins descending
+    ranked = [name for name, _ in sorted(all_wins.items(), key=lambda x: -x[1])]
+
+    n_players = len(data.get("players", {}))
+    caps = tier_capacities(n_players)
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    idx = 0
+    players = data.get("players", {})
+    for tier in ("PRM", "CH", "L1", "DED"):
+        cap = caps.get(tier, 0)
+        for _ in range(cap):
+            if idx >= len(ranked):
+                break
+            name = ranked[idx]
+            if name in players:
+                players[name]["tier"] = tier
+                players[name]["tier_since"] = now
+            idx += 1
+
+    _save_lb(data, lb_path)
+    print(f"[done] assign_placements: {n_players} players placed")

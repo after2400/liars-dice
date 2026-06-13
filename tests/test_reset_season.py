@@ -129,7 +129,11 @@ def _player(tier, wins=100, games=500):
         "tier_since": "2026-01-01T00:00:00Z",
         "times_inactive": 0,
         "tier_stats": {
-            tier: {"wins": wins, "games": games, "win_pct": round(wins / games * 100, 1)}
+            tier: {
+                "wins": wins,
+                "games": games,
+                "win_pct": round(wins / games * 100, 1) if games else 0.0,
+            }
         },
     }
 
@@ -216,3 +220,74 @@ def test_run_pools_is_idempotent(tmp_path, monkeypatch):
 
     mod.run_pools(path, n_games=10)
     assert len(called) == 0  # _run_pool was never called
+
+
+def test_assign_placements_fills_tiers_top_down(tmp_path):
+    """Top win-count players go to PRM, next to CH, etc."""
+    mod = _load()
+    # 11 players: caps = {PRM:4, CH:4, L1:3, DED:0}
+    names = [f"P{i}" for i in range(11)]
+    players = {n: _player("L1", wins=0, games=0) for n in names}
+    pool_results = {
+        "pool_0": {n: 500 - i * 40 for i, n in enumerate(names[:6])},
+        "pool_1": {n: 500 - i * 40 for i, n in enumerate(names[6:])},
+    }
+    lb = _make_lb(players, tournament_state={"quarter": "2026-Q3", "pool_results": pool_results})
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(yaml.dump(lb))
+
+    mod.assign_placements(path, n_games=1000)
+
+    result = yaml.safe_load(Path(path).read_text())["players"]
+    tiers = {n: p["tier"] for n, p in result.items()}
+    prm_players = [n for n, t in tiers.items() if t == "PRM"]
+    ch_players = [n for n, t in tiers.items() if t == "CH"]
+    l1_players = [n for n, t in tiers.items() if t == "L1"]
+    assert len(prm_players) == 4
+    assert len(ch_players) == 4
+    assert len(l1_players) == 3
+
+
+def test_assign_placements_top_scorer_in_prm(tmp_path):
+    """The player with the most wins ends up in PRM."""
+    mod = _load()
+    players = {
+        n: _player("CH", wins=0, games=0)
+        for n in [
+            "Alice",
+            "Bruno",
+            "Cleo",
+            "Diego",
+            "Eva",
+            "Finn",
+            "Remy",
+            "Sloane",
+            "Zara",
+            "Pyro",
+            "Topper",
+        ]
+    }
+    # Alice dominates
+    wins = {
+        "Alice": 800,
+        "Bruno": 600,
+        "Cleo": 500,
+        "Diego": 490,
+        "Eva": 480,
+        "Finn": 470,
+        "Remy": 460,
+        "Sloane": 450,
+        "Zara": 440,
+        "Pyro": 430,
+        "Topper": 420,
+    }
+    pool_results = {"pool_0": wins}
+    lb = _make_lb(players, tournament_state={"quarter": "2026-Q3", "pool_results": pool_results})
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(yaml.dump(lb))
+
+    mod.assign_placements(path, n_games=1000)
+
+    result = yaml.safe_load(Path(path).read_text())["players"]
+    assert result["Alice"]["tier"] == "PRM"
+    assert result["Topper"]["tier"] == "L1"
