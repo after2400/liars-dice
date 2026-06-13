@@ -38,15 +38,9 @@ def _save_lb(data):
 
 
 def _detect_entry_tier(lb: dict) -> str:
-    players = lb.get("players", {})
-    l1_count = sum(1 for p in players.values() if p.get("tier") == "L1")
-    ch_count = sum(1 for p in players.values() if p.get("tier") == "CH")
+    from game.components.leaderboard import detect_entry_tier
 
-    if l1_count >= 1:
-        return "L1"
-    if ch_count >= 1:
-        return "CH"
-    return "CH"
+    return detect_entry_tier(lb)
 
 
 def main():

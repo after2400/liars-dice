@@ -31,26 +31,29 @@ def run_register(
     return result.returncode, result.stdout + result.stderr
 
 
-def test_register_new_player_enters_l1_when_l1_has_player(tmp_path):
-    lb = {
-        "total_runs": 0,
-        "players": {
-            "Alice": {
-                "display_name": "Alice",
-                "github_username": "",
-                "tier": "L1",
-                "tier_since": "2026-01-01T00:00:00Z",
-                "date_added": "2026-01-01T00:00:00Z",
-                "times_inactive": 0,
-                "tier_stats": {},
-            },
-        },
-    }
-    player_file = REPO_ROOT / "players" / "bruno.py"
+def test_register_new_player_enters_l1_when_l1_open(tmp_path):
+    """L1 opens when total players will exceed 8. With 8 current players, 9th goes to L1."""
+
+    def _p(tier):
+        return {
+            "display_name": "X",
+            "github_username": "",
+            "tier": tier,
+            "tier_since": "2026-01-01T00:00:00Z",
+            "date_added": "2026-01-01T00:00:00Z",
+            "times_inactive": 0,
+            "tier_stats": {},
+        }
+
+    # 8 current players: 4 PRM + 4 CH → tier_capacities(9) = {L1:1, ...} → 9th goes to L1
+    players = {f"P{i}": _p("PRM") for i in range(4)}
+    players.update({f"C{i}": _p("CH") for i in range(4)})
+    lb = {"total_runs": 0, "players": players}
+    player_file = REPO_ROOT / "players" / "alice.py"
     rc, out = run_register(player_file, lb, tmp_path)
     assert rc == 0, out
     lb_result = yaml.safe_load((tmp_path / "leaderboard.yaml").read_text())
-    assert lb_result["players"]["Bruno"]["tier"] == "L1"
+    assert lb_result["players"]["Alice"]["tier"] == "L1"
 
 
 def test_register_new_player_enters_ch_when_all_tiers_empty(tmp_path):
@@ -94,113 +97,55 @@ def test_register_exits_0_if_already_registered(tmp_path):
     assert lb_result["players"]["Alice"]["github_username"] == "someone"
 
 
-def test_register_enters_l1_when_l1_has_players_at_capacity(tmp_path):
-    # L1 has players (even over capacity) → new player still enters L1; season run handles overflow
-    lb = {
-        "total_runs": 0,
-        "players": {
-            "P1": {
-                "display_name": "P1",
-                "github_username": "",
-                "tier": "L1",
-                "tier_since": "2026-01-01T00:00:00Z",
-                "date_added": "2026-01-01T00:00:00Z",
-                "times_inactive": 0,
-                "tier_stats": {},
-            },
-            "P2": {
-                "display_name": "P2",
-                "github_username": "",
-                "tier": "L1",
-                "tier_since": "2026-01-01T00:00:00Z",
-                "date_added": "2026-01-01T00:00:00Z",
-                "times_inactive": 0,
-                "tier_stats": {},
-            },
-            "P3": {
-                "display_name": "P3",
-                "github_username": "",
-                "tier": "L1",
-                "tier_since": "2026-01-01T00:00:00Z",
-                "date_added": "2026-01-01T00:00:00Z",
-                "times_inactive": 0,
-                "tier_stats": {},
-            },
-            "P4": {
-                "display_name": "P4",
-                "github_username": "",
-                "tier": "L1",
-                "tier_since": "2026-01-01T00:00:00Z",
-                "date_added": "2026-01-01T00:00:00Z",
-                "times_inactive": 0,
-                "tier_stats": {},
-            },
-            "Alice": {
-                "display_name": "Alice",
-                "github_username": "",
-                "tier": "CH",
-                "tier_since": "2026-01-01T00:00:00Z",
-                "date_added": "2026-01-01T00:00:00Z",
-                "times_inactive": 0,
-                "tier_stats": {},
-            },
-        },
-    }
-    player_file = REPO_ROOT / "players" / "bruno.py"
+def test_register_enters_ch_when_l1_full(tmp_path):
+    """When L1 is at capacity, new player goes to CH (next lowest with room)."""
+
+    def _p(tier):
+        return {
+            "display_name": "X",
+            "github_username": "",
+            "tier": tier,
+            "tier_since": "2026-01-01T00:00:00Z",
+            "date_added": "2026-01-01T00:00:00Z",
+            "times_inactive": 0,
+            "tier_stats": {},
+        }
+
+    # 25 players: 4 PRM + 4 CH + 17 L1 → tier_capacities(26) = {PRM:5, CH:5, L1:16}
+    # L1_count=17 >= 16, CH_count=4 < 5 → CH
+    players = {f"P{i}": _p("PRM") for i in range(4)}
+    players.update({f"C{i}": _p("CH") for i in range(4)})
+    players.update({f"L{i}": _p("L1") for i in range(17)})  # 25 players total
+    lb = {"total_runs": 0, "players": players}
+    player_file = REPO_ROOT / "players" / "alice.py"
     rc, out = run_register(player_file, lb, tmp_path)
     assert rc == 0, out
     lb_result = yaml.safe_load((tmp_path / "leaderboard.yaml").read_text())
-    assert lb_result["players"]["Bruno"]["tier"] == "L1"
+    assert lb_result["players"]["Alice"]["tier"] == "CH"
 
 
-def test_register_enters_ch_when_l1_empty_and_ch_at_capacity(tmp_path):
-    # L1 is empty (not active) and CH is over capacity → new player still enters CH; season run handles overflow
-    lb = {
-        "total_runs": 0,
-        "players": {
-            "Alice": {
-                "display_name": "Alice",
-                "github_username": "",
-                "tier": "CH",
-                "tier_since": "2026-01-01T00:00:00Z",
-                "date_added": "2026-01-01T00:00:00Z",
-                "times_inactive": 0,
-                "tier_stats": {},
-            },
-            "Cleo": {
-                "display_name": "Cleo",
-                "github_username": "",
-                "tier": "CH",
-                "tier_since": "2026-01-01T00:00:00Z",
-                "date_added": "2026-01-01T00:00:00Z",
-                "times_inactive": 0,
-                "tier_stats": {},
-            },
-            "Diego": {
-                "display_name": "Diego",
-                "github_username": "",
-                "tier": "CH",
-                "tier_since": "2026-01-01T00:00:00Z",
-                "date_added": "2026-01-01T00:00:00Z",
-                "times_inactive": 0,
-                "tier_stats": {},
-            },
-            "Finn": {
-                "display_name": "Finn",
-                "github_username": "",
-                "tier": "CH",
-                "tier_since": "2026-01-01T00:00:00Z",
-                "date_added": "2026-01-01T00:00:00Z",
-                "times_inactive": 0,
-                "tier_stats": {},
-            },
-        },
-    }
-    player_file = REPO_ROOT / "players" / "bruno.py"
+def test_register_enters_prm_when_ch_full_and_l1_not_open(tmp_path):
+    """With ≤8 total players and CH full, new player goes to PRM."""
+
+    def _p(tier):
+        return {
+            "display_name": "X",
+            "github_username": "",
+            "tier": tier,
+            "tier_since": "2026-01-01T00:00:00Z",
+            "date_added": "2026-01-01T00:00:00Z",
+            "times_inactive": 0,
+            "tier_stats": {},
+        }
+
+    # 4 CH players, L1 not open (n_after=5 → L1 cap=0), CH at cap=4 → PRM
+    players = {f"C{i}": _p("CH") for i in range(4)}
+    lb = {"total_runs": 0, "players": players}
+    player_file = REPO_ROOT / "players" / "alice.py"
     rc, out = run_register(player_file, lb, tmp_path)
     assert rc == 0, out
     lb_result = yaml.safe_load((tmp_path / "leaderboard.yaml").read_text())
-    assert lb_result["players"]["Bruno"]["tier"] == "CH"
+    assert lb_result["players"]["Alice"]["tier"] == "PRM"
 
 
 def test_register_enters_ch_when_l1_empty(tmp_path):
