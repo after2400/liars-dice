@@ -166,15 +166,15 @@ def run_pools(lb_path: str, n_games: int) -> None:
     tier_order = ["PRM", "CH", "L1", "DED", "inactive"]
     seeded: list[str] = []
     players_data = data.get("players", {})
+
+    def _win_pct(name: str) -> float:
+        ts = players_data[name].get("tier_stats", {})
+        total_w = sum(t.get("wins", 0) for t in ts.values())
+        total_g = sum(t.get("games", 0) for t in ts.values())
+        return total_w / total_g if total_g else 0.0
+
     for tier in tier_order:
         in_tier = get_tier_players(data, tier)
-
-        def _win_pct(name: str) -> float:
-            ts = players_data[name].get("tier_stats", {})
-            total_w = sum(t.get("wins", 0) for t in ts.values())
-            total_g = sum(t.get("games", 0) for t in ts.values())
-            return total_w / total_g if total_g else 0.0
-
         in_tier.sort(key=_win_pct, reverse=True)
         seeded.extend(in_tier)
 
