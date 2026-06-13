@@ -16,9 +16,12 @@ Environment variables:
   GH_REPO           GitHub repo in owner/repo format (required in CI)
 """
 
+import os
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
+
+import yaml
 
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent.parent
@@ -70,3 +73,35 @@ def form_pools(players: list[str], n_pools: int) -> list[list[str]]:
             else:
                 pool_idx -= 1
     return pools
+
+
+def _load_lb(path: str) -> dict:
+    if os.path.exists(path):
+        with open(path) as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def _save_lb(data: dict, path: str) -> None:
+    data["last_updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with open(path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+
+
+def zero_stats(lb_path: str, quarter: str) -> None:
+    """Zero all tier_stats and mark the tournament quarter. Idempotent.
+
+    If tournament_state.quarter already matches quarter, this is a no-op.
+    """
+    data = _load_lb(lb_path)
+    state = data.get("tournament_state") or {}
+    if state.get("quarter") == quarter:
+        print(f"[skip] zero_stats: already zeroed for {quarter}")
+        return
+
+    for player in data.get("players", {}).values():
+        player["tier_stats"] = {}
+
+    data["tournament_state"] = {"quarter": quarter}
+    _save_lb(data, lb_path)
+    print(f"[done] zero_stats: all tier_stats cleared for {quarter}")

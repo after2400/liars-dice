@@ -4,6 +4,8 @@ import importlib.util
 from datetime import date
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).parent.parent
 SCRIPT = REPO_ROOT / ".github" / "scripts" / "reset_season.py"
 
@@ -101,3 +103,71 @@ def test_form_pools_all_players_present():
     players = [f"P{i}" for i in range(11)]
     pools = mod.form_pools(players, 2)
     assert sorted(sum(pools, [])) == sorted(players)
+
+
+# --- zero_stats ---
+
+
+def _make_lb(players: dict, tournament_state=None) -> dict:
+    lb = {
+        "total_runs": 5,
+        "last_updated": "2026-01-01T00:00:00Z",
+        "current_season_issue": 10,
+        "players": players,
+    }
+    if tournament_state:
+        lb["tournament_state"] = tournament_state
+    return lb
+
+
+def _player(tier, wins=100, games=500):
+    return {
+        "display_name": "X",
+        "github_username": "",
+        "date_added": "2026-01-01T00:00:00Z",
+        "tier": tier,
+        "tier_since": "2026-01-01T00:00:00Z",
+        "times_inactive": 0,
+        "tier_stats": {
+            tier: {"wins": wins, "games": games, "win_pct": round(wins / games * 100, 1)}
+        },
+    }
+
+
+def test_zero_stats_clears_all_tier_stats(tmp_path):
+    mod = _load()
+    lb = _make_lb(
+        {
+            "Alice": _player("PRM"),
+            "Bruno": _player("CH"),
+        }
+    )
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(yaml.dump(lb))
+
+    mod.zero_stats(path, quarter="2026-Q3")
+
+    result = yaml.safe_load(Path(path).read_text())
+    assert result["players"]["Alice"]["tier_stats"] == {}
+    assert result["players"]["Bruno"]["tier_stats"] == {}
+    assert result["tournament_state"]["quarter"] == "2026-Q3"
+
+
+def test_zero_stats_is_idempotent(tmp_path):
+    """Calling zero_stats twice for the same quarter is a no-op on the second call."""
+    mod = _load()
+    lb = _make_lb({"Alice": _player("PRM")})
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(yaml.dump(lb))
+
+    mod.zero_stats(path, quarter="2026-Q3")
+    # Manually re-add stats to verify second call doesn't re-zero
+    result = yaml.safe_load(Path(path).read_text())
+    result["players"]["Alice"]["tier_stats"] = {"PRM": {"wins": 99, "games": 100, "win_pct": 99.0}}
+    Path(path).write_text(yaml.dump(result))
+
+    mod.zero_stats(path, quarter="2026-Q3")  # same quarter → skip
+
+    result2 = yaml.safe_load(Path(path).read_text())
+    # Stats were NOT re-zeroed (idempotent skip)
+    assert result2["players"]["Alice"]["tier_stats"]["PRM"]["wins"] == 99
