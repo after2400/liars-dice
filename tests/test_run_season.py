@@ -373,3 +373,27 @@ def test_run_season_rebalances_in_one_run(tmp_path, monkeypatch):
     assert by_tier("PRM") == {"Diego", "Eva", "Sloane", "Zara"}
     assert by_tier("CH") == {"Alice", "Bruno", "Finn", "Remy"}  # Remy parachuted back
     assert by_tier("L1") == {"Pyro", "Topper", "Cleo"}  # Cleo bounced back
+
+
+def test_run_season_reads_issue_number_from_leaderboard(tmp_path, monkeypatch):
+    """run_season.py should read current_season_issue from leaderboard.yaml."""
+    run_season_mod = _load_run_season("run_season_issue_test")
+
+    captured = {}
+
+    def fake_post(issue_number, summary_file):
+        captured["issue"] = issue_number
+
+    monkeypatch.setattr(run_season_mod, "_post_season_summary", fake_post)
+
+    lb_path = tmp_path / "leaderboard.yaml"
+    lb = {
+        "total_runs": 0,
+        "last_updated": "2026-01-01T00:00:00Z",
+        "current_season_issue": 99,
+        "players": {},
+    }
+    lb_path.write_text(yaml.dump(lb))
+
+    run_season_mod._post_season_from_lb(str(lb_path), str(tmp_path / "summary.md"))
+    assert captured["issue"] == 99

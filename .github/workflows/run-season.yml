@@ -65,6 +65,8 @@ jobs:
         run: uv sync --no-install-project
 
       - name: Run season script
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run python .github/scripts/run_season.py
 
       - name: Commit leaderboard update
@@ -77,9 +79,3 @@ jobs:
             git pull --rebase
             git push
           fi
-
-      - name: Post summary to GitHub issue
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh issue comment ${{ vars.SEASON_TRACKING_ISSUE || '1' }} --body-file season_summary.md
