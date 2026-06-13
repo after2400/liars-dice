@@ -299,6 +299,10 @@ def create_season_issue(lb_path: str, quarter: str, summary_file: str) -> None:
     if os.path.exists(summary_file):
         _gh_post_comment(issue_number, summary_file, repo)
         print(f"[done] Posted tournament summary to #{issue_number}")
+    else:
+        print(
+            f"[warn] summary_file not found — skipping comment on #{issue_number}", file=sys.stderr
+        )
 
     data["current_season_issue"] = issue_number
     state["issue_created"] = True

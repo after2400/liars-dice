@@ -331,3 +331,27 @@ def test_create_season_issue_writes_issue_number(tmp_path, monkeypatch):
     result = yaml.safe_load(Path(path).read_text())
     assert result["current_season_issue"] == 42
     assert result["tournament_state"]["issue_created"] is True
+
+
+def test_write_tournament_summary_contains_tier_placements(tmp_path):
+    """_write_tournament_summary writes tier placements and pool results."""
+    mod = _load()
+    players = {
+        "Alice": _player("PRM"),
+        "Bruno": _player("CH"),
+        "Cleo": _player("L1"),
+    }
+    pool_results = {"pool_0": {"Alice": 500, "Bruno": 300, "Cleo": 200}}
+    lb = _make_lb(players, tournament_state={"quarter": "2026-Q3", "pool_results": pool_results})
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(yaml.dump(lb))
+    summary = str(tmp_path / "summary.md")
+
+    mod._write_tournament_summary(summary, path, "2026-Q3")
+
+    text = Path(summary).read_text()
+    assert "# Tournament Summary — 2026-Q3" in text
+    assert "Premier" in text  # PRM label
+    assert "Alice" in text
+    assert "## Pool Results" in text
+    assert "500" in text  # Alice's wins
