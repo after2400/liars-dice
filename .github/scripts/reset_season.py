@@ -102,6 +102,7 @@ def zero_stats(lb_path: str, quarter: str) -> None:
     for player in data.get("players", {}).values():
         player["tier_stats"] = {}
 
-    data["tournament_state"] = {"quarter": quarter}
+    state["quarter"] = quarter
+    data["tournament_state"] = state
     _save_lb(data, lb_path)
     print(f"[done] zero_stats: all tier_stats cleared for {quarter}")
