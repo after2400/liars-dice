@@ -171,3 +171,48 @@ def test_zero_stats_is_idempotent(tmp_path):
     result2 = yaml.safe_load(Path(path).read_text())
     # Stats were NOT re-zeroed (idempotent skip)
     assert result2["players"]["Alice"]["tier_stats"]["PRM"]["wins"] == 99
+
+
+def test_run_pools_stores_results(tmp_path, monkeypatch):
+    """run_pools() stores per-pool win dicts in tournament_state.pool_results."""
+    mod = _load()
+
+    canned = {"Alice": 450, "Bruno": 300, "Cleo": 250}
+    monkeypatch.setattr(
+        mod, "_run_pool", lambda pool, n_games, lb_path: {p: canned[p] for p in pool if p in canned}
+    )
+
+    lb = _make_lb(
+        {"Alice": _player("PRM"), "Bruno": _player("CH"), "Cleo": _player("L1")},
+        tournament_state={"quarter": "2026-Q3"},
+    )
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(yaml.dump(lb))
+
+    mod.run_pools(path, n_games=10)
+
+    result = yaml.safe_load(Path(path).read_text())
+    pool_results = result["tournament_state"]["pool_results"]
+    assert len(pool_results) == 1  # 3 players → 1 pool (ceil(3/8)=1)
+    wins = list(pool_results.values())[0]
+    assert set(wins.keys()) == {"Alice", "Bruno", "Cleo"}
+
+
+def test_run_pools_is_idempotent(tmp_path, monkeypatch):
+    """run_pools() skips if pool_results already present."""
+    mod = _load()
+    called = []
+    monkeypatch.setattr(mod, "_run_pool", lambda *a, **kw: called.append(1) or {})
+
+    lb = _make_lb(
+        {"Alice": _player("PRM"), "Bruno": _player("CH")},
+        tournament_state={
+            "quarter": "2026-Q3",
+            "pool_results": {"pool_0": {"Alice": 5, "Bruno": 3}},
+        },
+    )
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(yaml.dump(lb))
+
+    mod.run_pools(path, n_games=10)
+    assert len(called) == 0  # _run_pool was never called
