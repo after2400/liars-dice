@@ -1,0 +1,108 @@
+name: Run Monday
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # 9am UTC every Monday
+  workflow_dispatch:
+    inputs:
+      force_tournament:
+        description: "Force a quarterly tournament reset regardless of date"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.decide.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide mode
+        id: decide
+        run: |
+          if [ "${{ inputs.force_tournament }}" = "true" ]; then
+            echo "mode=tournament" >> "$GITHUB_OUTPUT"
+            echo "force_tournament=true → tournament mode"
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "mode=season" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          DOW=$(date +%u)
+          if [ "$DOW" != "1" ]; then
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+            echo "Not Monday — skip."
+            exit 0
+          fi
+
+          IS_TOURNAMENT=$(uv run python -c "
+          from datetime import date
+          import sys
+          sys.path.insert(0, '.')
+          exec(open('.github/scripts/reset_season.py').read())
+          print('true' if is_tournament_monday() else 'false')
+          " 2>/dev/null || echo "false")
+
+          if [ "$IS_TOURNAMENT" = "true" ]; then
+            echo "mode=tournament" >> "$GITHUB_OUTPUT"
+            echo "Tournament Monday detected."
+          elif git log --since='24 hours ago' --name-only --pretty=format: -- 'players/*.py' | grep -q '\.py$'; then
+            echo "mode=season" >> "$GITHUB_OUTPUT"
+            echo "New player file(s) — running season."
+          else
+            echo "mode=season" >> "$GITHUB_OUTPUT"
+            echo "Regular Monday season run."
+          fi
+
+  run:
+    needs: guard
+    if: needs.guard.outputs.mode != 'skip'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      PYTHONPATH: .
+      N_GAMES: ${{ vars.N_GAMES || '1000' }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.LEADERBOARD_PAT }}
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --no-install-project
+
+      - name: Run tournament reset
+        if: needs.guard.outputs.mode == 'tournament'
+        run: uv run python .github/scripts/reset_season.py
+
+      - name: Run regular season
+        if: needs.guard.outputs.mode == 'season'
+        run: uv run python .github/scripts/run_season.py
+
+      - name: Commit leaderboard update
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add leaderboard.yaml README.md
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: update leaderboard [skip ci]"
+            git pull --rebase
+            git push
+          fi
