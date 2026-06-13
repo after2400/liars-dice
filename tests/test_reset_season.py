@@ -291,3 +291,43 @@ def test_assign_placements_top_scorer_in_prm(tmp_path):
     result = yaml.safe_load(Path(path).read_text())["players"]
     assert result["Alice"]["tier"] == "PRM"
     assert result["Topper"]["tier"] == "L1"
+
+
+def test_create_season_issue_is_idempotent(tmp_path, monkeypatch):
+    """create_season_issue() skips if tournament_state.issue_created is True."""
+    mod = _load()
+    called = []
+    monkeypatch.setattr(mod, "_gh_create_issue", lambda *a, **kw: called.append(1) or 99)
+
+    lb = _make_lb(
+        {"Alice": _player("PRM")},
+        tournament_state={"quarter": "2026-Q3", "issue_created": True},
+    )
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(yaml.dump(lb))
+
+    mod.create_season_issue(path, quarter="2026-Q3", summary_file=str(tmp_path / "s.md"))
+    assert len(called) == 0  # skipped
+
+
+def test_create_season_issue_writes_issue_number(tmp_path, monkeypatch):
+    """create_season_issue() stores the new issue number in leaderboard.yaml."""
+    mod = _load()
+    monkeypatch.setenv("GH_REPO", "owner/repo")
+    monkeypatch.setattr(mod, "_gh_create_issue", lambda title, repo: 42)
+    monkeypatch.setattr(mod, "_gh_post_comment", lambda issue, body_file, repo: None)
+
+    summary = tmp_path / "s.md"
+    summary.write_text("# Tournament Summary\n")
+    lb = _make_lb(
+        {"Alice": _player("PRM")},
+        tournament_state={"quarter": "2026-Q3"},
+    )
+    path = str(tmp_path / "lb.yaml")
+    (tmp_path / "lb.yaml").write_text(yaml.dump(lb))
+
+    mod.create_season_issue(path, quarter="2026-Q3", summary_file=str(summary))
+
+    result = yaml.safe_load(Path(path).read_text())
+    assert result["current_season_issue"] == 42
+    assert result["tournament_state"]["issue_created"] is True

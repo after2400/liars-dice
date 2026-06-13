@@ -241,3 +241,127 @@ def assign_placements(lb_path: str, n_games: int) -> None:
 
     _save_lb(data, lb_path)
     print(f"[done] assign_placements: {n_players} players placed")
+
+
+def _gh_create_issue(title: str, repo: str) -> int:
+    """Create a GitHub issue and return its number."""
+    result = subprocess.run(
+        [
+            "gh",
+            "issue",
+            "create",
+            "--repo",
+            repo,
+            "--title",
+            title,
+            "--body",
+            "",
+            "--json",
+            "number",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"gh issue create failed: {result.stderr}")
+    return json.loads(result.stdout)["number"]
+
+
+def _gh_post_comment(issue_number: int, body_file: str, repo: str) -> None:
+    """Post a comment to a GitHub issue from a file."""
+    result = subprocess.run(
+        ["gh", "issue", "comment", str(issue_number), "--repo", repo, "--body-file", body_file],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"[warn] gh issue comment failed: {result.stderr}", file=sys.stderr)
+
+
+def create_season_issue(lb_path: str, quarter: str, summary_file: str) -> None:
+    """Create the quarter's tracking issue and post tournament summary. Idempotent."""
+    data = _load_lb(lb_path)
+    state = data.get("tournament_state") or {}
+
+    if state.get("issue_created"):
+        print(f"[skip] create_season_issue: already created for {quarter}")
+        return
+
+    repo = os.environ.get("GH_REPO", "")
+    if not repo:
+        print("[warn] GH_REPO not set — skipping issue creation", file=sys.stderr)
+        return
+
+    title = f"{quarter} Season"
+    issue_number = _gh_create_issue(title, repo)
+    print(f"[done] Created issue #{issue_number}: {title}")
+
+    if os.path.exists(summary_file):
+        _gh_post_comment(issue_number, summary_file, repo)
+        print(f"[done] Posted tournament summary to #{issue_number}")
+
+    data["current_season_issue"] = issue_number
+    state["issue_created"] = True
+    data["tournament_state"] = state
+    _save_lb(data, lb_path)
+    print(f"[done] current_season_issue set to {issue_number}")
+
+
+def _write_tournament_summary(summary_file: str, lb_path: str, quarter: str) -> None:
+    """Write a markdown summary of tournament results."""
+    from game.components.leaderboard import build_display_names
+
+    data = _load_lb(lb_path)
+    state = data.get("tournament_state") or {}
+    pool_results = state.get("pool_results", {})
+    players = data.get("players", {})
+
+    display_names = build_display_names(players)
+
+    lines = [f"# Tournament Summary — {quarter}", ""]
+
+    lines += ["## Tier Placements", ""]
+    for tier in ("PRM", "CH", "L1", "DED"):
+        in_tier = [n for n, p in players.items() if p.get("tier") == tier]
+        if in_tier:
+            label = {
+                "PRM": "Premier",
+                "CH": "Championship",
+                "L1": "League One",
+                "DED": "Dead Letter",
+            }.get(tier, tier)
+            lines.append(f"**{label}:** " + ", ".join(display_names.get(n, n) for n in in_tier))
+    lines.append("")
+
+    if pool_results:
+        lines += ["## Pool Results", ""]
+        for pool_key, wins in pool_results.items():
+            lines.append(f"### {pool_key.replace('_', ' ').title()}")
+            lines.append("| Player | Wins |")
+            lines.append("|--------|------|")
+            for name, w in sorted(wins.items(), key=lambda x: -x[1]):
+                lines.append(f"| {display_names.get(name, name)} | {w} |")
+            lines.append("")
+
+    with open(summary_file, "w") as f:
+        f.write("\n".join(lines))
+
+
+def main() -> None:
+    n_games = int(os.environ.get("N_GAMES", "1000"))
+    lb_path = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
+    summary_file = os.environ.get("SUMMARY_FILE", "season_summary.md")
+
+    quarter = current_quarter()
+    print(f"[reset_season] quarter={quarter} n_games={n_games} lb={lb_path}")
+
+    zero_stats(lb_path, quarter=quarter)
+    run_pools(lb_path, n_games=n_games)
+    assign_placements(lb_path, n_games=n_games)
+    _write_tournament_summary(summary_file, lb_path, quarter)
+    create_season_issue(lb_path, quarter=quarter, summary_file=summary_file)
+    print("[done] Quarterly reset complete.")
+
+
+if __name__ == "__main__":
+    main()
