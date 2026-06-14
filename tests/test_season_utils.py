@@ -2,6 +2,7 @@
 
 import importlib.util
 import sys
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -74,3 +75,27 @@ def test_save_lb_round_trips(tmp_path):
     mod._save_lb(original, str(lb))
     result = mod._load_lb(str(lb))
     assert result["players"] == original["players"]
+
+
+# --- next_tournament_monday ---
+
+
+def test_next_tournament_monday_on_tournament_day():
+    mod = _load()
+    # 2026-07-06 is the first Monday of Q3 — should return itself
+    result = mod.next_tournament_monday(date(2026, 7, 6))
+    assert result == date(2026, 7, 6)
+
+
+def test_next_tournament_monday_before_quarter():
+    mod = _load()
+    # Mid-June: next tournament Monday is the first Monday of Q3
+    result = mod.next_tournament_monday(date(2026, 6, 15))
+    assert result == date(2026, 7, 6)
+
+
+def test_next_tournament_monday_day_after():
+    mod = _load()
+    # 2026-07-07 (Tuesday after Q3 tournament): next is Q4, first Monday of October
+    result = mod.next_tournament_monday(date(2026, 7, 7))
+    assert result == date(2026, 10, 5)
