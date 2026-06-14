@@ -382,6 +382,7 @@ def main() -> None:
     run_pools(lb_path, n_games=n_games)
     assign_placements(lb_path, n_games=n_games)
     _write_tournament_summary(summary_file, lb_path, quarter)
+    print(open(summary_file).read())
     create_season_issue(lb_path, quarter=quarter, summary_file=summary_file)
     print("[done] Quarterly reset complete.")
 
