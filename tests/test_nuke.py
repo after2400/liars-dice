@@ -112,6 +112,26 @@ def test_last_resort_raises_quantity_blind(nuke):
     assert result.quantity == 3  # +1 blind
 
 
+def test_raises_quantity_by_raise_when_backed_on_ones(nuke):
+    """Backed raise works correctly when the prior bet is on face 1 (no wilds counted)."""
+    hand = [1, 1, 3, 4, 5]  # two 1s → backed on face 1
+    prior_bet = Bet(2, 1, "someone")  # holds 2 ones, need=0 → P=1.0, well above threshold
+    result = nuke.algo(hand, prior_bet, 20, [], [])
+    assert result is not None
+    assert result.face == 1
+    assert result.quantity == 2 + Nuke.RAISE_WHEN_BACKED
+
+
+def test_last_resort_from_face_six(nuke):
+    """Last-resort +1 raise fires when prior face is 6 (no higher face exists)."""
+    hand = [2, 2, 3, 3, 4]  # no 6s, no 1s — nothing above face 6
+    prior_bet = Bet(3, 6, "someone")  # P(3+ sixes with 0 own, 15 unseen) is high
+    result = nuke.algo(hand, prior_bet, 20, [], [])
+    assert result is not None
+    assert result.face == 6
+    assert result.quantity == 4  # +1 blind
+
+
 def test_player_name(nuke):
     """Player name attribute is set correctly."""
     assert nuke.name == "Nuke LaLoosh"
