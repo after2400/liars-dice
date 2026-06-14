@@ -21,6 +21,7 @@ testpaths = ["tests", "examples/tests"]
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
 tag_format = "v{version}"
+commit_message = "chore(release): v{version} [skip ci]"
 
 [tool.semantic_release.branches.main]
 match = "main"
