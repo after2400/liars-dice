@@ -185,7 +185,11 @@ def _write_summary(
 
     inactive_players = [(n, p) for n, p in players.items() if p.get("tier") == "inactive"]
     if inactive_players:
-        names = ", ".join(display_names.get(n, n) for n, _ in inactive_players)
+
+        def _q(s: str) -> str:
+            return f'"{s}"' if "," in s else s
+
+        names = ", ".join(_q(display_names.get(n, n)) for n, _ in inactive_players)
         lines.append(f"*Inactive: {names}*")
         lines.append("")
 

@@ -17,7 +17,12 @@ def build_display_names(players: dict) -> dict[str, str]:
     colliding group; otherwise it falls back to the class name, which is always
     unique. Unique names render bare.
     """
-    names = {cn: p.get("display_name", cn) for cn, p in players.items()}
+    _ctrl = str.maketrans("", "", "".join(chr(i) for i in range(32)))
+
+    def _clean(s: str) -> str:
+        return s.translate(_ctrl).strip()
+
+    names = {cn: _clean(p.get("display_name", cn)) for cn, p in players.items()}
 
     groups: dict[str, list[str]] = defaultdict(list)
     for cn, name in names.items():

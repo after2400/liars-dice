@@ -353,7 +353,11 @@ def _write_tournament_summary(summary_file: str, lb_path: str, quarter: str) -> 
                 "L1": "League One",
                 "DED": "Dead Letter",
             }.get(tier, tier)
-            lines.append(f"**{label}:** " + ", ".join(display_names.get(n, n) for n in in_tier))
+
+            def _q(name: str) -> str:
+                return f'"{name}"' if "," in name else name
+
+            lines.append(f"**{label}:** " + ", ".join(_q(display_names.get(n, n)) for n in in_tier))
     lines.append("")
 
     if pool_results:
