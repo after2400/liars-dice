@@ -17,7 +17,7 @@ export default {
         "plans", // docs/plans/ implementation plans
       ],
     ],
-    "scope-empty": [1, "never"], // warn if no scope provided
+    "scope-empty": [0, "never"], // off — player: commits legitimately have no scope
     "type-enum": [
       2,
       "always",
