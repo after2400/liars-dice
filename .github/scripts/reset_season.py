@@ -25,14 +25,14 @@ import tempfile
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-import yaml
-
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent.parent
 
 _repo_root_str = str(_REPO_ROOT)
 if _repo_root_str not in sys.path:
     sys.path.insert(0, _repo_root_str)
+
+from season_utils import _load_lb, _save_lb  # noqa: E402
 
 _DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
 
@@ -89,19 +89,6 @@ def form_pools(players: list[str], n_pools: int) -> list[list[str]]:
             else:
                 pool_idx -= 1
     return pools
-
-
-def _load_lb(path: str) -> dict:
-    if os.path.exists(path):
-        with open(path) as f:
-            return yaml.safe_load(f) or {}
-    return {}
-
-
-def _save_lb(data: dict, path: str) -> None:
-    data["last_updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    with open(path, "w") as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
 
 def zero_stats(lb_path: str, quarter: str) -> None:
