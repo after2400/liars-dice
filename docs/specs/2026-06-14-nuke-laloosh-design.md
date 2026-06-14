@@ -67,9 +67,8 @@ Diego-style logic, with raise size controlled by `RAISE_WHEN_BACKED`:
 ## Implementation Plan
 
 1. Implement `players/nuke.py` as a single class with `CALL_THRESHOLD` and `RAISE_WHEN_BACKED` constants
-2. Run all three variants via `just simulate` and compare win rates
-3. Set constants to the winning variant; delete the others from comments
-4. Register Nuke in the leaderboard starting at L1
+2. Run all three variants via `just simulate-season` and compare win rates
+3. Set constants to the winning variant; remove the others
 
 ---
 
