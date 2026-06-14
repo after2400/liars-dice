@@ -43,12 +43,11 @@ class Nuke:
     ) -> Bet | None:
         if prior_bet is None:
             if random.random() < self.FASTBALL_PROB:
-                # Fastball: open on 1s, turning wilds off for the round
                 own_1s = hand.count(1)
                 unseen = total_dice - len(hand)
+                # Always claims at least one more than he holds — never backs down
                 quantity = max(own_1s + 1, round(own_1s + unseen * (1 / 6) * 0.7))
                 return Bet(quantity, 1, self.name)
-            # Changeup: best non-1 face, Diego's opening formula
             best_face = max(range(2, 7), key=lambda f: hand.count(f) + hand.count(1))
             own = hand.count(best_face) + hand.count(1)
             unseen = total_dice - len(hand)
