@@ -29,3 +29,7 @@ uv run pytest -v
 This collects both `tests/` and `examples/tests/` via the `testpaths` setting in
 `pyproject.toml` — pass no path so the example player's tests run too. Don't pass
 `tests/` explicitly or the `examples/` template tests are skipped.
+
+## PR and commit attribution
+
+All PRs must use `🤖 Co-Authored with [Claude Code](https://claude.com/claude-code)` in the body footer — not "Generated with". This project is a genuine collaboration.
