@@ -1,0 +1,28 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    concurrency: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.LEADERBOARD_PAT }}
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install python-semantic-release
+        run: uv tool install python-semantic-release
+
+      - name: Run semantic-release
+        run: semantic-release version
+        env:
+          GH_TOKEN: ${{ secrets.LEADERBOARD_PAT }}
