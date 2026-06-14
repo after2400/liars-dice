@@ -36,6 +36,7 @@ export default {
         "revert",
         // add custom types below
         "player", // adding or updating a player strategy (players/); ignored by semantic-release
+        "doh", // escape hatch — never bumps version, never appears in changelog
       ],
     ],
   },
