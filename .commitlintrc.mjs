@@ -9,7 +9,7 @@ export default {
         "config", // commitlint, ruff, pre-commit config
         "workflows", // .github/workflows/
         "game", // core game engine (game/)
-        "players", // player files (players/)
+        // "players" scope removed — use `player:` type for all player additions/updates
         "leaderboard", // leaderboard schema and data
         "scripts", // .github/scripts/
         "tests", // test-only changes
@@ -35,6 +35,7 @@ export default {
         "chore",
         "revert",
         // add custom types below
+        "player", // adding or updating a player strategy (players/); ignored by semantic-release
       ],
     ],
   },
