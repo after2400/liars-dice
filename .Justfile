@@ -7,6 +7,9 @@ _default:
 develop:
     uv sync --dev
     uv tool install --upgrade wrkflw
+    uv tool install pre-commit
+    pre-commit install --hook-type commit-msg
+    pre-commit install
 
 # Run the full test suite
 [group('quality')]
