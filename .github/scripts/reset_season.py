@@ -22,7 +22,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 _SCRIPT_DIR = Path(__file__).parent
@@ -32,39 +32,15 @@ _repo_root_str = str(_REPO_ROOT)
 if _repo_root_str not in sys.path:
     sys.path.insert(0, _repo_root_str)
 
-from season_utils import _load_lb, _save_lb  # noqa: E402
+from season_utils import (  # noqa: E402
+    _load_lb,
+    _save_lb,
+    _today,  # noqa: F401
+    current_quarter,
+    is_tournament_monday,  # noqa: F401
+)
 
 _DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
-
-
-def _today() -> date:
-    raw = os.environ.get("TODAY")
-    if not raw:
-        return date.today()
-    try:
-        return date.fromisoformat(raw)
-    except ValueError:
-        raise ValueError(f"TODAY env var must be YYYY-MM-DD, got: {raw!r}") from None
-
-
-# ---------------------------------------------------------------------------
-# Utilities
-# ---------------------------------------------------------------------------
-
-
-def current_quarter(today: date | None = None) -> str:
-    """Return e.g. '2026-Q3' for the quarter containing today."""
-    d = today or _today()
-    q = (d.month - 1) // 3 + 1
-    return f"{d.year}-Q{q}"
-
-
-def is_tournament_monday(today: date | None = None) -> bool:
-    """Return True if today is the first Monday of a new quarter."""
-    d = today or _today()
-    if d.weekday() != 0:  # 0 = Monday
-        return False
-    return d.month in (1, 4, 7, 10) and d.day <= 7
 
 
 def form_pools(players: list[str], n_pools: int) -> list[list[str]]:
