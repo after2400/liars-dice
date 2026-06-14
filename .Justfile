@@ -2,11 +2,10 @@
 _default:
     @just --list
 
-# Install/upgrade dev dependencies and tools
+# Install/upgrade dev dependencies and tools (maintainers: also `brew install wrkflw`)
 [group('development')]
 develop:
     uv sync --dev
-    uv tool install --upgrade wrkflw
     uv tool install pre-commit
     pre-commit install --hook-type commit-msg
     pre-commit install
