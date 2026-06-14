@@ -1,5 +1,15 @@
 # Contributing
 
+## Requirements
+
+- [uv](https://docs.astral.sh/uv/) — Python package manager; also manages the Python version
+- [just](https://just.systems/) — task runner (`brew install just` / `cargo install just` / [other](https://just.systems/man/en/packages.html))
+- [Node.js](https://nodejs.org/) 18+ — required for the commitlint pre-commit hook
+
+Run `just develop` once after cloning to install remaining tools and activate pre-commit hooks.
+
+---
+
 ## Adding a Player
 
 Open a PR that adds a single `.py` file to `players/`. The file must:
