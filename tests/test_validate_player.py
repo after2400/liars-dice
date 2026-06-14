@@ -151,3 +151,10 @@ def test_valid_player_with_tier_param(tmp_path):
     result = _run(f)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "OK" in result.stdout
+
+
+def test_real_player_nuke():
+    """Real player nuke.py passes validation."""
+    result = _run(REPO_ROOT / "players" / "nuke.py")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "OK" in result.stdout
