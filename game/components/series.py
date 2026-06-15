@@ -5,12 +5,14 @@ from game.components.stats import GameStats
 logger = logging.getLogger(__name__)
 
 
-def run_series(players: list, n_games: int) -> dict[str, int]:
+def run_series(players: list, n_games: int, tier: str | None = None) -> dict[str, int]:
     """Runs n_games games between the given players and returns win counts.
 
     Args:
         players: List of player objects, each implementing the algo interface.
         n_games: Number of games to play.
+        tier: League tier for this series ("L1", "CH", "PRM"), or None for
+              tournament pools and untiered runs.
 
     Returns:
         Dict mapping player name -> number of wins.
@@ -30,7 +32,12 @@ def run_series(players: list, n_games: int) -> dict[str, int]:
                 handler.stream.truncate(0)
 
         winner = game_orchestrator(
-            players, game_id=game_num, bet_history=bet_history, outcomes=outcomes, stats=stats
+            players,
+            game_id=game_num,
+            bet_history=bet_history,
+            outcomes=outcomes,
+            stats=stats,
+            tier=tier,
         )
         wins[type(winner).__name__] += 1
         logger.info(f"Game {game_num}/{n_games}: {type(winner).__name__} wins")

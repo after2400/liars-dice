@@ -70,6 +70,15 @@ def validate(player_file: str) -> None:
         print("ERROR: Player class does not define an 'algo' method")
         sys.exit(1)
 
+    import inspect
+
+    if "tier" in inspect.signature(instance.algo).parameters:
+        try:
+            instance.algo([], None, 10, [], [], tier=None)
+        except Exception as exc:
+            print(f"ERROR: algo() raised {type(exc).__name__} when called with tier=None: {exc}")
+            sys.exit(1)
+
     display_name = getattr(player_class, "name", player_class.__name__)
     name_error = validate_display_name(display_name)
     if name_error:

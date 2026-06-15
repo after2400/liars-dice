@@ -31,6 +31,9 @@ class Fred:
         total_dice: int,
         bet_history: list[dict],
         outcomes: list[dict],
+        # optional — declare by name to opt in:
+        # stats: GameStats | None = None   (pre-computed opponent stats)
+        # tier: str | None = None          ("L1", "CH", "PRM", or None in tournaments)
     ) -> Bet | None:
         ...
 ```
@@ -47,17 +50,20 @@ The PR is validated and auto-merged. Your player competes starting from the next
 
 ### `algo` inputs
 
-| Parameter     | Type                | Description                                                                                                                                                                                                                                                                                                                        |
-| ------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hand`        | `list[int]`         | Your current dice (values 1–6)                                                                                                                                                                                                                                                                                                     |
-| `prior_bet`   | `Bet \| None`       | The last bid placed, or `None` if you are opening the round                                                                                                                                                                                                                                                                        |
-| `total_dice`  | `int`               | Total dice in play across all active players                                                                                                                                                                                                                                                                                       |
-| `bet_history` | `list[dict]`        | Every accepted bid this game, oldest first                                                                                                                                                                                                                                                                                         |
-| `outcomes`    | `list[dict]`        | Revealed hands and results from all completed rounds                                                                                                                                                                                                                                                                               |
-| `stats`       | `GameStats \| None` | Pre-computed opponent statistics. Present only if your `algo` declares a 6th parameter. Use it instead of scanning `bet_history` or `outcomes` — those lists grow to tens of thousands of entries by game 1000 and scanning them on every turn makes your player slow. See `game/components/stats.py` for the full attribute list. |
+| Parameter     | Type                | Description                                                                                                                                                                                                                                                                                                                                                         |
+| ------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hand`        | `list[int]`         | Your current dice (values 1–6)                                                                                                                                                                                                                                                                                                                                      |
+| `prior_bet`   | `Bet \| None`       | The last bid placed, or `None` if you are opening the round                                                                                                                                                                                                                                                                                                         |
+| `total_dice`  | `int`               | Total dice in play across all active players                                                                                                                                                                                                                                                                                                                        |
+| `bet_history` | `list[dict]`        | Every accepted bid this game, oldest first                                                                                                                                                                                                                                                                                                                          |
+| `outcomes`    | `list[dict]`        | Revealed hands and results from all completed rounds                                                                                                                                                                                                                                                                                                                |
+| `stats`       | `GameStats \| None` | Pre-computed opponent statistics. Opt-in: declare `stats=None` in your signature and the engine passes it automatically. Use it instead of scanning `bet_history` or `outcomes` — those lists grow to tens of thousands of entries by game 1000 and scanning them on every turn makes your player slow. See `game/components/stats.py` for the full attribute list. |
+| `tier`        | `str \| None`       | The current league tier: `"L1"`, `"CH"`, or `"PRM"`. Opt-in: declare `tier=None` in your signature. Receives `None` during quarterly tournament pools. **Your `algo` must not crash when `tier` is `None`** — this is enforced at registration.                                                                                                                     |
+
+Both `stats` and `tier` are opt-in by parameter name and are fully independent — declare either, both, or neither in any order.
 
 > **Performance note:** If your strategy reads `bet_history` or `outcomes`, declare `stats=None`
-> as a 6th parameter and use `GameStats` instead. A full scan of `outcomes` at game 1000
+> in your signature and use `GameStats` instead. A full scan of `outcomes` at game 1000
 > iterates ~15,000 entries — done on every turn, that makes the last games ~2,000× slower
 > than the first.
 

@@ -14,6 +14,7 @@ def game_orchestrator(
     bet_history: list[dict] | None = None,
     outcomes: list[dict] | None = None,
     stats=None,
+    tier: str | None = None,
 ):
     """Plays a complete game of Liar's Dice between N players.
 
@@ -32,7 +33,9 @@ def game_orchestrator(
     Returns:
         The winning player object.
     """
-    _wants_stats = {p: len(inspect.signature(p.algo).parameters) >= 6 for p in players}
+    _sigs = {p: inspect.signature(p.algo).parameters for p in players}
+    _wants_stats = {p: "stats" in _sigs[p] for p in players}
+    _wants_tier = {p: "tier" in _sigs[p] for p in players}
     logger.info("=== New Game ===")
     r.shuffle(players)
     logger.info(f"Players: {', '.join(p.name for p in players)}")
@@ -82,23 +85,19 @@ def game_orchestrator(
             player = players[player_idx]
 
             try:
-                if stats is not None and _wants_stats[player]:
-                    action = player.algo(
-                        hands[player_idx],
-                        current_bet,
-                        total_dice,
-                        bet_history,
-                        completed_outcomes,
-                        stats,
-                    )
-                else:
-                    action = player.algo(
-                        hands[player_idx],
-                        current_bet,
-                        total_dice,
-                        bet_history,
-                        completed_outcomes,
-                    )
+                kwargs: dict = {}
+                if _wants_stats[player]:
+                    kwargs["stats"] = stats
+                if _wants_tier[player]:
+                    kwargs["tier"] = tier
+                action = player.algo(
+                    hands[player_idx],
+                    current_bet,
+                    total_dice,
+                    bet_history,
+                    completed_outcomes,
+                    **kwargs,
+                )
             except Exception as exc:
                 logger.error(f"{player.name} raised an exception ({exc}) - penalised")
                 loser = player_idx

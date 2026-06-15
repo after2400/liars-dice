@@ -116,7 +116,7 @@ if len(players) < 2:
 if not args.no_game_results:
     print(f"Playing: {[type(p).__name__ for p in players]}")
 
-wins = run_series(players, N_GAMES)
+wins = run_series(players, N_GAMES, tier=args.tier)
 print(format_results(wins, N_GAMES))
 
 if args.results_file:

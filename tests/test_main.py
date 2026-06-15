@@ -279,6 +279,149 @@ def test_players_flag_runs_exactly_named_players(tmp_path):
     assert sum(results.values()) == 5
 
 
+def test_tier_passed_to_tier_arg_player(tmp_path):
+    """A player declaring tier=None receives the tier string passed to run_series."""
+    import textwrap
+
+    from game.components.series import run_series
+    from game.components.utils import import_player_classes_from_dir
+
+    player_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class Tierspy:
+            name = "Tierspy"
+            received_tiers = []
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, tier=None):
+                Tierspy.received_tiers.append(tier)
+                if prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+
+    player_dir = tmp_path / "players"
+    player_dir.mkdir()
+    (player_dir / "tierspy.py").write_text(player_src)
+    (player_dir / "__init__.py").write_text("")
+
+    players = import_player_classes_from_dir(str(player_dir))
+
+    class AlwaysBid:
+        name = "AlwaysBid"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            from game.components.bets import Bet
+
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    run_series(players + [AlwaysBid()], n_games=1, tier="CH")
+
+    spy_cls = players[0].__class__
+    assert len(spy_cls.received_tiers) > 0, "Tierspy.algo was never called"
+    assert all(t == "CH" for t in spy_cls.received_tiers), (
+        f"Expected 'CH' on every call, got: {spy_cls.received_tiers}"
+    )
+
+
+def test_tier_none_when_not_specified(tmp_path):
+    """A tier-aware player receives None when run_series is called without a tier."""
+    import textwrap
+
+    from game.components.series import run_series
+    from game.components.utils import import_player_classes_from_dir
+
+    player_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class Tierspy2:
+            name = "Tierspy2"
+            received_tiers = []
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, tier=None):
+                Tierspy2.received_tiers.append(tier)
+                if prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+
+    player_dir = tmp_path / "players"
+    player_dir.mkdir()
+    (player_dir / "tierspy2.py").write_text(player_src)
+    (player_dir / "__init__.py").write_text("")
+
+    players = import_player_classes_from_dir(str(player_dir))
+
+    class AlwaysBid:
+        name = "AlwaysBid"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            from game.components.bets import Bet
+
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    run_series(players + [AlwaysBid()], n_games=1)  # no tier kwarg
+
+    spy_cls = players[0].__class__
+    assert all(t is None for t in spy_cls.received_tiers), (
+        f"Expected None on every call, got: {spy_cls.received_tiers}"
+    )
+
+
+def test_stats_and_tier_independent(tmp_path):
+    """A player with only tier (no stats) gets tier; a player with only stats gets stats."""
+    import textwrap
+
+    from game.components.series import run_series
+    from game.components.stats import GameStats
+    from game.components.utils import import_player_classes_from_dir
+
+    tier_only_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class Tieronly:
+            name = "Tieronly"
+            calls = []
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, tier=None):
+                Tieronly.calls.append({"tier": tier})
+                if prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+
+    stats_only_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class Statsonly:
+            name = "Statsonly"
+            calls = []
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, stats=None):
+                Statsonly.calls.append({"stats": stats})
+                if prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+
+    player_dir = tmp_path / "players"
+    player_dir.mkdir()
+    (player_dir / "tieronly.py").write_text(tier_only_src)
+    (player_dir / "statsonly.py").write_text(stats_only_src)
+    (player_dir / "__init__.py").write_text("")
+
+    players = import_player_classes_from_dir(str(player_dir))
+    run_series(players, n_games=1, tier="PRM")
+
+    tier_cls = next(p.__class__ for p in players if type(p).__name__ == "Tieronly")
+    stats_cls = next(p.__class__ for p in players if type(p).__name__ == "Statsonly")
+
+    assert all(c["tier"] == "PRM" for c in tier_cls.calls), "Tieronly should receive tier='PRM'"
+    assert all(isinstance(c["stats"], GameStats) for c in stats_cls.calls), (
+        "Statsonly should receive a GameStats instance"
+    )
+
+
 def test_stats_passed_to_six_arg_player(tmp_path):
     """A player declaring a 6th arg receives a non-None GameStats instance."""
     import textwrap

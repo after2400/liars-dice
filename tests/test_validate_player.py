@@ -123,3 +123,31 @@ def test_real_player_alice():
     result = _run(REPO_ROOT / "players" / "alice.py")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "OK" in result.stdout
+
+
+def test_tier_none_crash_fails_validation(tmp_path):
+    """A player declaring tier that crashes when tier=None fails validation."""
+    f = tmp_path / "tierbug.py"
+    f.write_text(
+        "class Tierbug:\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, tier=None):\n"
+        "        return tier.upper()  # AttributeError when tier is None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+    assert "tier" in result.stdout.lower()
+
+
+def test_valid_player_with_tier_param(tmp_path):
+    """A player declaring tier=None that handles None correctly passes validation."""
+    f = tmp_path / "tierok.py"
+    f.write_text(
+        "class Tierok:\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, tier=None):\n"
+        "        multiplier = 0.85 if tier == 'CH' else 0.82\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "OK" in result.stdout

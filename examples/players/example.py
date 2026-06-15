@@ -34,6 +34,15 @@ class Example:
         total_dice: int,
         bet_history: list[dict],
         outcomes: list[dict],
+        # Optional: declare `stats: GameStats | None = None` to receive pre-computed
+        # opponent statistics (bluff rates, face biases, etc.) — much faster than
+        # scanning bet_history or outcomes yourself.
+        #
+        # Optional: declare `tier: str | None = None` to receive the current league
+        # tier ("L1", "CH", "PRM"), or None during tournament pools. Lets you tune
+        # strategy per tier. Your algo MUST NOT crash when tier is None.
+        #
+        # Both are opt-in by parameter name — declare either, both, or neither.
     ) -> Bet | None:
         """Decide this turn's action.
 

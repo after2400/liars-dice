@@ -92,24 +92,30 @@ game/
     bets.py            # Bet class, bet_validator, bet_grader
     series.py          # series runner and results formatter
     leaderboard.py     # leaderboard read/write, apply_season_results
-    stats.py           # GameStats incremental stats (passed as 6th algo arg)
+    stats.py           # GameStats incremental stats (optional algo arg, opt-in by name)
     utils.py           # player loader
+  season/
+    utils.py           # shared helpers: _load_lb, _save_lb, date/quarter utilities
+  simulation/
+    quarter.py         # simulate a full quarter locally (uv run python -m game.simulation.quarter)
 
 players/               # one .py file per player — see full list on GitHub
   ...                  # https://github.com/after2400/liars-dice/tree/main/players
 
 .github/
   workflows/
-    register-player.yml  # PR validation, registration, auto-merge
-    run-season.yml       # weekly/conditional season runner (guard + run jobs)
-    release.yml          # PSR — bumps version, regenerates CHANGELOG, creates GitHub Release
-    lint.yml             # ruff + commitlint on push/PR
+    register-player.yml      # PR validation, registration, auto-merge
+    run-monday.yml           # weekly/conditional season runner (guard + run jobs)
+    update-leaderboard.yml   # updates README standings on player file changes
+    guard-non-player-prs.yml # blocks non-admin non-player PRs from auto-merge
+    release.yml              # PSR — bumps version, regenerates CHANGELOG, creates GitHub Release
+    lint.yml                 # ruff + commitlint on push/PR
   scripts/
     register_player.py   # validates player file, writes leaderboard entry
     run_season.py        # bottom-up tier runner, writes season summary
     reset_season.py      # quarterly tournament reset and pool runner
-    season_utils.py      # shared leaderboard I/O and date utilities
     lb_owner.py          # looks up github_username by class name
+    lb_has_player.py     # checks whether a class name is registered
     lb_delete.py         # removes players from leaderboard by file path
     lb_update_name.py    # validates and updates display_name on modification
 
