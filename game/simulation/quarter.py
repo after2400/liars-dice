@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from io import StringIO
 from pathlib import Path
 
-from game.season.utils import next_tournament_monday
+from game.season.utils import current_quarter, next_tournament_monday
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _SCRIPTS = _REPO_ROOT / ".github" / "scripts"
@@ -62,3 +62,81 @@ def run_step(
         buf.write(line)
     proc.wait()
     return buf.getvalue()
+
+
+_TIER_LABEL = {"PRM": "Premier", "CH": "Championship", "L1": "League One"}
+
+
+def write_report(
+    steps: list[dict],
+    lb_path: str,
+    output_file: Path,
+    n_games: int,
+) -> None:
+    """Write a plain-Markdown simulation report."""
+    from game.components.leaderboard import build_display_names
+    from game.season.utils import _load_lb
+
+    data = _load_lb(lb_path)
+    players = data.get("players", {})
+    display_names = build_display_names(players)
+
+    # Derive quarter from the first step date, or fall back to today.
+    first_date = steps[0]["date"] if steps else date.today()
+    quarter = current_quarter(first_date)
+
+    lines: list[str] = [
+        f"# Quarter Simulation: {quarter}",
+        f"**Start:** {first_date} | **Mondays:** {len(steps)} | **Games/run:** {n_games}",
+        "",
+    ]
+
+    for i, step in enumerate(steps):
+        d = step["date"]
+        mode = step["mode"]
+        output = step["output"]
+
+        if mode == "tournament":
+            label = "Tournament"
+        else:
+            label = f"Week {i}"
+
+        lines.append(f"## {d} — {label}")
+        lines.append("")
+        lines.append(output.rstrip())
+        lines.append("")
+
+    lines += ["---", "", "## Final Standings", ""]
+
+    for tier, label in _TIER_LABEL.items():
+        tier_players = [(n, p) for n, p in players.items() if p.get("tier") == tier]
+        tier_players.sort(
+            key=lambda x: -x[1].get("tier_stats", {}).get(tier, {}).get("win_pct", 0.0)
+        )
+        lines.append(f"### {label}")
+        if tier_players:
+            lines.append(f"| Player | Win % in {tier} | Wins | Win % Total | Total Wins | Games |")
+            lines.append("|--------|----------------|------|-------------|------------|-------|")
+            for name, p in tier_players:
+                display = display_names.get(name, name)
+                ts = p.get("tier_stats", {}).get(tier, {})
+                all_ts = p.get("tier_stats", {}).values()
+                total_wins = sum(t.get("wins", 0) for t in all_ts)
+                total_games = sum(t.get("games", 0) for t in p.get("tier_stats", {}).values())
+                total_pct = round(total_wins / total_games * 100, 1) if total_games else 0.0
+                lines.append(
+                    f"| {display} | {ts.get('win_pct', 0.0)} | {ts.get('wins', 0)} "
+                    f"| {total_pct} | {total_wins} | {total_games} |"
+                )
+        else:
+            lines.append(f"*No players currently in {label}.*")
+        lines.append("")
+
+    inactive = [n for n, p in players.items() if p.get("tier") == "inactive"]
+    if inactive:
+        inactive_names = ", ".join(display_names.get(n, n) for n in inactive)
+        lines.append(f"*Inactive: {inactive_names}*")
+        lines.append("")
+
+    output_file.write_text("\n".join(lines))
+    print(f"[done] Report written to {output_file}")

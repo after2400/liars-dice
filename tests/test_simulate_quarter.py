@@ -126,3 +126,69 @@ def test_run_step_returns_captured_output(monkeypatch):
     output = run_step(date(2026, 7, 6), "tournament", n_games=50, lb_path="leaderboard.yaml")
     assert "line one" in output
     assert "line two" in output
+
+
+def test_write_report_contains_quarter_header(tmp_path):
+    from game.simulation.quarter import write_report
+
+    lb = tmp_path / "leaderboard.yaml"
+    lb.write_text(
+        "players:\n  Diego:\n    tier: PRM\n    display_name: Diego\n    github_username: ''\n    tier_stats:\n      PRM:\n        wins: 100\n        games: 200\n        win_pct: 50.0\n"
+    )
+    out = tmp_path / "report.md"
+
+    steps = [
+        {"date": date(2026, 7, 6), "mode": "tournament", "output": "[done] tournament\n"},
+        {"date": date(2026, 7, 13), "mode": "season", "output": "[done] season\n"},
+    ]
+    write_report(steps, str(lb), out, n_games=50)
+
+    text = out.read_text()
+    assert "2026-Q3" in text
+
+
+def test_write_report_contains_monday_sections(tmp_path):
+    from game.simulation.quarter import write_report
+
+    lb = tmp_path / "leaderboard.yaml"
+    lb.write_text("players: {}\n")
+    out = tmp_path / "report.md"
+
+    steps = [
+        {"date": date(2026, 7, 6), "mode": "tournament", "output": "tournament output\n"},
+        {"date": date(2026, 7, 13), "mode": "season", "output": "season output\n"},
+    ]
+    write_report(steps, str(lb), out, n_games=50)
+
+    text = out.read_text()
+    assert "2026-07-06" in text
+    assert "Tournament" in text
+    assert "2026-07-13" in text
+    assert "Week 1" in text
+    assert "tournament output" in text
+    assert "season output" in text
+
+
+def test_write_report_contains_final_standings(tmp_path):
+    from game.simulation.quarter import write_report
+
+    lb = tmp_path / "leaderboard.yaml"
+    lb.write_text(
+        "players:\n"
+        "  Diego:\n"
+        "    tier: PRM\n"
+        "    display_name: Diego\n"
+        "    github_username: ''\n"
+        "    tier_stats:\n"
+        "      PRM:\n"
+        "        wins: 100\n"
+        "        games: 200\n"
+        "        win_pct: 50.0\n"
+    )
+    out = tmp_path / "report.md"
+    write_report([], str(lb), out, n_games=50)
+
+    text = out.read_text()
+    assert "Final Standings" in text
+    assert "Premier" in text
+    assert "Diego" in text
