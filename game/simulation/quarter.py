@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import subprocess
 from datetime import date, timedelta
@@ -140,3 +141,58 @@ def write_report(
 
     output_file.write_text("\n".join(lines))
     print(f"[done] Report written to {output_file}")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Simulate a full quarter locally (DRY_RUN=true, no GitHub changes)."
+    )
+    parser.add_argument(
+        "--start",
+        type=lambda s: date.fromisoformat(s),
+        default=next_tournament_monday(),
+        help="Tournament Monday to start from (YYYY-MM-DD). Default: next upcoming.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Report output path. Default: sim-YYYY-QN.md in current directory.",
+    )
+    parser.add_argument(
+        "--n-games",
+        type=int,
+        default=int(os.environ.get("N_GAMES", "1000")),
+        help="Games per tier/pool per run. Default: N_GAMES env var or 1000.",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+
+    quarter = current_quarter(args.start)
+    output_file = args.output or Path(f"sim-{quarter}.md")
+    lb_path = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
+
+    mondays = compute_mondays(args.start)
+    print(f"[simulate] {quarter}: {len(mondays)} Mondays, {args.n_games} games/run")
+    print(f"[simulate] leaderboard: {lb_path}")
+    print(f"[simulate] report: {output_file}")
+    print()
+
+    steps: list[dict] = []
+    for step_date, mode in mondays:
+        label = "Tournament" if mode == "tournament" else "season"
+        print(f"{'=' * 60}")
+        print(f"[simulate] {step_date} — {label}")
+        print(f"{'=' * 60}")
+        output = run_step(step_date, mode, args.n_games, lb_path)
+        steps.append({"date": step_date, "mode": mode, "output": output})
+        print()
+
+    write_report(steps, lb_path, output_file, args.n_games)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,5 +1,6 @@
 """Tests for game/simulation/quarter.py."""
 
+import os
 from datetime import date
 
 
@@ -192,3 +193,37 @@ def test_write_report_contains_final_standings(tmp_path):
     assert "Final Standings" in text
     assert "Premier" in text
     assert "Diego" in text
+
+
+def test_parse_args_defaults(monkeypatch):
+    import sys
+
+    from game.season.utils import next_tournament_monday
+    from game.simulation.quarter import parse_args
+
+    monkeypatch.setattr(sys, "argv", ["quarter.py"])
+    args = parse_args()
+
+    assert args.n_games == int(os.environ.get("N_GAMES", "1000"))
+    assert args.start == next_tournament_monday()
+    assert args.output is None
+
+
+def test_parse_args_start_override(monkeypatch):
+    import sys
+
+    from game.simulation.quarter import parse_args
+
+    monkeypatch.setattr(sys, "argv", ["quarter.py", "--start", "2026-07-06"])
+    args = parse_args()
+    assert args.start == date(2026, 7, 6)
+
+
+def test_parse_args_n_games_override(monkeypatch):
+    import sys
+
+    from game.simulation.quarter import parse_args
+
+    monkeypatch.setattr(sys, "argv", ["quarter.py", "--n-games", "50"])
+    args = parse_args()
+    assert args.n_games == 50
