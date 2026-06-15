@@ -65,7 +65,7 @@ def run_step(
     return buf.getvalue()
 
 
-_TIER_LABEL = {"PRM": "Premier", "CH": "Championship", "L1": "League One"}
+_TIER_LABEL = {"PRM": "Premier", "CH": "Championship", "L1": "Level 1"}
 
 
 def write_report(
@@ -171,6 +171,18 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    import sys
+
+    from game.season.utils import is_tournament_monday
+
+    if not is_tournament_monday(args.start):
+        print(
+            f"[error] {args.start} is not a tournament Monday "
+            "(must be the first Monday of Jan/Apr/Jul/Oct).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     quarter = current_quarter(args.start)
     output_file = args.output or Path(f"sim-{quarter}.md")
     lb_path = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
@@ -179,6 +191,9 @@ def main() -> None:
     print(f"[simulate] {quarter}: {len(mondays)} Mondays, {args.n_games} games/run")
     print(f"[simulate] leaderboard: {lb_path}")
     print(f"[simulate] report: {output_file}")
+    print(
+        f"[simulate] WARNING: {lb_path} will be modified in place. Use `git checkout -- {lb_path}` or `just clean` to restore."
+    )
     print()
 
     steps: list[dict] = []
