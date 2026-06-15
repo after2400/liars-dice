@@ -405,3 +405,12 @@ def test_dry_run_skips_post_season_summary(monkeypatch, capsys):
     rs._post_season_summary(77, "/tmp/summary.md")
     out = capsys.readouterr().out
     assert "[dry-run]" in out
+
+
+def test_dry_run_skips_readme_update(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("DRY_RUN", "1")
+    rs = _load_run_season("run_season_dry_readme")
+    readme = tmp_path / "README.md"
+    readme.write_text("original content")
+    rs._update_readme(str(readme), str(tmp_path / "lb.yaml"))
+    assert readme.read_text() == "original content", "dry-run must not write README"

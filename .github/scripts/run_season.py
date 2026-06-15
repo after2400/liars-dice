@@ -137,7 +137,11 @@ def run_season(
     _write_summary(summary_file, tier_results, skipped, n_games, lb_path)
     print(f"[done] Season summary written to {summary_file}")
     _update_readme(readme_path, lb_path)
-    print("[done] README standings updated.")
+    print(
+        "[done] README standings updated."
+        if not _DRY_RUN
+        else "[dry-run] would update README standings."
+    )
     _post_season_from_lb(lb_path, summary_file)
     print("[done] Season summary posted to tracking issue.")
 
@@ -273,6 +277,8 @@ def _standings_table(
 
 def _update_readme(readme_path: str, lb_path: str) -> None:
     """Replace the <!-- leaderboard-start/end --> section in README.md with current standings."""
+    if _DRY_RUN:
+        return
     if not os.path.exists(readme_path):
         return
 
