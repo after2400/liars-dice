@@ -1,7 +1,6 @@
 """Tests for .github/scripts/reset_season.py utility functions."""
 
 import importlib.util
-import sys
 from datetime import date
 from pathlib import Path
 
@@ -12,9 +11,6 @@ SCRIPT = REPO_ROOT / ".github" / "scripts" / "reset_season.py"
 
 
 def _load():
-    scripts_dir = str(REPO_ROOT / ".github" / "scripts")
-    if scripts_dir not in sys.path:
-        sys.path.insert(0, scripts_dir)
     spec = importlib.util.spec_from_file_location("reset_season", SCRIPT)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

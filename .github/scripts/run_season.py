@@ -32,7 +32,7 @@ _repo_root_str = str(_REPO_ROOT)
 if _repo_root_str not in sys.path:
     sys.path.insert(0, _repo_root_str)
 
-from season_utils import _load_lb  # noqa: E402
+from game.season.utils import _load_lb  # noqa: E402
 
 _DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
 

@@ -32,7 +32,7 @@ _repo_root_str = str(_REPO_ROOT)
 if _repo_root_str not in sys.path:
     sys.path.insert(0, _repo_root_str)
 
-from season_utils import (  # noqa: E402
+from game.season.utils import (  # noqa: E402
     _load_lb,
     _save_lb,
     _today,  # noqa: F401
