@@ -23,7 +23,17 @@ jobs:
       - name: Install python-semantic-release
         run: uv tool install python-semantic-release
 
-      - name: Run semantic-release
+      - name: Bump version (no commit)
+        run: semantic-release version --skip-build --no-commit --no-tag --no-changelog
+        env:
+          GH_TOKEN: ${{ secrets.LEADERBOARD_PAT }}
+
+      - name: Sync uv.lock
+        run: |
+          uv lock --upgrade-package liars-dice
+          git add uv.lock
+
+      - name: Release
         run: semantic-release version
         env:
           GH_TOKEN: ${{ secrets.LEADERBOARD_PAT }}

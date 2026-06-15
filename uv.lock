@@ -30,7 +30,7 @@ wheels = [
 
 [[package]]
 name = "liars-dice"
-version = "0.9.1"
+version = "1.0.1"
 source = { virtual = "." }
 dependencies = [
     { name = "pandas" },
