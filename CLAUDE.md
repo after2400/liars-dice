@@ -22,12 +22,13 @@
 | `TOP_N` | 4 | League capacity per tier (PRM/CH) |
 | `LEADERBOARD_PATH` | leaderboard.yaml | Path to the leaderboard file |
 
-**Key scripts** (all in `.github/scripts/`):
+**Key scripts** (in `.github/scripts/` unless noted):
 
-- `season_utils.py` — shared helpers: `_load_lb`, `_save_lb`, `_today()`, `is_tournament_monday()`, `next_tournament_monday()`, `current_quarter()`
+- `game/season/utils.py` — shared helpers: `_load_lb`, `_save_lb`, `_today()`, `is_tournament_monday()`, `next_tournament_monday()`, `current_quarter()`
 - `reset_season.py` — quarterly tournament reset (idempotent via `tournament_state` in leaderboard)
 - `run_season.py` — regular Monday season driver
 - `register_player.py` — registers a new player bot into `leaderboard.yaml`
+- `game/simulation/quarter.py` — simulate a full quarter locally (`uv run python -m game.simulation.quarter`)
 
 ## Python execution
 
