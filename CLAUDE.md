@@ -51,15 +51,17 @@ This applies everywhere: shell commands, CI scripts, subagent prompts, code revi
 
 ## Testing
 
-Run the full test suite with:
+Two recipes — use the right one for the work:
 
 ```bash
+# Player development (default) — runs player_tests/ only
 just pytest
+
+# Engine / admin PRs — runs tests/ and examples/tests/
+just pytest-all
 ```
 
-This collects both `tests/` and `examples/tests/` via the `testpaths` setting in
-`pyproject.toml` — pass no path so the example player's tests run too. Don't pass
-`tests/` explicitly or the `examples/` template tests are skipped.
+`player_tests/` is gitignored. Write bot tests there freely; they run locally but are never committed. When working on engine code, always use `just pytest-all` before committing — `just pytest` alone does not cover engine tests.
 
 ## Commits
 

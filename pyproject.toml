@@ -16,7 +16,7 @@ select = ["E", "F", "W", "I"]   # pycodestyle errors, pyflakes, isort
 ignore = ["E501"]                # line length handled by formatter
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "examples/tests"]
+testpaths = ["player_tests"]
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]

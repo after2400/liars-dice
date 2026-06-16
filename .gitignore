@@ -2,6 +2,9 @@
 .claude/worktrees/
 .worktrees/
 
+# Local player test sandbox — write tests here freely; never committed
+player_tests/*.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
