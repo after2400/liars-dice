@@ -10,17 +10,14 @@ class Nuke:
     FASTBALL_PROB = 0.50
     FASTBALL_HOLD_THRESHOLD = 0.40
     BLUFF_CALL_THRESHOLD = 0.30
-    DESPERATE_BUCKET_OFFSET = 0.10  # bidder has 1-2 dice: more likely bluffing
-    COMFORTABLE_BUCKET_OFFSET = 0.05  # bidder has 3+ dice: less likely bluffing
 
     _OPENING_MULTIPLIER = {"L1": 0.85, "CH": 0.82, "PRM": 0.78}
 
     def __init__(self) -> None:
         self._opp: dict[str, dict] = {}
         self._last_outcomes_len: int = 0
-        self._last_bet_history_len: int = 0
 
-    def _ingest(self, outcomes: list[dict], bet_history: list[dict]) -> None:
+    def _ingest(self, outcomes: list[dict]) -> None:
         for o in outcomes[self._last_outcomes_len :]:
             if "bidder" not in o:
                 continue
@@ -37,17 +34,6 @@ class Nuke:
                 d["face_bluffs"][face] = d["face_bluffs"].get(face, 0) + 1
         self._last_outcomes_len = len(outcomes)
 
-        for entry in bet_history[self._last_bet_history_len :]:
-            player = entry.get("player")
-            dice_count = entry.get("dice_count")
-            if player is None or dice_count is None:
-                continue
-            d = self._opp.setdefault(
-                player, {"bluffs": 0, "holds": 0, "face_bluffs": {}, "face_holds": {}}
-            )
-            d["last_dice_count"] = dice_count
-        self._last_bet_history_len = len(bet_history)
-
     def _crash_davis_called_pitch(self, bidder: str, face: int) -> float:
         base = self.BLUFF_CALL_THRESHOLD
         d = self._opp.get(bidder)
@@ -60,14 +46,7 @@ class Nuke:
         face_holds = d["face_holds"].get(face, 0)
         face_bluff_rate = (face_bluffs + 1) / (face_bluffs + face_holds + 2)
         face_offset = (face_bluff_rate - 0.5) * 0.10
-        last_dc = d.get("last_dice_count")
-        if last_dc is not None and last_dc <= 2:
-            bucket_offset = self.DESPERATE_BUCKET_OFFSET
-        elif last_dc is not None:
-            bucket_offset = -self.COMFORTABLE_BUCKET_OFFSET
-        else:
-            bucket_offset = 0.0
-        return max(0.10, min(0.50, base + bluff_offset + face_offset + bucket_offset))
+        return max(0.10, min(0.50, base + bluff_offset + face_offset))
 
     def _prob_bet_holds(self, hand: list[int], face: int, quantity: int, total_dice: int) -> float:
         own = hand.count(face) + (hand.count(1) if face != 1 else 0)
@@ -94,7 +73,7 @@ class Nuke:
         outcomes: list[dict],
         tier: str | None = None,
     ) -> Bet | None:
-        self._ingest(outcomes, bet_history)
+        self._ingest(outcomes)
         if prior_bet is None:
             if (
                 tier != "PRM"
