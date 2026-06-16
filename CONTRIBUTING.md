@@ -44,6 +44,8 @@ The PR is validated and auto-merged. Your player competes starting from the next
 
 **Removing your player:** open a PR that deletes your file. Self-removals are auto-merged; admins can batch-delete multiple players.
 
+> **PR rules (enforced by CI):** Each PR must touch only files under `players/` and add or modify exactly one file. PRs that touch other paths are silently skipped; PRs with multiple player files are rejected with an error comment.
+
 ---
 
 ## Player API
