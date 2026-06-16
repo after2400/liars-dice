@@ -63,6 +63,39 @@ just pytest-all
 
 `player_tests/` is gitignored. Write bot tests there freely; they run locally but are never committed. When working on engine code, always use `just pytest-all` before committing — `just pytest` alone does not cover engine tests.
 
+## Local simulation
+
+Use these to test how a player performs before Monday's CI run. All simulation commands run with `DRY_RUN=true` — they modify `leaderboard.yaml` locally but make no GitHub API calls.
+
+**Register a player locally first** (only needed if they're not yet in `leaderboard.yaml`):
+
+```bash
+PLAYER_FILE=players/foo.py GITHUB_USERNAME=your-login uv run python .github/scripts/register_player.py
+```
+
+**Single-step simulations:**
+
+```bash
+just simulate-tournament           # runs the next quarterly tournament (dry run)
+just simulate-season 2026-07-14    # runs one regular Monday season step
+```
+
+**Full quarter simulation** — runs tournament + all regular Mondays in sequence, writes a Markdown report:
+
+```bash
+uv run python -m game.simulation.quarter
+# --start 2026-07-07   tournament Monday to start from (default: next upcoming)
+# --n-games 500        games per tier per run (default: N_GAMES env var or 1000)
+```
+
+Outputs `sim-YYYY-QN.md` in the current directory. `leaderboard.yaml` is mutated in-place.
+
+**Clean up afterward:**
+
+```bash
+just clean    # restores leaderboard.yaml and removes season_summary.md
+```
+
 ## Commits
 
 Before writing a commit message, check:
