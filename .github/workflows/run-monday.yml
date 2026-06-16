@@ -54,9 +54,6 @@ jobs:
           if [ "$IS_TOURNAMENT" = "true" ]; then
             echo "mode=tournament" >> "$GITHUB_OUTPUT"
             echo "Tournament Monday detected."
-          elif git log --since='24 hours ago' --name-only --pretty=format: -- 'players/*.py' | grep -q '\.py$'; then
-            echo "mode=season" >> "$GITHUB_OUTPUT"
-            echo "New player file(s) — running season."
           else
             echo "mode=season" >> "$GITHUB_OUTPUT"
             echo "Regular Monday season run."
