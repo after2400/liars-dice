@@ -84,7 +84,7 @@ just simulate-season 2026-07-14    # runs one regular Monday season step
 
 ```bash
 uv run python -m game.simulation.quarter
-# --start 2026-07-07   tournament Monday to start from (default: next upcoming)
+# --start 2026-07-06   tournament Monday to start from (default: next upcoming)
 # --n-games 500        games per tier per run (default: N_GAMES env var or 1000)
 ```
 
