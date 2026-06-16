@@ -77,7 +77,7 @@ PLAYER_FILE=players/foo.py GITHUB_USERNAME=your-login uv run python .github/scri
 
 ```bash
 just simulate-tournament           # runs the next quarterly tournament (dry run)
-just simulate-season 2026-07-14    # runs one regular Monday season step
+just simulate-season 2026-07-13    # runs one regular Monday season step
 ```
 
 **Full quarter simulation** — runs tournament + all regular Mondays in sequence, writes a Markdown report:

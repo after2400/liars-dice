@@ -127,8 +127,14 @@ just lint     # ruff check + format check
 
 ```bash
 just simulate-season               # dry run with today's date
-just simulate-season 2026-07-07    # dry run with a specific date
+just simulate-season 2026-07-13    # dry run with a specific Monday date
 just simulate-tournament           # dry run the next quarterly tournament
+
+# Full quarter — runs tournament + all Mondays in sequence, writes sim-YYYY-QN.md
+uv run python -m game.simulation.quarter
+# --start 2026-07-06   tournament Monday to start from (default: next upcoming)
+# --n-games 500        games per tier per run (default: 1000)
+
 just clean                         # reset leaderboard.yaml and season_summary.md afterward
 ```
 
