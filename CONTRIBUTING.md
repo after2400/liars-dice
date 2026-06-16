@@ -15,8 +15,9 @@ Run `just develop` once after cloning to install remaining tools and activate pr
 Open a PR that adds a single `.py` file to `players/`. The file must:
 
 1. Be named after the class it contains — `fred.py` must define `class Fred`
-2. Implement the `algo` method (see [Player API](#player-api) below)
-3. Optionally set a `name` attribute (display name, ≤ 25 chars, no parentheses)
+2. Have a class name unique across the league — CI rejects duplicates (`Fred` already exists? try `Fred_<username>`)
+3. Implement the `algo` method (see [Player API](#player-api) below)
+4. Optionally set a `name` attribute (display name, ≤ 25 chars, no parentheses)
 
 ```python
 from game.components.bets import Bet
@@ -89,8 +90,10 @@ bet.player    # str — name of the player who placed it
 ### `bet_history` entries
 
 ```python
-{"game": int, "round": int, "player": str, "bet": Bet}
+{"game": int, "round": int, "player": str, "bet": Bet, "dice_count": int}
 ```
+
+`dice_count` is the bidder's die count at the moment they placed that bid.
 
 ### `outcomes` entries
 
