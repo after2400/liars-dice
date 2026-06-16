@@ -74,7 +74,7 @@ if args.no_game_results:
 # --- Imports after logging setup ---
 
 from game.components.series import format_results, run_series  # noqa: E402
-from game.components.utils import import_player_classes_from_dir  # noqa: E402
+from game.components.utils import apply_display_names, import_player_classes_from_dir  # noqa: E402
 
 # --- Main ---
 
@@ -87,6 +87,7 @@ _lb_data = yaml.safe_load(open(_lb_path)) if _lb_path.exists() else {}
 _lb_players = _lb_data.get("players", {})
 
 all_players = import_player_classes_from_dir(str(project_root / "players"))
+apply_display_names(all_players, _lb_players)
 
 if args.players:
     player_names = set(args.players)

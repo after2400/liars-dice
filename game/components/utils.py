@@ -28,6 +28,22 @@ def import_player_classes_from_dir(directory):
     return player_objects
 
 
+def apply_display_names(players: list, lb_players: dict) -> None:
+    """Set player.name to the deduplicated display name from the leaderboard.
+
+    When two players share the same display_name, build_display_names appends
+    a (github_username) suffix so each in-game name is unique. Players not
+    registered in lb_players are left untouched.
+    """
+    from game.components.leaderboard import build_display_names
+
+    display_names = build_display_names(lb_players)
+    for p in players:
+        class_name = type(p).__name__
+        if class_name in display_names:
+            p.name = display_names[class_name]
+
+
 def roll_dice(hands: list):
     for h in hands:
         h["hand"] = r.choices(FACES, k=h["n_dice"])

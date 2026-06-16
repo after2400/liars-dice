@@ -473,6 +473,98 @@ def test_stats_passed_to_six_arg_player(tmp_path):
     )
 
 
+_NOW = "2026-01-01T00:00:00Z"
+
+
+def _lb_entry(display_name: str, github_username: str, tier: str = "PRM") -> dict:
+    return {
+        "display_name": display_name,
+        "github_username": github_username,
+        "tier": tier,
+        "date_added": _NOW,
+        "tier_since": _NOW,
+        "times_inactive": 0,
+        "tier_stats": {},
+    }
+
+
+class TestApplyDisplayNames:
+    def test_deduplicates_colliding_display_names(self):
+        """Two players sharing a display name both get (github_username) suffix."""
+        from game.components.utils import apply_display_names
+
+        class Remy1:
+            name = "Remy"
+
+        class Remy2:
+            name = "Remy"
+
+        lb = {"Remy1": _lb_entry("Remy", "user1"), "Remy2": _lb_entry("Remy", "user2")}
+        p1, p2 = Remy1(), Remy2()
+        apply_display_names([p1, p2], lb)
+        assert p1.name == "Remy (user1)"
+        assert p2.name == "Remy (user2)"
+
+    def test_leaves_unique_names_unchanged(self):
+        """Players with unique display names keep their raw name."""
+        from game.components.utils import apply_display_names
+
+        class Alice:
+            name = "Alice"
+
+        class Bruno:
+            name = "Bruno"
+
+        lb = {"Alice": _lb_entry("Alice", "user1"), "Bruno": _lb_entry("Bruno", "user2")}
+        a, b = Alice(), Bruno()
+        apply_display_names([a, b], lb)
+        assert a.name == "Alice"
+        assert b.name == "Bruno"
+
+    def test_skips_unregistered_players(self):
+        """A player not in lb_players keeps their raw name."""
+        from game.components.utils import apply_display_names
+
+        class Ghost:
+            name = "Remy"
+
+        lb = {"Remy1": _lb_entry("Remy", "user1")}
+        g = Ghost()
+        apply_display_names([g], lb)
+        assert g.name == "Remy"
+
+    def test_deduplicated_name_appears_in_bet_history(self):
+        """After apply_display_names, prior_bet.player carries the unique deduplicated name."""
+        from game.components.utils import apply_display_names
+
+        class Remy1:
+            name = "Remy"
+
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+                if prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None  # call liar
+
+        class Remy2:
+            name = "Remy"
+
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+                if prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+        lb = {"Remy1": _lb_entry("Remy", "user1"), "Remy2": _lb_entry("Remy", "user2")}
+        p1, p2 = Remy1(), Remy2()
+        apply_display_names([p1, p2], lb)
+
+        bet_history: list[dict] = []
+        game_orchestrator([p1, p2], bet_history=bet_history)
+
+        names = {e["player"] for e in bet_history}
+        assert "Remy" not in names, f"bare 'Remy' should not appear; got {names}"
+        assert names <= {"Remy (user1)", "Remy (user2)"}
+
+
 def test_bet_history_includes_dice_count():
     """Each bet_history entry records how many dice the bidder held when they bid.
     This lets players model opponent behaviour by game stage (desperate vs. comfortable)."""
