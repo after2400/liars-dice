@@ -158,6 +158,7 @@ def game_orchestrator(
                             "round": round_num,
                             "player": player.name,
                             "bet": current_bet,
+                            "dice_count": dice_counts[player_idx],
                         }
                     )
                     if stats is not None:

@@ -5,6 +5,9 @@ from pathlib import Path
 
 import yaml
 
+from game.components.bets import Bet
+from game.components.script import game_orchestrator
+
 REPO_ROOT = Path(__file__).parent.parent
 
 
@@ -468,3 +471,31 @@ def test_stats_passed_to_six_arg_player(tmp_path):
     assert all(isinstance(s, GameStats) for s in spy_cls.received_stats), (
         f"Expected GameStats on every call, got: {spy_cls.received_stats}"
     )
+
+
+def test_bet_history_includes_dice_count():
+    """Each bet_history entry records how many dice the bidder held when they bid.
+    This lets players model opponent behaviour by game stage (desperate vs. comfortable)."""
+
+    class Caller:
+        name = "Caller"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            return None  # always call liar — game ends in one round
+
+    class Bidder:
+        name = "Bidder"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    bet_history: list[dict] = []
+    game_orchestrator([Bidder(), Caller()], bet_history=bet_history)
+
+    assert len(bet_history) > 0, "expected at least one bid"
+    for entry in bet_history:
+        assert "dice_count" in entry, f"missing dice_count in bet_history entry: {entry}"
+        assert isinstance(entry["dice_count"], int)
+        assert 1 <= entry["dice_count"] <= 5
