@@ -124,8 +124,9 @@ just develop
 ### Tests and linting
 
 ```bash
-just pytest   # full test suite
-just lint     # ruff check + format check
+just pytest       # player tests (player_tests/ only)
+just pytest-all   # full engine + player test suite
+just lint         # ruff check + format check
 ```
 
 ### Simulating runs
