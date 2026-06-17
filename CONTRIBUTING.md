@@ -12,6 +12,8 @@ Run `just develop` once after cloning to install remaining tools and activate pr
 
 ## Adding a Player
 
+If you don't have write access to the repo, fork it first: click **Fork** on GitHub, clone your fork, add your player file, then open a PR targeting `after2400/liars-dice:main`.
+
 Open a PR that adds a single `.py` file to `players/`. The file must:
 
 1. Be named after the class it contains — `fred.py` must define `class Fred`
