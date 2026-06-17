@@ -1,5 +1,5 @@
 total_runs: 21
-last_updated: '2026-06-17T12:53:59Z'
+last_updated: '2026-06-17T20:24:22Z'
 current_season_issue: 4
 players:
   Alice:
@@ -194,3 +194,11 @@ players:
         wins: 404
         games: 2000
         win_pct: 20.2
+  Stewie:
+    display_name: Stewie
+    github_username: zachaustin01
+    date_added: '2026-06-17T20:24:22Z'
+    tier: L1
+    tier_since: '2026-06-17T20:24:22Z'
+    times_inactive: 0
+    tier_stats: {}
