@@ -1,6 +1,7 @@
 import inspect
 import logging
-import random as r
+import random
+import secrets
 
 from game.components.bets import Bet, bet_grader, bet_validator
 from game.components.utils import FACES
@@ -33,11 +34,12 @@ def game_orchestrator(
     Returns:
         The winning player object.
     """
+    rng = random.Random(secrets.randbits(64))
     _sigs = {p: inspect.signature(p.algo).parameters for p in players}
     _wants_stats = {p: "stats" in _sigs[p] for p in players}
     _wants_tier = {p: "tier" in _sigs[p] for p in players}
     logger.info("=== New Game ===")
-    r.shuffle(players)
+    rng.shuffle(players)
     logger.info(f"Players: {', '.join(p.name for p in players)}")
 
     n = len(players)
@@ -47,7 +49,7 @@ def game_orchestrator(
     def active():
         return [i for i in range(n) if not eliminated[i]]
 
-    first_player = r.choice(active())
+    first_player = rng.choice(active())
     logger.info(f"First to bet: {players[first_player].name}")
 
     if bet_history is None:
@@ -66,7 +68,7 @@ def game_orchestrator(
         logger.info(f"--- Round {round_num}  |  {dice_summary} ---")
 
         # Roll dice for all active players
-        hands = {i: r.choices(FACES, k=dice_counts[i]) for i in active_list}
+        hands = {i: rng.choices(FACES, k=dice_counts[i]) for i in active_list}
         for i in active_list:
             logger.debug(f"  {players[i].name} rolled: {hands[i]}")
 
@@ -90,12 +92,17 @@ def game_orchestrator(
                     kwargs["stats"] = stats
                 if _wants_tier[player]:
                     kwargs["tier"] = tier
+                safe_bet = (
+                    Bet(current_bet.quantity, current_bet.face, current_bet.player)
+                    if current_bet is not None
+                    else None
+                )
                 action = player.algo(
-                    hands[player_idx],
-                    current_bet,
+                    list(hands[player_idx]),
+                    safe_bet,
                     total_dice,
-                    bet_history,
-                    completed_outcomes,
+                    list(bet_history),
+                    list(completed_outcomes),
                     **kwargs,
                 )
             except Exception as exc:
