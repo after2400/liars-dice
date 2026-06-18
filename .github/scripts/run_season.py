@@ -14,6 +14,7 @@ promotions/relegations are in effect before the next tier above starts.
 """
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -32,9 +33,10 @@ _repo_root_str = str(_REPO_ROOT)
 if _repo_root_str not in sys.path:
     sys.path.insert(0, _repo_root_str)
 
-from game.season.utils import _load_lb  # noqa: E402
+from game.season.utils import _load_lb, form_pools  # noqa: E402
 
 _DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
+_POOL_MAX = 9  # maximum players per L1 pool; split when L1 exceeds this
 
 
 def _get_tier_players(data: dict, tier: str) -> list[str]:
@@ -90,6 +92,41 @@ def _run_tier(tier: str, n_games: int, top_n: int, lb_path: str) -> dict[str, in
             pass
 
 
+def _run_players(players: list[str], n_games: int, lb_path: str) -> dict[str, int]:
+    """Run n_games for a specific player list. Returns {name: win_count}."""
+    with tempfile.NamedTemporaryFile(suffix=".json", prefix="pool_results_", delete=False) as tmp:
+        results_file = tmp.name
+    try:
+        env = {**os.environ, "LEADERBOARD_PATH": lb_path}
+        cmd = [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "game",
+            str(n_games),
+            str(len(players)),
+            "--no-game-results",
+            "--players",
+            *players,
+            "--results-file",
+            results_file,
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(_REPO_ROOT))
+        print(proc.stdout, end="")
+        if proc.returncode != 0:
+            print(f"[warn] game engine exited {proc.returncode}", file=sys.stderr)
+            print(proc.stderr, end="", file=sys.stderr)
+            return {}
+        with open(results_file) as f:
+            return json.load(f)
+    finally:
+        try:
+            os.unlink(results_file)
+        except FileNotFoundError:
+            pass
+
+
 def run_season(
     n_games: int,
     top_n: int,
@@ -114,12 +151,35 @@ def run_season(
             skipped.append(tier)
             continue
 
-        print(f"[run] {tier}: {len(players_in_tier)} players, {n_games} games each …")
-        try:
-            os.chmod(lb_path, 0o444)
-            wins = _run_tier(tier, n_games, top_n, lb_path)
-        finally:
-            os.chmod(lb_path, 0o644)
+        if tier == "L1" and len(players_in_tier) > _POOL_MAX:
+            n_pools = math.ceil(len(players_in_tier) / _POOL_MAX)
+            seeded = sorted(
+                players_in_tier,
+                key=lambda n: (
+                    -data["players"][n].get("tier_stats", {}).get("L1", {}).get("win_pct", 0.0)
+                ),
+            )
+            pools = form_pools(seeded, n_pools)
+            print(
+                f"[run] {tier}: {len(players_in_tier)} players → "
+                f"{n_pools} pools of ≤{_POOL_MAX}, {n_games} games each …"
+            )
+            wins: dict[str, int] = {}
+            try:
+                os.chmod(lb_path, 0o444)
+                for i, pool in enumerate(pools):
+                    print(f"  [pool {i + 1}/{n_pools}]: {pool}")
+                    pool_wins = _run_players(pool, n_games, lb_path)
+                    wins.update(pool_wins)
+            finally:
+                os.chmod(lb_path, 0o644)
+        else:
+            print(f"[run] {tier}: {len(players_in_tier)} players, {n_games} games each …")
+            try:
+                os.chmod(lb_path, 0o444)
+                wins = _run_tier(tier, n_games, top_n, lb_path)
+            finally:
+                os.chmod(lb_path, 0o644)
 
         if not wins:
             print(f"[skip] {tier}: game engine returned no results.")

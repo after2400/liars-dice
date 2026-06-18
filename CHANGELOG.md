@@ -1,6 +1,42 @@
 # CHANGELOG
 
 
+## v1.6.2 (2026-06-18)
+
+### Bug Fixes
+
+- **game**: Grow PRM/CH to 8 before L1 resumes growth
+  ([#76](https://github.com/after2400/liars-dice/pull/76),
+  [`34f1122`](https://github.com/after2400/liars-dice/commit/34f112247686ae5c220d780bfaddaabf8f16a42e))
+
+
+## v1.6.1 (2026-06-18)
+
+### Bug Fixes
+
+- **config**: Update simulate-tournament to use game.season.utils
+  ([#72](https://github.com/after2400/liars-dice/pull/72),
+  [`d218a84`](https://github.com/after2400/liars-dice/commit/d218a8498294f7748dc3bdd9d35ac40b19a96d3a))
+
+
+## v1.6.0 (2026-06-18)
+
+### Features
+
+- **game**: Split L1 into pools when >8 players for season runs
+  ([#70](https://github.com/after2400/liars-dice/pull/70),
+  [`9e3e982`](https://github.com/after2400/liars-dice/commit/9e3e982153f58831f3ee19c5481ce3067c71969b))
+
+
+## v1.5.1 (2026-06-18)
+
+### Bug Fixes
+
+- **game**: Scale tier capacity with player count in settle_relegations
+  ([#71](https://github.com/after2400/liars-dice/pull/71),
+  [`05af5e6`](https://github.com/after2400/liars-dice/commit/05af5e6d4b3c670722e9439d6419e4fe2f9c58aa))
+
+
 ## v1.5.0 (2026-06-18)
 
 ### Features

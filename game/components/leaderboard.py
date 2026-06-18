@@ -57,12 +57,13 @@ _TIER_BELOW = {"PRM": "CH", "CH": "L1", "L1": "inactive"}
 
 def tier_capacities(n_players: int) -> dict[str, int]:
     """Return target capacity per tier for n_players total registered players."""
-    if n_players <= 24:
+    if n_players <= 16:
         return {"PRM": 4, "CH": 4, "L1": max(0, n_players - 8), "DED": 0}
+    if n_players <= 24:
+        extra = n_players - 16  # 1..8: PRM grows first, then CH alternates
+        return {"PRM": 4 + (extra + 1) // 2, "CH": 4 + extra // 2, "L1": 8, "DED": 0}
     if n_players <= 32:
-        pairs = (n_players - 24) // 2
-        extra = (n_players - 24) % 2
-        return {"PRM": 4 + pairs, "CH": 4 + pairs, "L1": 16 + extra, "DED": 0}
+        return {"PRM": 8, "CH": 8, "L1": 8 + (n_players - 24), "DED": 0}
     return {"PRM": 8, "CH": 8, "L1": 16, "DED": n_players - 32}
 
 
@@ -187,7 +188,10 @@ def settle_relegations(
         tier_below = _TIER_BELOW.get(tier)
         if tier_below is None:
             continue
-        capacity = _TIER_CAPACITY(tier, top_n)
+        capacity = max(
+            tier_capacities(len(players)).get(tier, 0),
+            _TIER_CAPACITY(tier, top_n),
+        )
         residents = [n for n, p in players.items() if p.get("tier") == tier]
         excess = len(residents) - capacity
         if excess <= 0:

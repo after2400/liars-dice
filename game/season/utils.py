@@ -52,3 +52,27 @@ def next_tournament_monday(today: date | None = None) -> date:
         if is_tournament_monday(candidate):
             return candidate
     raise ValueError("No tournament Monday found in next 100 days")
+
+
+def form_pools(players: list[str], n_pools: int) -> list[list[str]]:
+    """Distribute seeded players into n_pools via S-curve (serpentine) seeding.
+
+    Players must be pre-sorted strongest-first. S-curve ensures each pool
+    gets one player from every strength band.
+    """
+    pools: list[list[str]] = [[] for _ in range(n_pools)]
+    direction = 1
+    pool_idx = 0
+    for player in players:
+        pools[pool_idx].append(player)
+        if direction == 1:
+            if pool_idx == n_pools - 1:
+                direction = -1
+            else:
+                pool_idx += 1
+        else:
+            if pool_idx == 0:
+                direction = 1
+            else:
+                pool_idx -= 1
+    return pools
