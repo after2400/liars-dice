@@ -36,7 +36,7 @@ if _repo_root_str not in sys.path:
 from game.season.utils import _load_lb, form_pools  # noqa: E402
 
 _DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
-_POOL_MAX = 8  # maximum players per L1 pool before splitting
+_POOL_MAX = 9  # maximum players per L1 pool; split when L1 exceeds this
 
 
 def _get_tier_players(data: dict, tier: str) -> list[str]:
