@@ -632,26 +632,43 @@ def test_tier_capacities_phase1_current():
 def test_tier_capacities_phase1_full():
     from game.components.leaderboard import tier_capacities
 
-    caps = tier_capacities(24)
-    assert caps == {"PRM": 4, "CH": 4, "L1": 16, "DED": 0}
+    # L1 fills to 8 at n=16; PRM/CH growth begins next
+    caps = tier_capacities(16)
+    assert caps == {"PRM": 4, "CH": 4, "L1": 8, "DED": 0}
 
 
-def test_tier_capacities_phase2_odd():
+def test_tier_capacities_phase2_mid():
     from game.components.leaderboard import tier_capacities
 
-    # 25th player holds in L1
-    caps = tier_capacities(25)
-    assert caps == {"PRM": 4, "CH": 4, "L1": 17, "DED": 0}
-
-
-def test_tier_capacities_phase2_even():
-    from game.components.leaderboard import tier_capacities
-
-    caps = tier_capacities(26)
-    assert caps == {"PRM": 5, "CH": 5, "L1": 16, "DED": 0}
+    # n=20: PRM and CH have each grown 2 seats; L1 frozen at 8
+    caps = tier_capacities(20)
+    assert caps == {"PRM": 6, "CH": 6, "L1": 8, "DED": 0}
 
 
 def test_tier_capacities_phase2_full():
+    from game.components.leaderboard import tier_capacities
+
+    # n=24: PRM/CH both reach 8; all tiers at 8/8/8
+    caps = tier_capacities(24)
+    assert caps == {"PRM": 8, "CH": 8, "L1": 8, "DED": 0}
+
+
+def test_tier_capacities_phase3_odd():
+    from game.components.leaderboard import tier_capacities
+
+    # n=25: L1 resumes growth
+    caps = tier_capacities(25)
+    assert caps == {"PRM": 8, "CH": 8, "L1": 9, "DED": 0}
+
+
+def test_tier_capacities_phase3_even():
+    from game.components.leaderboard import tier_capacities
+
+    caps = tier_capacities(26)
+    assert caps == {"PRM": 8, "CH": 8, "L1": 10, "DED": 0}
+
+
+def test_tier_capacities_phase3_full():
     from game.components.leaderboard import tier_capacities
 
     caps = tier_capacities(32)
@@ -689,11 +706,10 @@ def test_detect_entry_tier_l1_has_room():
 def test_detect_entry_tier_l1_full_returns_ch():
     from game.components.leaderboard import detect_entry_tier
 
-    # 25 players: PRM=4, CH=4, L1=17. For #26: tier_capacities(26)={PRM:5,CH:5,L1:16}
-    # L1 count=17 >= 16, CH count=4 < 5 → CH
+    # 24 players: L1 at true max (16). For #25: entry L1 cap=min(17,16)=16=count → CH
     players = {f"P{i}": {"tier": "PRM"} for i in range(4)}
     players.update({f"C{i}": {"tier": "CH"} for i in range(4)})
-    players.update({f"L{i}": {"tier": "L1"} for i in range(17)})  # 25 players
+    players.update({f"L{i}": {"tier": "L1"} for i in range(16)})  # 24 players
     lb = {"players": players}
     assert detect_entry_tier(lb) == "CH"
 
