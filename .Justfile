@@ -36,7 +36,7 @@ simulate-season date=`date +%Y-%m-%d`:
 # Simulate the next tournament (dry run). Finds the next quarterly Monday automatically.
 [group('algorithms')]
 simulate-tournament:
-    uv run python -c "import subprocess, os, sys; sys.path.insert(0, '.github/scripts'); from season_utils import next_tournament_monday; env = {**os.environ, 'TODAY': str(next_tournament_monday()), 'DRY_RUN': '1'}; subprocess.run(['uv', 'run', 'python', '.github/scripts/reset_season.py'], env=env, check=True)"
+    TODAY=$(uv run python -c "from game.season.utils import next_tournament_monday; print(next_tournament_monday())") DRY_RUN=1 uv run python .github/scripts/reset_season.py
 
 # Reset files written by simulate-season or simulate-tournament
 [group('algorithms')]
