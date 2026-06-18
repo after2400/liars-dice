@@ -39,6 +39,7 @@ def game_orchestrator(
     _sigs = {p: inspect.signature(p.algo).parameters for p in players}
     _wants_stats = {p: "stats" in _sigs[p] for p in players}
     _wants_tier = {p: "tier" in _sigs[p] for p in players}
+    _wants_round_players = {p: "round_players" in _sigs[p] for p in players}
     logger.info("=== New Game ===")
     rng.shuffle(players)
     logger.info(f"Players: {', '.join(p.name for p in players)}")
@@ -75,6 +76,10 @@ def game_orchestrator(
 
         total_dice = sum(dice_counts[i] for i in active_list)
         start_pos = active_list.index(first_player)
+        round_players_order = [
+            players[active_list[(start_pos + i) % len(active_list)]].name
+            for i in range(len(active_list))
+        ]
         step = 0
         current_bet: Bet | None = None
         prev_bidder: int | None = None
@@ -93,6 +98,8 @@ def game_orchestrator(
                     kwargs["stats"] = stats
                 if _wants_tier[player]:
                     kwargs["tier"] = tier
+                if _wants_round_players[player]:
+                    kwargs["round_players"] = list(round_players_order)
                 safe_bet = (
                     Bet(current_bet.quantity, current_bet.face, current_bet.player)
                     if current_bet is not None

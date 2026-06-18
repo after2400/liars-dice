@@ -473,6 +473,102 @@ def test_stats_passed_to_six_arg_player(tmp_path):
     )
 
 
+def test_round_players_passed_when_declared(tmp_path):
+    """A player declaring round_players=None receives a list of active player names each call."""
+    import textwrap
+
+    from game.components.series import run_series
+    from game.components.utils import import_player_classes_from_dir
+
+    player_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class RpSpy:
+            name = "RpSpy"
+            received = []
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, round_players=None):
+                RpSpy.received.append(round_players)
+                if prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+
+    player_dir = tmp_path / "players"
+    player_dir.mkdir()
+    (player_dir / "rpspy.py").write_text(player_src)
+    (player_dir / "__init__.py").write_text("")
+
+    players = import_player_classes_from_dir(str(player_dir))
+
+    class AlwaysBid:
+        name = "AlwaysBid"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            from game.components.bets import Bet
+
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    run_series(players + [AlwaysBid()], n_games=1)
+
+    spy_cls = players[0].__class__
+    assert len(spy_cls.received) > 0, "RpSpy.algo was never called"
+    assert all(isinstance(rp, list) for rp in spy_cls.received), "round_players must be a list"
+    assert all("RpSpy" in rp and "AlwaysBid" in rp for rp in spy_cls.received), (
+        f"Both player names should appear in round_players; got: {spy_cls.received}"
+    )
+
+
+def test_round_players_first_element_is_opener(tmp_path):
+    """round_players[0] is always the opening bidder of the current round."""
+    import textwrap
+
+    from game.components.series import run_series
+    from game.components.utils import import_player_classes_from_dir
+
+    player_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class OpenerSpy:
+            name = "OpenerSpy"
+            opener_calls = []  # (round_players[0], is_opener) pairs when I am called
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, round_players=None):
+                if prior_bet is None:
+                    OpenerSpy.opener_calls.append(round_players)
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+
+    player_dir = tmp_path / "players"
+    player_dir.mkdir()
+    (player_dir / "openerspy.py").write_text(player_src)
+    (player_dir / "__init__.py").write_text("")
+
+    players = import_player_classes_from_dir(str(player_dir))
+
+    class AlwaysBid:
+        name = "AlwaysBid"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            from game.components.bets import Bet
+
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    run_series(players + [AlwaysBid()], n_games=5)
+
+    spy_cls = players[0].__class__
+    assert len(spy_cls.opener_calls) > 0, "OpenerSpy was never the opener"
+    assert all(rp is not None for rp in spy_cls.opener_calls), (
+        "round_players was None on opener calls"
+    )
+    assert all(rp[0] == "OpenerSpy" for rp in spy_cls.opener_calls), (
+        f"round_players[0] was not 'OpenerSpy' on opener calls; got: {spy_cls.opener_calls}"
+    )
+
+
 _NOW = "2026-01-01T00:00:00Z"
 
 
