@@ -1,7 +1,7 @@
 name: Register Player
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
 
 env:
@@ -9,8 +9,9 @@ env:
 
 jobs:
   validate:
-    # Executes contributor code (game.validate imports the player file), so it
-    # holds no PAT and only a read-scoped GITHUB_TOKEN. It can comment on the PR.
+    # Executes contributor code (game.validate imports the player file).
+    # GH_TOKEN is NOT exposed to the validation step — only to the separate
+    # comment step — to prevent secret leakage via malicious fork code.
     permissions:
       contents: read
       pull-requests: write
@@ -19,8 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: astral-sh/setup-uv@v5
         with:
@@ -30,9 +32,7 @@ jobs:
         run: uv sync --no-install-project
 
       - name: Validate player can be imported and instantiated
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+        id: validate_file
         run: |
           set -euo pipefail
 
@@ -57,11 +57,23 @@ jobs:
             [ -z "$player_file" ] && continue
             if ! output=$(uv run python -m game.validate "$player_file" 2>&1); then
               echo "$output"
-              gh pr comment "$PR_NUMBER" --body "❌ Player file cannot be loaded — fix these errors before the PR can be merged:\`\`\`${output}\`\`\`"
+              echo "$output" > /tmp/validate_error.txt
               exit 1
             fi
             echo "$output"
           done <<< "$changed"
+
+      - name: Comment on validation failure
+        if: failure() && steps.validate_file.conclusion == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          output=$(cat /tmp/validate_error.txt 2>/dev/null || echo "Unknown validation error")
+          gh pr comment "$PR_NUMBER" --body "❌ Player file cannot be loaded — fix these errors before the PR can be merged:
+          \`\`\`
+          ${output}
+          \`\`\`"
 
   register:
     # Holds LEADERBOARD_PAT and runs no contributor code. Privileged operations
@@ -75,7 +87,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - uses: astral-sh/setup-uv@v5

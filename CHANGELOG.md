@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v1.4.3 (2026-06-17)
+
+### Bug Fixes
+
+- **ci**: Support fork PRs — switch register-player to pull_request_target
+  ([#55](https://github.com/after2400/liars-dice/pull/55),
+  [`00612b0`](https://github.com/after2400/liars-dice/commit/00612b0530f985432ac43d638adee363c333282c))
+
+### Documentation
+
+- Rename Run Monday → Run Season, add attribution, fix pytest docs
+  ([#54](https://github.com/after2400/liars-dice/pull/54),
+  [`181f518`](https://github.com/after2400/liars-dice/commit/181f5187c2b9209b2d6da3f4e721aa418121435d))
+
+
 ## v1.4.2 (2026-06-16)
 
 ### Bug Fixes

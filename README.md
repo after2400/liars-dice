@@ -2,7 +2,9 @@
 
 A Python engine for running Liar's Dice games between algorithmic players. Players compete in a tiered league — submit a PR to join, and a weekly scheduled run plays the games and updates standings (extra runs trigger automatically when a player file changes).
 
-Interested in competing? See [CONTRIBUTING.md](CONTRIBUTING.md) · Game rules: [RULES.md](RULES.md)
+_This project is based on the foundational work and initial implementation by [Zach Austin](https://github.com/zachaustin01)._
+
+Interested in competing? **[Visit the Wiki](https://github.com/after2400/liars-dice/wiki)** — rules, player API, and how to submit a bot. For local dev setup see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Current Standings
 
