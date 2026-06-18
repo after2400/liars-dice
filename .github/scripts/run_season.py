@@ -160,7 +160,7 @@ def _write_summary(
     """Write a markdown season summary: final standings + collapsed per-tier game results."""
     from game.components.leaderboard import build_display_names
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     data = _load_lb(lb_path)
     players = data.get("players", {})
     display_names = build_display_names(players)
