@@ -4,7 +4,7 @@ current_season_issue: 4
 players:
   Alice:
     display_name: Alice
-    github_username: ''
+    github_username: zachaustin01
     date_added: '2026-05-22T15:47:31Z'
     tier: CH
     tier_since: '2026-06-17T12:53:48Z'
@@ -24,7 +24,7 @@ players:
         win_pct: 56.4
   Bruno:
     display_name: Bruno
-    github_username: ''
+    github_username: zachaustin01
     date_added: '2026-05-22T15:47:31Z'
     tier: L1
     tier_since: '2026-06-17T12:53:59Z'
@@ -40,7 +40,7 @@ players:
         win_pct: 13.8
   Cleo:
     display_name: Cleo
-    github_username: ''
+    github_username: zachaustin01
     date_added: '2026-05-22T15:47:31Z'
     tier: L1
     tier_since: '2026-06-15T15:12:10Z'
@@ -60,7 +60,7 @@ players:
         win_pct: 31.1
   Diego:
     display_name: Diego
-    github_username: ''
+    github_username: zachaustin01
     date_added: '2026-05-22T16:10:13Z'
     tier: PRM
     tier_since: '2026-05-22T16:10:13Z'
