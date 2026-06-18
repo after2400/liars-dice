@@ -158,12 +158,16 @@ def run_pools(lb_path: str, n_games: int) -> None:
     pools = form_pools(seeded, n_pools)
 
     pool_results: dict[str, dict[str, int]] = {}
-    for i, pool in enumerate(pools):
-        key = f"pool_{i}"
-        print(f"[run] {key}: {pool}")
-        wins = _run_pool(pool, n_games, lb_path)
-        pool_results[key] = wins
-        print(f"[done] {key}: {wins}")
+    try:
+        os.chmod(lb_path, 0o444)
+        for i, pool in enumerate(pools):
+            key = f"pool_{i}"
+            print(f"[run] {key}: {pool}")
+            wins = _run_pool(pool, n_games, lb_path)
+            pool_results[key] = wins
+            print(f"[done] {key}: {wins}")
+    finally:
+        os.chmod(lb_path, 0o644)
 
     state["pool_results"] = pool_results
     data["tournament_state"] = state

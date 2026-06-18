@@ -15,8 +15,16 @@ Exits 0 on success, 1 on any failure.
 import ast
 import importlib.util
 import inspect
+import signal
 import sys
 from pathlib import Path
+
+_INSTANTIATION_TIMEOUT = 10  # seconds
+
+
+def _handle_alarm(signum, frame):
+    raise TimeoutError("instantiation timed out")
+
 
 MAX_NAME_LEN = 25
 
@@ -230,10 +238,20 @@ def _runtime_errors(player_file: str, stem: str) -> list[str]:
     if player_class is None:
         return [f"No class named '{stem}' (case-insensitive) found after import"]
 
+    old_handler = signal.signal(signal.SIGALRM, _handle_alarm)
+    signal.alarm(_INSTANTIATION_TIMEOUT)
     try:
         instance = player_class()
+    except TimeoutError:
+        return [
+            f"Player class timed out during instantiation (>{_INSTANTIATION_TIMEOUT}s)"
+            " — check __init__ for infinite loops or blocking calls"
+        ]
     except Exception as exc:
         return [f"Player class crashed during instantiation: {type(exc).__name__}: {exc}"]
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
 
     if not callable(getattr(instance, "algo", None)):
         return ["Player class does not define an 'algo' method"]

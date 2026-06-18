@@ -2,6 +2,7 @@ import inspect
 import logging
 import random
 import secrets
+import traceback
 
 from game.components.bets import Bet, bet_grader, bet_validator
 from game.components.utils import FACES
@@ -105,8 +106,12 @@ def game_orchestrator(
                     list(completed_outcomes),
                     **kwargs,
                 )
-            except Exception as exc:
-                logger.error(f"{player.name} raised an exception ({exc}) - penalised")
+            except Exception:
+                logger.error(
+                    "%s raised an exception - penalised\n%s",
+                    player.name,
+                    traceback.format_exc().rstrip(),
+                )
                 loser = player_idx
                 break
 

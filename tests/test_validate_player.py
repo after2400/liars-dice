@@ -84,6 +84,23 @@ def test_blocked_import_inside_method(tmp_path):
     assert "not allowed" in result.stdout.lower()
 
 
+def test_init_timeout(tmp_path):
+    """A player whose __init__ hangs exits 1 within the timeout."""
+    f = tmp_path / "hangy.py"
+    f.write_text(
+        "class Hangy:\n"
+        "    def __init__(self):\n"
+        "        while True:\n"
+        "            pass\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+    assert "timed out" in result.stdout.lower()
+
+
 def test_init_crash(tmp_path):
     """A player whose __init__ raises exits 1."""
     f = tmp_path / "badint.py"

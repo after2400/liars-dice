@@ -115,7 +115,11 @@ def run_season(
             continue
 
         print(f"[run] {tier}: {len(players_in_tier)} players, {n_games} games each …")
-        wins = _run_tier(tier, n_games, top_n, lb_path)
+        try:
+            os.chmod(lb_path, 0o444)
+            wins = _run_tier(tier, n_games, top_n, lb_path)
+        finally:
+            os.chmod(lb_path, 0o644)
 
         if not wins:
             print(f"[skip] {tier}: game engine returned no results.")
