@@ -6,6 +6,10 @@ on:
     paths:
       - "players/*.py"
 
+concurrency:
+  group: leaderboard-update
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: read

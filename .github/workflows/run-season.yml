@@ -10,6 +10,10 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: season-run
+  cancel-in-progress: false
+
 permissions:
   contents: write
   issues: write
