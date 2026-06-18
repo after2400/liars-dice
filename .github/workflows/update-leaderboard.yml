@@ -13,6 +13,7 @@ concurrency:
 permissions:
   contents: write
   pull-requests: read
+  actions: write
 
 env:
   PYTHONPATH: .
@@ -34,6 +35,7 @@ jobs:
         run: uv sync --no-install-project
 
       - name: Update leaderboard
+        id: update
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
@@ -46,6 +48,7 @@ jobs:
           deleted=$(git diff --name-only --diff-filter=D HEAD~1 HEAD -- 'players/*.py' || true)
 
           if [ -n "$added" ]; then
+            echo "player_added=true" >> "$GITHUB_OUTPUT"
             # Resolve the PR author from the merge commit
             actor=$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/pulls" \
               --jq '.[0].user.login' 2>/dev/null || echo "")
@@ -86,3 +89,9 @@ jobs:
           if [ -n "$branch" ] && [ "$branch" != "main" ]; then
             gh api "repos/${REPOSITORY}/git/refs/heads/${branch}" --method DELETE 2>/dev/null || true
           fi
+
+      - name: Trigger season run for new player
+        if: steps.update.outputs.player_added == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run run-season.yml --ref main
