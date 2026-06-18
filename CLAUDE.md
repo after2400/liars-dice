@@ -38,7 +38,9 @@
 # correct
 uv run python -m game ...
 uv run python .github/scripts/register_player.py
-just pytest
+just pytest tests/test_main.py
+just pytest-players
+just pytest-all
 
 # wrong — do not use
 python3 script.py
@@ -51,17 +53,21 @@ This applies everywhere: shell commands, CI scripts, subagent prompts, code revi
 
 ## Testing
 
-Two recipes — use the right one for the work:
+Three recipes — use the right one for the work:
 
 ```bash
-# Player development (default) — runs player_tests/ only
-just pytest
+# Targeted run — pass any pytest path/node args
+just pytest tests/test_main.py
+just pytest tests/test_main.py::test_round_players_passed_when_declared
+
+# Player development — runs player_tests/ only (exits 0 even if dir is empty)
+just pytest-players
 
 # Engine / admin PRs — runs tests/ and examples/tests/
 just pytest-all
 ```
 
-`player_tests/` is gitignored. Write bot tests there freely; they run locally but are never committed. When working on engine code, always use `just pytest-all` before committing — `just pytest` alone does not cover engine tests.
+`player_tests/` is gitignored. Write bot tests there freely; they run locally but are never committed. When working on engine code, always use `just pytest-all` before committing — `just pytest-players` alone does not cover engine tests.
 
 ## Local simulation
 

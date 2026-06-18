@@ -10,9 +10,14 @@ develop:
     pre-commit install --hook-type commit-msg
     pre-commit install
 
+# Run tests with optional path args (e.g. just pytest tests/test_main.py). No args = player_tests/.
+[group('quality')]
+pytest *args:
+    uv run pytest {{args}} -v
+
 # Run player tests (local sandbox — player_tests/ is gitignored)
 [group('quality')]
-pytest:
+pytest-players:
     uv run pytest player_tests/ -v; s=$?; [ $s -eq 5 ] && exit 0 || exit $s
 
 # Run engine and integration tests (admin/engine PRs only)

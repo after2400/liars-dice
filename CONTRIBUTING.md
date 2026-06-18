@@ -28,9 +28,10 @@ just develop
 ### Tests and linting
 
 ```bash
-just pytest       # player tests (player_tests/ only)
-just pytest-all   # full engine + player test suite
-just lint         # ruff check + format check
+just pytest tests/test_main.py   # targeted run — pass any path or node id
+just pytest-players              # player sandbox tests (player_tests/ only)
+just pytest-all                  # full engine + integration test suite
+just lint                        # ruff check + format check
 ```
 
 ### Simulating runs
