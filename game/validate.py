@@ -105,10 +105,13 @@ _BLOCKED_BUILTINS: frozenset[str] = frozenset({"exec", "eval", "__import__", "co
 
 _REQUIRED_ALGO_ARGS = ("self", "hand", "prior_bet", "total_dice", "bet_history", "outcomes")
 _ALLOWED_OPT_ARGS: frozenset[str] = frozenset({"stats", "tier"})
+_V2_ALGO_ARGS = ("self", "ctx")
 
 
 def _check_algo_signature(node: ast.FunctionDef, errors: list[str]) -> None:
     args = [a.arg for a in node.args.args]
+    if args == list(_V2_ALGO_ARGS):
+        return
     for i, expected in enumerate(_REQUIRED_ALGO_ARGS):
         actual = args[i] if i < len(args) else "<missing>"
         if actual != expected:
@@ -256,7 +259,27 @@ def _runtime_errors(player_file: str, stem: str) -> list[str]:
     if not callable(getattr(instance, "algo", None)):
         return ["Player class does not define an 'algo' method"]
 
-    if "tier" in inspect.signature(instance.algo).parameters:
+    _algo_params = inspect.signature(instance.algo).parameters
+    _positional = [
+        name
+        for name, p in _algo_params.items()
+        if name != "self"
+        and p.kind
+        in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+    ]
+    if len(_positional) != 1:
+        print(
+            f"[WARNING] {stem} uses the deprecated v1 algo() interface "
+            f"(positional args: {', '.join(_positional)}). "
+            f"Migrate to def algo(self, ctx) before 2026-10-05 or this player "
+            f"will be dropped from the league. "
+            f"See: https://github.com/after2400/liars-dice/wiki/Player-Guide"
+        )
+
+    if "tier" in _algo_params:
         try:
             instance.algo([], None, 10, [], [], tier=None)
         except Exception as exc:

@@ -1,6 +1,7 @@
 """Tests for game/validate.py (run via python -m game.validate)."""
 
 import subprocess
+import textwrap
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -232,3 +233,59 @@ def test_valid_player_with_allowed_imports(tmp_path):
     result = _run(f)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "OK" in result.stdout
+
+
+def test_v1_player_emits_deprecation_warning(tmp_path):
+    """validate emits a deprecation warning for v1 algo() signatures."""
+    player_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class Legacyplayer:
+            name = "LegacyPlayer"
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+                if prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+    player_file = tmp_path / "legacyplayer.py"
+    player_file.write_text(player_src)
+
+    result = subprocess.run(
+        ["uv", "run", "python", "-m", "game.validate", str(player_file)],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    assert result.returncode == 0, f"validate failed: {result.stderr}"
+    assert "deprecated" in result.stdout.lower() or "deprecat" in result.stderr.lower(), (
+        f"Expected deprecation warning, got stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert "2026-10-05" in result.stdout or "2026-10-05" in result.stderr, (
+        "Expected cutover date in deprecation warning"
+    )
+
+
+def test_v2_player_no_deprecation_warning(tmp_path):
+    """validate does not emit a deprecation warning for v2 algo() signatures."""
+    player_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class Modernplayer:
+            name = "ModernPlayer"
+            def algo(self, ctx):
+                if ctx.prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+    player_file = tmp_path / "modernplayer.py"
+    player_file.write_text(player_src)
+
+    result = subprocess.run(
+        ["uv", "run", "python", "-m", "game.validate", str(player_file)],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    assert result.returncode == 0, f"validate failed: {result.stderr}"
+    assert "deprecat" not in result.stdout.lower()
+    assert "deprecat" not in result.stderr.lower()
