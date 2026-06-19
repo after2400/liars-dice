@@ -31,6 +31,12 @@ lint:
     uv run ruff check .
     uv run ruff format --check .
 
+# Register a player locally (dry run — no GitHub API calls).
+# Usage: just register-player players/foo.py your-github-username
+[group('algorithms')]
+register-player file username:
+    PLAYER_FILE={{file}} GITHUB_USERNAME={{username}} DRY_RUN=1 uv run python .github/scripts/register_player.py
+
 # Simulate a season run (dry run). Optional date arg defaults to today.
 # Usage: just simulate-season
 #        just simulate-season 2026-07-07

@@ -34,6 +34,18 @@ just pytest-all                  # full engine + integration test suite
 just lint                        # ruff check + format check
 ```
 
+### Registering a player locally
+
+Before simulating against a new bot, register it in `leaderboard.yaml`:
+
+```bash
+just register-player players/foo.py your-github-username
+```
+
+**Naming rule:** the class inside the file must match the filename exactly — `players/foo.py` must define `class Foo`.
+
+This runs with `DRY_RUN=1`: it writes to `leaderboard.yaml` locally but makes no GitHub API calls. Use `just clean` afterward to restore it.
+
 ### Simulating runs
 
 ```bash
