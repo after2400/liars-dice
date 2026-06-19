@@ -126,3 +126,31 @@ uv run python -m game.validate players/fred.py
 ```
 
 Exits 0 if clean; exits 1 with an error message otherwise. The same check runs in CI when you open a PR.
+
+### Simulating a season
+
+To see how your bot performs over a full simulated quarter (tournament seeding + all regular Mondays), you'll need [`just`](https://just.systems/) installed (`brew install just` / `cargo install just`).
+
+**1. Register locally** — adds your bot to the leaderboard for simulation:
+
+```bash
+just register-player players/fred.py your-github-username
+```
+
+> **Naming rule:** the class inside the file must match the filename exactly — `fred.py` must define `class Fred`.
+
+**2. Simulate** — pick a scope:
+
+```bash
+just simulate-tournament           # one-off quarterly tournament
+just simulate-season 2026-07-13    # one regular Monday season run
+just simulate-quarter              # full quarter: tournament + all Mondays, writes sim-YYYY-QN.md
+```
+
+All simulation commands run with `DRY_RUN=1` — they modify `leaderboard.yaml` locally but make no GitHub API calls.
+
+**3. Clean up afterward:**
+
+```bash
+just clean
+```
