@@ -202,7 +202,7 @@ def main() -> None:
     for i, (step_date, mode) in enumerate(mondays):
         label = "Tournament" if mode == "tournament" else "season"
         print(f"{'=' * 60}")
-        print(f"[simulate] {step_date} — {label} (step {i + 1}/{len(mondays)})")
+        print(f"[simulate] {step_date} — {label} (week {i + 1}/{len(mondays)})")
         print(f"{'=' * 60}")
         t0 = time.perf_counter()
         output = run_step(step_date, mode, args.n_games, lb_path)
