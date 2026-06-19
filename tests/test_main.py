@@ -569,6 +569,150 @@ def test_round_players_first_element_is_opener(tmp_path):
     )
 
 
+def test_v2_player_receives_game_context(tmp_path):
+    """A player with def algo(self, ctx) receives a GameContext instance."""
+    import textwrap
+
+    from game.components.series import run_series
+    from game.components.utils import import_player_classes_from_dir
+
+    player_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class V2Player:
+            name = "V2Player"
+            received = []
+            def algo(self, ctx):
+                V2Player.received.append(type(ctx).__name__)
+                if ctx.prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+
+    player_dir = tmp_path / "players"
+    player_dir.mkdir()
+    (player_dir / "v2player.py").write_text(player_src)
+    (player_dir / "__init__.py").write_text("")
+    players = import_player_classes_from_dir(str(player_dir))
+
+    class AlwaysBid:
+        name = "AlwaysBid"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            from game.components.bets import Bet
+
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    run_series(players + [AlwaysBid()], n_games=1)
+    spy_cls = players[0].__class__
+    assert len(spy_cls.received) > 0, "V2Player.algo was never called"
+    assert all(t == "GameContext" for t in spy_cls.received), (
+        f"Expected GameContext on every call, got: {spy_cls.received}"
+    )
+
+
+def test_v2_ctx_has_all_fields(tmp_path):
+    """GameContext passed to v2 player has all expected fields populated."""
+    import textwrap
+
+    from game.components.series import run_series
+    from game.components.utils import import_player_classes_from_dir
+
+    player_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class FieldProbe:
+            name = "FieldProbe"
+            snapshots = []
+            def algo(self, ctx):
+                FieldProbe.snapshots.append({
+                    "hand_type": type(ctx.hand).__name__,
+                    "total_dice": ctx.total_dice,
+                    "stats_type": type(ctx.stats).__name__,
+                    "round_players_type": type(ctx.round_players).__name__,
+                    "tier": ctx.tier,
+                })
+                if ctx.prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+
+    player_dir = tmp_path / "players"
+    player_dir.mkdir()
+    (player_dir / "fieldprobe.py").write_text(player_src)
+    (player_dir / "__init__.py").write_text("")
+    players = import_player_classes_from_dir(str(player_dir))
+
+    class AlwaysBid:
+        name = "AlwaysBid"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            from game.components.bets import Bet
+
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    run_series(players + [AlwaysBid()], n_games=1, tier="CH")
+    probe_cls = players[0].__class__
+    assert len(probe_cls.snapshots) > 0
+    for snap in probe_cls.snapshots:
+        assert snap["hand_type"] == "list"
+        assert snap["total_dice"] > 0
+        assert snap["stats_type"] == "GameStats"
+        assert snap["round_players_type"] == "list"
+        assert snap["tier"] == "CH"
+
+
+def test_v1_and_v2_players_coexist(tmp_path):
+    """A v1 and v2 player in the same game both work correctly."""
+    import textwrap
+
+    from game.components.series import run_series
+    from game.components.utils import import_player_classes_from_dir
+
+    v1_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class V1Player:
+            name = "V1Player"
+            calls = 0
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+                V1Player.calls += 1
+                if prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+
+    v2_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class V2Player2:
+            name = "V2Player2"
+            calls = 0
+            def algo(self, ctx):
+                V2Player2.calls += 1
+                if ctx.prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+
+    player_dir = tmp_path / "players"
+    player_dir.mkdir()
+    (player_dir / "v1player.py").write_text(v1_src)
+    (player_dir / "v2player2.py").write_text(v2_src)
+    (player_dir / "__init__.py").write_text("")
+    players = import_player_classes_from_dir(str(player_dir))
+
+    run_series(players, n_games=3)
+    v1_cls = next(p.__class__ for p in players if type(p).__name__ == "V1Player")
+    v2_cls = next(p.__class__ for p in players if type(p).__name__ == "V2Player2")
+    assert v1_cls.calls > 0, "V1Player was never called"
+    assert v2_cls.calls > 0, "V2Player2 was never called"
+
+
 _NOW = "2026-01-01T00:00:00Z"
 
 

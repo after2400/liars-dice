@@ -6,6 +6,7 @@ import traceback
 import types
 
 from game.components.bets import Bet, bet_grader, bet_validator
+from game.components.context import GameContext
 from game.components.utils import FACES
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,20 @@ def game_orchestrator(
     _wants_stats = {p: "stats" in _sigs[p] for p in players}
     _wants_tier = {p: "tier" in _sigs[p] for p in players}
     _wants_round_players = {p: "round_players" in _sigs[p] for p in players}
+
+    def _positional_count(params: dict) -> int:
+        return sum(
+            1
+            for name, p in params.items()
+            if name != "self"
+            and p.kind
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+        )
+
+    _is_v2 = {p: _positional_count(_sigs[p]) == 1 for p in players}
     logger.info("=== New Game ===")
     rng.shuffle(players)
     logger.info(f"Players: {', '.join(p.name for p in players)}")
@@ -94,26 +109,39 @@ def game_orchestrator(
             player = players[player_idx]
 
             try:
-                kwargs: dict = {}
-                if _wants_stats[player]:
-                    kwargs["stats"] = stats
-                if _wants_tier[player]:
-                    kwargs["tier"] = tier
-                if _wants_round_players[player]:
-                    kwargs["round_players"] = list(round_players_order)
                 safe_bet = (
                     Bet(current_bet.quantity, current_bet.face, current_bet.player)
                     if current_bet is not None
                     else None
                 )
-                action = player.algo(
-                    list(hands[player_idx]),
-                    safe_bet,
-                    total_dice,
-                    list(bet_history),
-                    list(completed_outcomes),
-                    **kwargs,
-                )
+                if _is_v2[player]:
+                    ctx = GameContext(
+                        hand=list(hands[player_idx]),
+                        prior_bet=safe_bet,
+                        total_dice=total_dice,
+                        bet_history=bet_history,
+                        outcomes=completed_outcomes,
+                        stats=stats,
+                        tier=tier,
+                        round_players=round_players_order,
+                    )
+                    action = player.algo(ctx)
+                else:
+                    kwargs: dict = {}
+                    if _wants_stats[player]:
+                        kwargs["stats"] = stats
+                    if _wants_tier[player]:
+                        kwargs["tier"] = tier
+                    if _wants_round_players[player]:
+                        kwargs["round_players"] = list(round_players_order)
+                    action = player.algo(
+                        list(hands[player_idx]),
+                        safe_bet,
+                        total_dice,
+                        list(bet_history),
+                        list(completed_outcomes),
+                        **kwargs,
+                    )
             except Exception:
                 logger.error(
                     "%s raised an exception - penalised\n%s",
