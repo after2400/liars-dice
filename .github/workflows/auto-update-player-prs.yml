@@ -1,0 +1,45 @@
+name: Auto-update player PR branches
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Update stale player PR branches
+        env:
+          GH_TOKEN: ${{ secrets.LEADERBOARD_PAT }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          prs=$(gh pr list --repo "$REPO" --state open --json number --jq '.[].number')
+
+          if [ -z "$prs" ]; then
+            echo "No open PRs."
+            exit 0
+          fi
+
+          for pr in $prs; do
+            files=$(gh pr view "$pr" --repo "$REPO" --json files --jq '.files[].path')
+            non_player=$(echo "$files" | grep -v '^players/' || true)
+            if [ -n "$non_player" ]; then
+              echo "PR #$pr touches non-player files — skipping."
+              continue
+            fi
+
+            status=$(gh pr view "$pr" --repo "$REPO" --json mergeStateStatus --jq '.mergeStateStatus')
+            if [ "$status" != "BEHIND" ]; then
+              echo "PR #$pr status is '$status' — skipping."
+              continue
+            fi
+
+            echo "Updating PR #$pr branch…"
+            gh pr update-branch "$pr" --repo "$REPO" \
+              || echo "Could not update PR #$pr (conflict or fork permission — needs manual rebase)."
+          done
