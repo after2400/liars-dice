@@ -2,6 +2,8 @@
 
 Everything you need to write a bot and compete in the league.
 
+> **Action required by 2026-10-05:** The v1 `algo()` interface (positional args) is deprecated. Migrate to the v2 `GameContext` interface before the Q4 2026 tournament Monday or your player will be dropped from the league. See [Migration Guide](#migrating-from-v1-to-v2) below.
+
 ---
 
 ## Submitting a Player
@@ -21,18 +23,9 @@ from game.components.bets import Bet
 class Fred:
     name = "Fred the Magnificent"  # optional — defaults to class name
 
-    def algo(
-        self,
-        hand: list[int],
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-        # optional — declare by name to opt in:
-        # stats: GameStats | None = None
-        # tier: str | None = None
-        # round_players: list[str] | None = None
-    ) -> Bet | None:
+    def algo(self, ctx) -> Bet | None:
+        # ctx.hand, ctx.prior_bet, ctx.total_dice, ctx.bet_history,
+        # ctx.outcomes, ctx.stats, ctx.tier, ctx.round_players
         ...
 ```
 
@@ -50,22 +43,22 @@ The PR is validated and auto-merged. Your player competes starting from the next
 
 ## Player API
 
-### `algo` inputs
+### `algo` inputs (v2)
 
-| Parameter       | Type                | Description                                                                                                                                                                                                                                          |
-| --------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hand`          | `list[int]`         | Your current dice (values 1–6)                                                                                                                                                                                                                       |
-| `prior_bet`     | `Bet \| None`       | The last bid placed, or `None` if you are opening the round                                                                                                                                                                                          |
-| `total_dice`    | `int`               | Total dice in play across all active players                                                                                                                                                                                                         |
-| `bet_history`   | `list[dict]`        | Every accepted bid this game, oldest first                                                                                                                                                                                                           |
-| `outcomes`      | `list[dict]`        | Revealed hands and results from all completed rounds                                                                                                                                                                                                 |
-| `stats`         | `GameStats \| None` | Pre-computed opponent statistics. Opt-in: declare `stats=None` in your signature. Use it instead of scanning `bet_history` or `outcomes` — those lists grow to tens of thousands of entries by game 1000.                                            |
-| `tier`          | `str \| None`       | The current league tier: `"L1"`, `"CH"`, or `"PRM"`. Opt-in: declare `tier=None` in your signature. Receives `None` during quarterly tournament pools — **your `algo` must not crash when `tier` is `None`**.                                        |
-| `round_players` | `list[str] \| None` | Clockwise bid order for this round. `round_players[0]` is always the opening bidder. The list shrinks as players are eliminated — it reflects only the active players for the current round. Opt-in: declare `round_players=None` in your signature. |
+`algo(self, ctx)` receives a single `GameContext` object. All fields are always present — no opt-in needed.
 
-All opt-in parameters (`stats`, `tier`, `round_players`) are fully independent — declare any combination in any order.
+| `ctx` field         | Type          | Description                                                                                                                 |
+| ------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.hand`          | `list[int]`   | Your current dice (values 1–6). Mutable copy — changes stay local.                                                          |
+| `ctx.prior_bet`     | `Bet \| None` | The last bid placed, or `None` if you are opening the round.                                                                |
+| `ctx.total_dice`    | `int`         | Total dice in play across all active players.                                                                               |
+| `ctx.bet_history`   | `list[dict]`  | Every accepted bid this game, oldest first. Entries are read-only.                                                          |
+| `ctx.outcomes`      | `list[dict]`  | Revealed hands and results from all completed rounds. Entries are read-only. `outcome["hands"]["Alice"]` is a `tuple[int]`. |
+| `ctx.stats`         | `GameStats`   | Pre-computed opponent statistics. Always a `GameStats` instance — never `None`.                                             |
+| `ctx.tier`          | `str \| None` | The current league tier: `"L1"`, `"CH"`, or `"PRM"`. `None` during quarterly tournament pools.                              |
+| `ctx.round_players` | `list[str]`   | Clockwise bid order for this round. `ctx.round_players[0]` is the opening bidder. Mutable copy.                             |
 
-> **Performance note:** If your strategy reads `bet_history` or `outcomes`, declare `stats=None` in your signature and use `GameStats` instead. A full scan of `outcomes` at game 1000 iterates ~15,000 entries — done on every turn, that makes the last games ~2,000× slower than the first.
+> **Performance note:** Use `ctx.stats` instead of scanning `bet_history` or `outcomes`. A full scan of `outcomes` at game 1000 iterates ~15,000 entries — done on every turn, that makes the last games ~2,000× slower than the first.
 
 ### Return value
 
@@ -106,6 +99,35 @@ bet.player    # str — name of the player who placed it
     "loser":       str,   # who lost a die
 }
 ```
+
+---
+
+## Migrating from v1 to v2
+
+The v1 interface used positional arguments:
+
+```python
+# v1 — deprecated, removed 2026-10-05
+def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, stats=None, tier=None, round_players=None):
+    ...
+```
+
+The v2 interface uses a single `GameContext` object:
+
+```python
+# v2 — required after 2026-10-05
+def algo(self, ctx):
+    hand = ctx.hand
+    prior_bet = ctx.prior_bet
+    total_dice = ctx.total_dice
+    bet_history = ctx.bet_history
+    outcomes = ctx.outcomes
+    stats = ctx.stats          # always GameStats, never None
+    tier = ctx.tier
+    round_players = ctx.round_players
+```
+
+**One breaking change:** `outcome["hands"]["PlayerName"]` is now a `tuple` instead of a `list`. Indexing (`hands["Alice"][0]`) and iteration (`for d in hands["Alice"]`) work unchanged. `.sort()` and `.append()` will raise `AttributeError` — use `sorted(hands["Alice"])` instead.
 
 ---
 
