@@ -6,7 +6,7 @@ import traceback
 import types
 
 from game.components.bets import Bet, bet_grader, bet_validator
-from game.components.context import GameContext
+from game.components.context import GameContext, _ReadOnlySequence
 from game.components.utils import FACES
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,10 @@ def game_orchestrator(
         outcomes = []
     completed_outcomes = outcomes  # alias — appended to in-place below
 
+    # Read-only wrappers created once per game, shared across all v2 player turns.
+    bet_history_view = _ReadOnlySequence(bet_history)
+    outcomes_view = _ReadOnlySequence(completed_outcomes)
+
     round_num = 0
 
     while len(active()) > 1:
@@ -119,8 +123,8 @@ def game_orchestrator(
                         hand=list(hands[player_idx]),
                         prior_bet=safe_bet,
                         total_dice=total_dice,
-                        bet_history=bet_history,
-                        outcomes=completed_outcomes,
+                        bet_history=bet_history_view,
+                        outcomes=outcomes_view,
                         stats=stats,
                         tier=tier,
                         round_players=round_players_order,
