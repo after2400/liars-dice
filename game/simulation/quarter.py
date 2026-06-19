@@ -5,7 +5,8 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
-from datetime import date, timedelta
+import time
+from datetime import date, datetime, timedelta
 from io import StringIO
 from pathlib import Path
 
@@ -88,7 +89,7 @@ def write_report(
 
     lines: list[str] = [
         f"# Quarter Simulation: {quarter}",
-        f"**Start:** {first_date} | **Mondays:** {len(steps)} | **Games/run:** {n_games}",
+        f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | **Start:** {first_date} | **Mondays:** {len(steps)} | **Games/run:** {n_games}",
         "",
     ]
 
@@ -197,16 +198,21 @@ def main() -> None:
     print()
 
     steps: list[dict] = []
-    for step_date, mode in mondays:
+    t_total = time.perf_counter()
+    for i, (step_date, mode) in enumerate(mondays):
         label = "Tournament" if mode == "tournament" else "season"
         print(f"{'=' * 60}")
-        print(f"[simulate] {step_date} — {label}")
+        print(f"[simulate] {step_date} — {label} (step {i + 1}/{len(mondays)})")
         print(f"{'=' * 60}")
+        t0 = time.perf_counter()
         output = run_step(step_date, mode, args.n_games, lb_path)
+        elapsed = time.perf_counter() - t0
+        print(f"[simulate] done in {elapsed:.1f}s")
         steps.append({"date": step_date, "mode": mode, "output": output})
         print()
 
     write_report(steps, lb_path, output_file, args.n_games)
+    print(f"[simulate] total elapsed: {time.perf_counter() - t_total:.1f}s")
 
 
 if __name__ == "__main__":
