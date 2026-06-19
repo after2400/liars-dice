@@ -76,7 +76,7 @@ Use these to test how a player performs before Monday's CI run. All simulation c
 **Register a player locally first** (only needed if they're not yet in `leaderboard.yaml`):
 
 ```bash
-PLAYER_FILE=players/foo.py GITHUB_USERNAME=your-login uv run python .github/scripts/register_player.py
+just register-player players/foo.py your-login
 ```
 
 **Single-step simulations:**
@@ -89,9 +89,9 @@ just simulate-season 2026-07-13    # runs one regular Monday season step
 **Full quarter simulation** — runs tournament + all regular Mondays in sequence, writes a Markdown report:
 
 ```bash
-uv run python -m game.simulation.quarter
-# --start 2026-07-06   tournament Monday to start from (default: next upcoming)
-# --n-games 500        games per tier per run (default: N_GAMES env var or 1000)
+just simulate-quarter                        # next upcoming tournament Monday
+just simulate-quarter 2026-07-06             # specific start date
+just simulate-quarter 2026-07-06 500         # with custom game count
 ```
 
 Outputs `sim-YYYY-QN.md` in the current directory. `leaderboard.yaml` is mutated in-place.
@@ -99,7 +99,8 @@ Outputs `sim-YYYY-QN.md` in the current directory. `leaderboard.yaml` is mutated
 **Clean up afterward:**
 
 ```bash
-just clean    # restores leaderboard.yaml and removes season_summary.md
+just clean                                          # restores leaderboard.yaml and removes season_summary.md
+just clean .claude/worktrees/my-worktree            # clean a specific worktree
 ```
 
 ## Commits

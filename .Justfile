@@ -49,8 +49,20 @@ simulate-season date=`date +%Y-%m-%d`:
 simulate-tournament:
     TODAY=$(uv run python -c "from game.season.utils import next_tournament_monday; print(next_tournament_monday())") DRY_RUN=1 uv run python .github/scripts/reset_season.py
 
-# Reset files written by simulate-season or simulate-tournament
+# Simulate a full quarter: tournament + all regular Mondays. Writes sim-YYYY-QN.md.
+# Usage: just simulate-quarter
+#        just simulate-quarter 2026-07-06
+#        just simulate-quarter 2026-07-06 500
 [group('algorithms')]
-clean:
-    git checkout -- leaderboard.yaml
-    rm -f season_summary.md
+simulate-quarter start='' n-games='':
+    uv run python -m game.simulation.quarter \
+        $([ -n "{{start}}" ] && echo "--start {{start}}") \
+        $([ -n "{{n-games}}" ] && echo "--n-games {{n-games}}")
+
+# Reset files written by simulate-* recipes. Optional path for worktrees.
+# Usage: just clean
+#        just clean .claude/worktrees/my-worktree
+[group('algorithms')]
+clean path='.':
+    git -C {{path}} checkout -- leaderboard.yaml
+    rm -f {{path}}/season_summary.md
