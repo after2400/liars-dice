@@ -661,6 +661,100 @@ class TestApplyDisplayNames:
         assert names <= {"Remy (user1)", "Remy (user2)"}
 
 
+def test_bet_history_entries_are_read_only(tmp_path):
+    """bet_history entries passed to players are MappingProxyType — writes raise TypeError."""
+    import textwrap
+
+    from game.components.series import run_series
+    from game.components.utils import import_player_classes_from_dir
+
+    player_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class MutationProbe:
+            name = "MutationProbe"
+            saw_readonly = []
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+                if bet_history:
+                    try:
+                        bet_history[-1]["player"] = "hacked"
+                        MutationProbe.saw_readonly.append(False)
+                    except TypeError:
+                        MutationProbe.saw_readonly.append(True)
+                if prior_bet is None:
+                    from game.components.bets import Bet
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+
+    player_dir = tmp_path / "players"
+    player_dir.mkdir()
+    (player_dir / "mutationprobe.py").write_text(player_src)
+    (player_dir / "__init__.py").write_text("")
+    players = import_player_classes_from_dir(str(player_dir))
+
+    class AlwaysBid:
+        name = "AlwaysBid"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            from game.components.bets import Bet
+
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    run_series(players + [AlwaysBid()], n_games=1)
+    probe_cls = players[0].__class__
+    assert len(probe_cls.saw_readonly) > 0, "MutationProbe never saw a bet_history entry"
+    assert all(probe_cls.saw_readonly), "bet_history entries were writable — expected TypeError"
+
+
+def test_outcomes_hands_values_are_tuples(tmp_path):
+    """outcomes[n]['hands'] values are tuples, not lists."""
+    import textwrap
+
+    from game.components.series import run_series
+    from game.components.utils import import_player_classes_from_dir
+
+    player_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class HandsProbe:
+            name = "HandsProbe"
+            hand_types = []
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+                for outcome in outcomes:
+                    for dice in outcome["hands"].values():
+                        HandsProbe.hand_types.append(type(dice).__name__)
+                if prior_bet is None:
+                    return Bet(1, 2, self.name)
+                return None
+    """)
+
+    player_dir = tmp_path / "players"
+    player_dir.mkdir()
+    (player_dir / "handsprobe.py").write_text(player_src)
+    (player_dir / "__init__.py").write_text("")
+    players = import_player_classes_from_dir(str(player_dir))
+
+    class AlwaysBid:
+        name = "AlwaysBid"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            from game.components.bets import Bet
+
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    run_series(players + [AlwaysBid()], n_games=2)
+    probe_cls = players[0].__class__
+    assert len(probe_cls.hand_types) > 0, "HandsProbe never saw an outcome"
+    assert all(t == "tuple" for t in probe_cls.hand_types), (
+        f"Expected all tuple, got: {set(probe_cls.hand_types)}"
+    )
+
+
 def test_bet_history_includes_dice_count():
     """Each bet_history entry records how many dice the bidder held when they bid.
     This lets players model opponent behaviour by game stage (desperate vs. comfortable)."""

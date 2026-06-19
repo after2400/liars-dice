@@ -3,6 +3,7 @@ import logging
 import random
 import secrets
 import traceback
+import types
 
 from game.components.bets import Bet, bet_grader, bet_validator
 from game.components.utils import FACES
@@ -144,16 +145,20 @@ def game_orchestrator(
                         loser = prev_bidder
                         round_winner = player_idx
                     completed_outcomes.append(
-                        {
-                            "game": game_id,
-                            "round": round_num,
-                            "hands": {players[i].name: hands[i] for i in active_list},
-                            "final_bet": current_bet,
-                            "bidder": players[prev_bidder].name,
-                            "challenger": player.name,
-                            "bet_held": bet_held,
-                            "loser": players[loser].name,
-                        }
+                        types.MappingProxyType(
+                            {
+                                "game": game_id,
+                                "round": round_num,
+                                "hands": types.MappingProxyType(
+                                    {players[i].name: tuple(hands[i]) for i in active_list}
+                                ),
+                                "final_bet": current_bet,
+                                "bidder": players[prev_bidder].name,
+                                "challenger": player.name,
+                                "bet_held": bet_held,
+                                "loser": players[loser].name,
+                            }
+                        )
                     )
                     if stats is not None:
                         stats.update_outcome(completed_outcomes[-1])
@@ -172,13 +177,15 @@ def game_orchestrator(
                     current_bet = action
                     prev_bidder = player_idx
                     bet_history.append(
-                        {
-                            "game": game_id,
-                            "round": round_num,
-                            "player": player.name,
-                            "bet": current_bet,
-                            "dice_count": dice_counts[player_idx],
-                        }
+                        types.MappingProxyType(
+                            {
+                                "game": game_id,
+                                "round": round_num,
+                                "player": player.name,
+                                "bet": current_bet,
+                                "dice_count": dice_counts[player_idx],
+                            }
+                        )
                     )
                     if stats is not None:
                         stats.update_bet(
