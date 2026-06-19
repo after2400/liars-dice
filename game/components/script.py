@@ -5,6 +5,8 @@ import secrets
 import traceback
 
 from game.components.bets import Bet, bet_grader, bet_validator
+from game.components.context import GameContext, _ReadOnlySequence
+from game.components.stats import GameStats
 from game.components.utils import FACES
 
 logger = logging.getLogger(__name__)
@@ -20,26 +22,31 @@ def game_orchestrator(
 ):
     """Plays a complete game of Liar's Dice between N players.
 
-    Each round, all active players roll their dice in secret. Players take
-    turns bidding (quantity, face). A player may call liar instead of bidding,
-    triggering a reveal. The loser of each challenge loses one die; a player
-    eliminated when they reach 0 dice. Last player standing wins.
-
-    Args:
-        players: List of player objects. Each must implement
-                 algo(hand, prior_bet, total_dice, bet_history, outcomes) -> Bet | None.
-        game_id: Identifier for this game, stored on every bet_history and outcomes entry.
-        bet_history: Shared list to append bids to. Created fresh if not provided.
-        outcomes: Shared list to append round outcomes to. Created fresh if not provided.
+    Supports v1 players (positional args) and v2 players (single GameContext arg).
+    v1 players receive list copies of bet_history/outcomes for isolation.
+    v2 players receive _ReadOnlySequence wrappers — O(1), no copying.
 
     Returns:
         The winning player object.
     """
     rng = random.Random(secrets.randbits(64))
-    _sigs = {p: inspect.signature(p.algo).parameters for p in players}
-    _wants_stats = {p: "stats" in _sigs[p] for p in players}
-    _wants_tier = {p: "tier" in _sigs[p] for p in players}
-    _wants_round_players = {p: "round_players" in _sigs[p] for p in players}
+
+    # Detect v2 players once per game. v2: algo(self, ctx) — exactly one non-self param named ctx.
+    def _is_v2(p) -> bool:
+        params = list(inspect.signature(p.algo).parameters)
+        return len(params) == 1 and params[0] == "ctx"
+
+    _v2 = {p: _is_v2(p) for p in players}
+
+    # v1 opt-in flags (only checked for v1 players)
+    _sigs = {p: inspect.signature(p.algo).parameters for p in players if not _v2[p]}
+    _wants_stats = {p: "stats" in _sigs[p] for p in players if not _v2[p]}
+    _wants_tier = {p: "tier" in _sigs[p] for p in players if not _v2[p]}
+    _wants_round_players = {p: "round_players" in _sigs[p] for p in players if not _v2[p]}
+
+    # Fallback stats for v2 players (always non-None per the v2 contract)
+    _v2_stats = stats if stats is not None else GameStats()
+
     logger.info("=== New Game ===")
     rng.shuffle(players)
     logger.info(f"Players: {', '.join(p.name for p in players)}")
@@ -59,6 +66,11 @@ def game_orchestrator(
     if outcomes is None:
         outcomes = []
     completed_outcomes = outcomes  # alias — appended to in-place below
+
+    # Read-only wrappers over the live accumulator lists — created once per game,
+    # shared across all v2 player turns. No copying; always reflects current state.
+    bet_history_view = _ReadOnlySequence(bet_history)
+    outcomes_view = _ReadOnlySequence(completed_outcomes)
 
     round_num = 0
 
@@ -93,26 +105,39 @@ def game_orchestrator(
             player = players[player_idx]
 
             try:
-                kwargs: dict = {}
-                if _wants_stats[player]:
-                    kwargs["stats"] = stats
-                if _wants_tier[player]:
-                    kwargs["tier"] = tier
-                if _wants_round_players[player]:
-                    kwargs["round_players"] = list(round_players_order)
                 safe_bet = (
                     Bet(current_bet.quantity, current_bet.face, current_bet.player)
                     if current_bet is not None
                     else None
                 )
-                action = player.algo(
-                    list(hands[player_idx]),
-                    safe_bet,
-                    total_dice,
-                    list(bet_history),
-                    list(completed_outcomes),
-                    **kwargs,
-                )
+                if _v2[player]:
+                    ctx = GameContext(
+                        hand=list(hands[player_idx]),
+                        prior_bet=safe_bet,
+                        total_dice=total_dice,
+                        bet_history=bet_history_view,
+                        outcomes=outcomes_view,
+                        stats=_v2_stats,
+                        tier=tier,
+                        round_players=list(round_players_order),
+                    )
+                    action = player.algo(ctx)
+                else:
+                    kwargs: dict = {}
+                    if _wants_stats.get(player):
+                        kwargs["stats"] = stats
+                    if _wants_tier.get(player):
+                        kwargs["tier"] = tier
+                    if _wants_round_players.get(player):
+                        kwargs["round_players"] = list(round_players_order)
+                    action = player.algo(
+                        list(hands[player_idx]),
+                        safe_bet,
+                        total_dice,
+                        list(bet_history),
+                        list(completed_outcomes),
+                        **kwargs,
+                    )
             except Exception:
                 logger.error(
                     "%s raised an exception - penalised\n%s",

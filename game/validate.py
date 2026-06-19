@@ -72,6 +72,7 @@ _ALLOWED_STDLIB: frozenset[str] = frozenset(
 _ALLOWED_GAME_MODULES: frozenset[str] = frozenset(
     {
         "game.components.bets",
+        "game.components.context",
         "game.components.stats",
     }
 )
@@ -104,11 +105,20 @@ _SAFE_TOPLEVEL = (
 _BLOCKED_BUILTINS: frozenset[str] = frozenset({"exec", "eval", "__import__", "compile", "open"})
 
 _REQUIRED_ALGO_ARGS = ("self", "hand", "prior_bet", "total_dice", "bet_history", "outcomes")
-_ALLOWED_OPT_ARGS: frozenset[str] = frozenset({"stats", "tier"})
+_ALLOWED_OPT_ARGS: frozenset[str] = frozenset({"stats", "tier", "round_players"})
+_V2_ALGO_ARGS = ("self", "ctx")
 
 
-def _check_algo_signature(node: ast.FunctionDef, errors: list[str]) -> None:
+def _check_algo_signature(node: ast.FunctionDef, errors: list[str]) -> list[str]:
+    """Validate algo signature. Returns deprecation warnings (non-fatal) for v1 players."""
+    warnings: list[str] = []
     args = [a.arg for a in node.args.args]
+
+    # v2: algo(self, ctx) — exactly two positional args, no kwargs
+    if args == list(_V2_ALGO_ARGS) and not node.args.kwonlyargs:
+        return warnings  # valid v2, no warnings
+
+    # v1: validate required positional args then allowed opts
     for i, expected in enumerate(_REQUIRED_ALGO_ARGS):
         actual = args[i] if i < len(args) else "<missing>"
         if actual != expected:
@@ -120,14 +130,23 @@ def _check_algo_signature(node: ast.FunctionDef, errors: list[str]) -> None:
         if kw.arg not in _ALLOWED_OPT_ARGS:
             errors.append(f"algo() has unexpected keyword-only argument '{kw.arg}'")
 
+    if not errors:
+        warnings.append(
+            "algo() uses the v1 positional-args interface, which will be removed on 2026-10-05 "
+            "(Q4 tournament Monday). Migrate to algo(self, ctx) before then."
+        )
+    return warnings
 
-def _ast_errors(source: str, stem: str) -> list[str]:
+
+def _ast_errors(source: str, stem: str) -> tuple[list[str], list[str]]:
+    """Returns (errors, warnings). Warnings are non-fatal deprecation notices."""
     errors: list[str] = []
+    warnings: list[str] = []
 
     try:
         tree = ast.parse(source)
     except SyntaxError as exc:
-        return [f"Syntax error at line {exc.lineno}: {exc.msg}"]
+        return [f"Syntax error at line {exc.lineno}: {exc.msg}"], []
 
     # Only imports, class/function definitions, and a module docstring are
     # permitted at the top level. Bare statements (calls, assignments, raises,
@@ -142,6 +161,9 @@ def _ast_errors(source: str, stem: str) -> list[str]:
         ):
             continue  # module-level docstring
         errors.append(f"Line {node.lineno}: executable statement at module level is not allowed")
+
+    if errors:
+        return errors, warnings
 
     # Import whitelist and blocked builtins — both checked everywhere in the file
     # so a bot cannot smuggle violations inside a method body.
@@ -173,7 +195,7 @@ def _ast_errors(source: str, stem: str) -> list[str]:
     )
     if class_node is None:
         errors.append(f"No class named '{stem}' (case-insensitive) found")
-        return errors
+        return errors, warnings
 
     # Check algo method.
     algo_node = next(
@@ -182,8 +204,12 @@ def _ast_errors(source: str, stem: str) -> list[str]:
     )
     if algo_node is None:
         errors.append("Player class does not define an 'algo' method")
-    else:
-        _check_algo_signature(algo_node, errors)
+        return errors, warnings
+
+    sig_warnings = _check_algo_signature(algo_node, errors)
+    warnings.extend(sig_warnings)
+    if errors:
+        return errors, warnings
 
     # Check display name if present as a class-level attribute. Must be a plain
     # string literal — dynamic values cannot be validated without execution.
@@ -210,7 +236,7 @@ def _ast_errors(source: str, stem: str) -> list[str]:
                 else:
                     errors.append("Class 'name' attribute must be a plain string literal")
 
-    return errors
+    return errors, warnings
 
 
 # --- runtime phase (only reached after AST phase passes) ---
@@ -256,7 +282,27 @@ def _runtime_errors(player_file: str, stem: str) -> list[str]:
     if not callable(getattr(instance, "algo", None)):
         return ["Player class does not define an 'algo' method"]
 
-    if "tier" in inspect.signature(instance.algo).parameters:
+    params = list(inspect.signature(instance.algo).parameters)
+    if params == ["ctx"]:
+        # v2 probe: call with a minimal GameContext
+        from game.components.context import GameContext, _ReadOnlySequence  # noqa: PLC0415
+        from game.components.stats import GameStats  # noqa: PLC0415
+
+        dummy_ctx = GameContext(
+            hand=[],
+            prior_bet=None,
+            total_dice=10,
+            bet_history=_ReadOnlySequence([]),
+            outcomes=_ReadOnlySequence([]),
+            stats=GameStats(),
+            tier=None,
+            round_players=[],
+        )
+        try:
+            instance.algo(dummy_ctx)
+        except Exception as exc:
+            return [f"algo() raised {type(exc).__name__} when called with dummy GameContext: {exc}"]
+    elif "tier" in params:
         try:
             instance.algo([], None, 10, [], [], tier=None)
         except Exception as exc:
@@ -284,11 +330,13 @@ def validate(player_file: str) -> None:
     stem = path.stem
     source = path.read_text()
 
-    ast_errs = _ast_errors(source, stem)
+    ast_errs, ast_warns = _ast_errors(source, stem)
     if ast_errs:
         for err in ast_errs:
             print(f"ERROR: {err}")
         sys.exit(1)
+    for w in ast_warns:
+        print(f"WARNING: {w}")
 
     runtime_errs = _runtime_errors(str(path), stem)
     if runtime_errs:
