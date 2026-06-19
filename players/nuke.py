@@ -1,4 +1,3 @@
-import random
 from math import comb
 
 from game.components.bets import Bet
@@ -7,46 +6,47 @@ from game.components.bets import Bet
 class Nuke:
     name = "Nuke LaLoosh"
 
+    # Call logic
+    BASE_CALL_THRESHOLD = 0.28
+    CALL_FLOOR = 0.10
+    STEWIE_CALL_FLOOR = 0.12
+    BLUFF_SENSITIVITY = 0.40
+    VELOCITY_SENSITIVITY = 0.015
+
+    # Fastball
     FASTBALL_PROB = 0.50
-    FASTBALL_HOLD_THRESHOLD = 0.40
-    BLUFF_CALL_THRESHOLD = 0.30
 
-    _OPENING_MULTIPLIER = {"L1": 0.85, "CH": 0.82, "PRM": 0.78}
+    # Raise selection
+    RAISE_OWN_WEIGHT = 2.0
+    RAISE_BIAS_PENALTY = 3.0
+    ENDGAME_THRESHOLD = 5
 
-    def __init__(self) -> None:
-        self._opp: dict[str, dict] = {}
-        self._last_outcomes_len: int = 0
+    # Opening
+    OPENING_FACTOR_DEFAULT = 0.82
+    OPENING_CR_PIVOT = 0.25
+    OPENING_CR_SENSITIVITY = 1.5
+    OPENING_FACTOR_MIN = 0.55
+    OPENING_FACTOR_MAX = 1.0
 
-    def _ingest(self, outcomes: list[dict]) -> None:
-        for o in outcomes[self._last_outcomes_len :]:
-            if "bidder" not in o:
-                continue
-            bidder = o["bidder"]
-            face = o["final_bet"].face
-            d = self._opp.setdefault(
-                bidder, {"bluffs": 0, "holds": 0, "face_bluffs": {}, "face_holds": {}}
-            )
-            if o["bet_held"]:
-                d["holds"] += 1
-                d["face_holds"][face] = d["face_holds"].get(face, 0) + 1
-            else:
-                d["bluffs"] += 1
-                d["face_bluffs"][face] = d["face_bluffs"].get(face, 0) + 1
-        self._last_outcomes_len = len(outcomes)
+    def _crash_davis_called_pitch(self, bidder: str, face: int, stats) -> float:
+        floor = self.STEWIE_CALL_FLOOR if bidder == "Stewie" else self.CALL_FLOOR
+        if stats is None:
+            return max(floor, self.BASE_CALL_THRESHOLD)
 
-    def _crash_davis_called_pitch(self, bidder: str, face: int) -> float:
-        base = self.BLUFF_CALL_THRESHOLD
-        d = self._opp.get(bidder)
-        if d is None:
-            return base
-        bluffs, holds = d["bluffs"], d["holds"]
-        bluff_rate = (bluffs + 1) / (bluffs + holds + 2)
-        bluff_offset = (bluff_rate - 0.5) * 0.15
-        face_bluffs = d["face_bluffs"].get(face, 0)
-        face_holds = d["face_holds"].get(face, 0)
-        face_bluff_rate = (face_bluffs + 1) / (face_bluffs + face_holds + 2)
-        face_offset = (face_bluff_rate - 0.5) * 0.10
-        return max(0.10, min(0.50, base + bluff_offset + face_offset))
+        face_bluff = stats.bluff_rate_by_face.get(bidder, {}).get(face)
+        overall_bluff = stats.bluff_rate.get(bidder)
+
+        if face_bluff is not None and overall_bluff is not None:
+            bluff_signal = face_bluff * 0.3 + overall_bluff * 0.7
+        elif overall_bluff is not None:
+            bluff_signal = overall_bluff
+        else:
+            bluff_signal = 0.5
+
+        bluff_adj = (bluff_signal - 0.5) * self.BLUFF_SENSITIVITY
+        velocity_adj = max(0.0, stats.current_round_velocity - 1.0) * self.VELOCITY_SENSITIVITY
+        raw = self.BASE_CALL_THRESHOLD + bluff_adj - velocity_adj
+        return max(floor, min(0.50, raw))
 
     def _prob_bet_holds(self, hand: list[int], face: int, quantity: int, total_dice: int) -> float:
         own = hand.count(face) + (hand.count(1) if face != 1 else 0)
@@ -61,8 +61,52 @@ class Nuke:
             comb(unseen, k) * (p**k) * ((1 - p) ** (unseen - k)) for k in range(need, unseen + 1)
         )
 
-    def _fastball_eligible(self, hand: list[int]) -> bool:
-        return bool(hand.count(1))
+    def _own_fraction(self, hand: list[int], face: int, total_dice: int, wilds: bool) -> float:
+        if total_dice == 0:
+            return 0.0
+        count = hand.count(face)
+        if wilds and face != 1:
+            count += hand.count(1)
+        return count / total_dice
+
+    def _avg_opp_face_bias(self, face: int, stats) -> float:
+        if stats is None or not stats.face_bias:
+            return 1 / 6
+        biases = [pb.get(face, 1 / 6) for pb in stats.face_bias.values()]
+        return sum(biases) / len(biases)
+
+    def _best_raise(
+        self, hand: list[int], prior_bet: Bet, total_dice: int, stats
+    ) -> tuple[int, int]:
+        wilds = prior_bet.face != 1
+        endgame = total_dice <= self.ENDGAME_THRESHOLD
+
+        candidates = []
+
+        frac = self._own_fraction(hand, prior_bet.face, total_dice, wilds)
+        bias = 0.0 if endgame else self._avg_opp_face_bias(prior_bet.face, stats)
+        candidates.append((prior_bet.quantity + 1, prior_bet.face, frac, bias))
+
+        for face in range(prior_bet.face + 1, 7):
+            frac = self._own_fraction(hand, face, total_dice, wilds)
+            bias = 0.0 if endgame else self._avg_opp_face_bias(face, stats)
+            candidates.append((prior_bet.quantity, face, frac, bias))
+
+        best = max(
+            candidates,
+            key=lambda c: c[2] * self.RAISE_OWN_WEIGHT - c[3] * self.RAISE_BIAS_PENALTY,
+        )
+        return best[0], best[1]
+
+    def _opening_factor(self, stats) -> float:
+        if stats is None or not stats.challenge_rate:
+            return self.OPENING_FACTOR_DEFAULT
+        avg_cr = sum(stats.challenge_rate.values()) / len(stats.challenge_rate)
+        adjustment = (self.OPENING_CR_PIVOT - avg_cr) * self.OPENING_CR_SENSITIVITY
+        return max(
+            self.OPENING_FACTOR_MIN,
+            min(self.OPENING_FACTOR_MAX, self.OPENING_FACTOR_DEFAULT + adjustment),
+        )
 
     def algo(
         self,
@@ -71,48 +115,8 @@ class Nuke:
         total_dice: int,
         bet_history: list[dict],
         outcomes: list[dict],
+        stats=None,
         tier: str | None = None,
     ) -> Bet | None:
-        self._ingest(outcomes)
-        if prior_bet is None:
-            if (
-                tier != "PRM"
-                and random.random() < self.FASTBALL_PROB
-                and self._fastball_eligible(hand)
-            ):
-                own_1s = hand.count(1)
-                unseen = total_dice - len(hand)
-                quantity = max(own_1s + 1, round(own_1s + unseen * (1 / 6) * 0.7))
-                return Bet(quantity, 1, self.name)
-            multiplier = self._OPENING_MULTIPLIER.get(tier, 0.82) if tier else 0.82
-            best_face = max(range(2, 7), key=lambda f: hand.count(f) + hand.count(1))
-            own = hand.count(best_face) + hand.count(1)
-            unseen = total_dice - len(hand)
-            quantity = max(1, round(own + unseen * (2 / 6) * multiplier))
-            return Bet(quantity, best_face, self.name)
-
-        if self._prob_bet_holds(
-            hand, prior_bet.face, prior_bet.quantity, total_dice
-        ) < self._crash_davis_called_pitch(prior_bet.player, prior_bet.face):
-            return None
-
-        if (
-            prior_bet.face == 1
-            and tier != "PRM"
-            and self._prob_bet_holds(hand, 1, prior_bet.quantity, total_dice)
-            >= self.FASTBALL_HOLD_THRESHOLD
-        ):
-            return Bet(prior_bet.quantity + 1, 1, self.name)
-
-        if hand.count(prior_bet.face) + (hand.count(1) if prior_bet.face != 1 else 0) > 0:
-            candidate = Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
-        else:
-            candidate = None
-            for face in range(prior_bet.face + 1, 7):
-                if hand.count(face) + hand.count(1) > 0:
-                    candidate = Bet(prior_bet.quantity, face, self.name)
-                    break
-            if candidate is None:
-                candidate = Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
-
-        return candidate
+        # Placeholder — will be filled in Task 6
+        raise NotImplementedError
