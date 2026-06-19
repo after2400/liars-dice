@@ -104,7 +104,7 @@ _SAFE_TOPLEVEL = (
 _BLOCKED_BUILTINS: frozenset[str] = frozenset({"exec", "eval", "__import__", "compile", "open"})
 
 _REQUIRED_ALGO_ARGS = ("self", "hand", "prior_bet", "total_dice", "bet_history", "outcomes")
-_ALLOWED_OPT_ARGS: frozenset[str] = frozenset({"stats", "tier"})
+_ALLOWED_OPT_ARGS: frozenset[str] = frozenset({"stats", "tier", "round_players"})
 _V2_ALGO_ARGS = ("self", "ctx")
 
 
