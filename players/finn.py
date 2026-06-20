@@ -1,6 +1,7 @@
 from math import comb
 
 from game.components.bets import Bet
+from game.components.context import GameContext
 
 
 class Finn:
@@ -31,14 +32,10 @@ class Finn:
     def _threshold(self, total_dice: int) -> float:
         return min(0.40, 0.15 + 0.25 * (total_dice / 20.0))
 
-    def algo(
-        self,
-        hand: list,
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-    ) -> Bet | None:
+    def algo(self, ctx: GameContext) -> Bet | None:
+        hand = ctx.hand
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
         if prior_bet is None:
             best_face = max(range(2, 7), key=lambda f: hand.count(f) + hand.count(1))
             own = hand.count(best_face) + hand.count(1)
