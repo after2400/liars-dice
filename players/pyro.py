@@ -1,4 +1,5 @@
 from game.components.bets import Bet
+from game.components.context import GameContext
 
 
 class Pyro:
@@ -23,14 +24,9 @@ class Pyro:
             return prior_bet.quantity, prior_bet.face + 1
         return prior_bet.quantity + 1, 2
 
-    def algo(
-        self,
-        hand: list,
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-    ) -> Bet | None:
+    def algo(self, ctx: GameContext) -> Bet | None:
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
         if prior_bet is None:
             return Bet(max(1, total_dice // 3), 5, self.name)
 
