@@ -2,6 +2,7 @@ import random
 from math import comb
 
 from game.components.bets import Bet
+from game.components.context import GameContext
 
 
 class Nuke:
@@ -105,16 +106,13 @@ class Nuke:
                 return curr["player"]
         return None
 
-    def algo(
-        self,
-        hand: list[int],
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-        stats=None,
-        tier: str | None = None,
-    ) -> Bet | None:
+    def algo(self, ctx: GameContext) -> Bet | None:
+        hand = ctx.hand
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
+        stats = ctx.stats
+        tier = ctx.tier
+        bet_history = ctx.bet_history
         if prior_bet is None:
             ones_count = hand.count(1)
             unseen = total_dice - len(hand)
