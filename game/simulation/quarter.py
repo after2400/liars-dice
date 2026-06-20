@@ -69,6 +69,38 @@ def run_step(
 _TIER_LABEL = {"PRM": "Premier", "CH": "Championship", "L1": "Level 1"}
 
 
+def _format_output(output: str) -> str:
+    """Wrap Series Results blocks in code fences; add trailing spaces to log lines."""
+    lines = output.splitlines()
+    result = []
+    in_chart = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        if stripped.startswith("=== Series Results"):
+            in_chart = True
+            result.append("```")
+            result.append(line)
+            continue
+
+        if in_chart:
+            if stripped.startswith(("[", "Promoted", "Relegated", "Playing")):
+                result.append("```")
+                in_chart = False
+                result.append(line + "  " if stripped else line)
+            else:
+                result.append(line)
+            continue
+
+        result.append(line + "  " if stripped else line)
+
+    if in_chart:
+        result.append("```")
+
+    return "\n".join(result)
+
+
 def write_report(
     steps: list[dict],
     lb_path: str,
@@ -105,7 +137,7 @@ def write_report(
 
         lines.append(f"## {d} — {label}")
         lines.append("")
-        lines.append(output.rstrip())
+        lines.append(_format_output(output.rstrip()))
         lines.append("")
 
     lines += ["---", "", "## Final Standings", ""]

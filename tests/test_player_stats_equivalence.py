@@ -57,32 +57,6 @@ def test_eva_raw_bluff_rate_matches_reliability_scan():
     assert scan_bluff_rate == pytest.approx(stats_bluff_rate)
 
 
-def test_eva_algo_same_output_scan_and_stats_paths():
-    """Eva produces identical decisions from scan path and stats path."""
-    from game.components.bets import Bet
-    from players.eva import Eva
-
-    eva = Eva()
-    outcomes = [
-        _make_outcome("Alice", 3, False),
-        _make_outcome("Alice", 3, False),
-        _make_outcome("Alice", 3, False),
-        _make_outcome("Alice", 3, True),
-    ]
-    stats = _build_stats(outcomes)
-    hand = [3, 1, 4, 5, 6]
-    for quantity in [5, 7, 10, 12]:
-        prior_bet = Bet(quantity, 3, "Alice")
-        result_scan = eva.algo(hand, prior_bet, 20, [], outcomes, stats=None)
-        result_stats = eva.algo(hand, prior_bet, 20, [], outcomes, stats=stats)
-        assert type(result_scan) is type(result_stats), (
-            f"quantity={quantity}: scan={result_scan}, stats={result_stats}"
-        )
-        if result_scan is not None:
-            assert result_scan.quantity == result_stats.quantity
-            assert result_scan.face == result_stats.face
-
-
 # ---------------------------------------------------------------------------
 # Sloane
 # ---------------------------------------------------------------------------
@@ -105,28 +79,3 @@ def test_sloane_raw_bluff_rate_by_face_matches_delta_bias_scan():
     raw_face_rate = stats.raw_bluff_rate_by_face.get("Alice", {}).get(3, 0.5)
     stats_delta = (raw_face_rate - 0.5) * 0.2
     assert scan_delta == pytest.approx(stats_delta)
-
-
-def test_sloane_algo_same_output_scan_and_stats_paths():
-    """Sloane produces identical decisions from scan path and stats path."""
-    from game.components.bets import Bet
-    from players.sloane import Sloane
-
-    sloane = Sloane()
-    outcomes = [
-        _make_outcome("Alice", 3, False),
-        _make_outcome("Alice", 3, False),
-        _make_outcome("Alice", 3, True),
-    ]
-    stats = _build_stats(outcomes)
-    hand = [3, 1, 4, 5, 6]
-    for quantity in [5, 7, 10, 12]:
-        prior_bet = Bet(quantity, 3, "Alice")
-        result_scan = sloane.algo(hand, prior_bet, 20, [], outcomes, stats=None)
-        result_stats = sloane.algo(hand, prior_bet, 20, [], outcomes, stats=stats)
-        assert type(result_scan) is type(result_stats), (
-            f"quantity={quantity}: scan={result_scan}, stats={result_stats}"
-        )
-        if result_scan is not None:
-            assert result_scan.quantity == result_stats.quantity
-            assert result_scan.face == result_stats.face

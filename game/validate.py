@@ -72,6 +72,7 @@ _ALLOWED_STDLIB: frozenset[str] = frozenset(
 _ALLOWED_GAME_MODULES: frozenset[str] = frozenset(
     {
         "game.components.bets",
+        "game.components.context",
         "game.components.stats",
     }
 )
