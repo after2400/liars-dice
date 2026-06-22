@@ -9,18 +9,18 @@ class Shark:
 
     # ── Tunable parameters ───────────────────────────────────────────────────
 
-    BASE_THRESHOLD = 0.28        # fallback follower threshold (no stats)
+    BASE_THRESHOLD = 0.33        # fallback follower threshold (no stats)
     CR_INTERCEPT = 0.15          # threshold = CR_INTERCEPT + challenge_rate * CR_SLOPE
-    CR_SLOPE = 0.65
-    BASE_SNIPER_THRESHOLD = 0.28
+    CR_SLOPE = 0.80
+    BASE_SNIPER_THRESHOLD = 0.30
     BLUFF_SENSITIVITY = 0.40
-    BASE_OPENING_FACTOR = 0.80
+    BASE_OPENING_FACTOR = 0.85
     OPENING_CR_PIVOT = 0.22
     OPENING_CR_SENSITIVITY = 1.5
     OPENING_FACTOR_MIN = 0.55
     OPENING_FACTOR_MAX = 1.05
     MEAN_HELD_WEIGHT = 1.0
-    ATTRITION_THRESHOLD = 3      # use attrition mode when player count > this
+    ATTRITION_THRESHOLD = 4      # use attrition mode when player count > this
 
     # ── Probability core ─────────────────────────────────────────────────────
 
