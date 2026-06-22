@@ -142,4 +142,41 @@ class Shark:
         return max(self.OPENING_FACTOR_MIN, min(self.OPENING_FACTOR_MAX, self.BASE_OPENING_FACTOR + adj))
 
     def algo(self, ctx: GameContext) -> Bet | None:
-        raise NotImplementedError
+        hand = ctx.hand
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
+        stats = ctx.stats
+        round_players = ctx.round_players
+
+        if len(round_players) > self.ATTRITION_THRESHOLD:
+            return self._algo_attrition(hand, prior_bet, total_dice, round_players, stats)
+        return self._algo_sniper(hand, prior_bet, total_dice, round_players, stats)
+
+    def _algo_attrition(self, hand, prior_bet, total_dice, round_players, stats) -> Bet | None:
+        if prior_bet is None:
+            bid = self._pressure_bid(hand, None, total_dice, round_players, stats)
+            return bid if bid is not None else self._solid_opening(hand, total_dice, self.BASE_OPENING_FACTOR)
+
+        follower_thr = self._follower_threshold(round_players, stats)
+        if self._prob_bet_holds(hand, prior_bet.face, prior_bet.quantity, total_dice) < follower_thr:
+            return None
+
+        bid = self._pressure_bid(hand, prior_bet, total_dice, round_players, stats)
+        return bid if bid is not None else Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    def _algo_sniper(self, hand, prior_bet, total_dice, round_players, stats) -> Bet | None:
+        if prior_bet is None:
+            factor = self._sniper_opening_factor(round_players, stats)
+            return self._solid_opening(hand, total_dice, factor)
+
+        if self._prob_bet_holds(hand, prior_bet.face, prior_bet.quantity, total_dice) < self._sniper_threshold(prior_bet, stats):
+            return None
+
+        return self._sniper_raise(hand, prior_bet, total_dice, stats)
+
+    def _solid_opening(self, hand: list[int], total_dice: int, factor: float) -> Bet:
+        best_face = max(range(2, 7), key=lambda f: hand.count(f) + hand.count(1))
+        own = hand.count(best_face) + hand.count(1)
+        unseen = total_dice - len(hand)
+        qty = max(1, round(own + unseen * (2 / 6) * factor))
+        return Bet(qty, best_face, self.name)
