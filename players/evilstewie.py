@@ -71,20 +71,31 @@ class EvilStewie:
         # Per-player running stats for challenge threshold (mean p_holds_public at challenge time)
         self._ct_sum: dict[str, float] = defaultdict(float)
         self._ct_count: dict[str, int] = defaultdict(int)
+        # Per-player opening-bid bluff propensity (fraction of opens where they bluffed)
+        self._bluff_outcomes_seen: int = 0
+        self._bluff_sum: dict[str, float] = defaultdict(float)
+        self._bluff_count: dict[str, int] = defaultdict(int)
+        # Incremental index for bluff tracking — rebuilt entry-by-entry as history grows
+        self._bluff_history_seen: int = 0
+        self._bluff_round_keys: list[tuple[int, int]] = []  # ordered (game, round) pairs
+        self._bluff_opens: dict[
+            tuple[int, int], dict[str, dict]
+        ] = {}  # (game,round)->player->entry
+        self._no_wilds_rounds: set[tuple[int, int]] = (
+            set()
+        )  # rounds where any face=1 bet was placed
 
     def _wilds_active(self, ctx: GameContext) -> bool:
-        """Wilds are off for the whole round once any bet on 1s has been placed."""
+        """Wilds are off for the whole round once any bet on 1s has been placed.
+
+        Uses the _no_wilds_rounds cache populated incrementally by _update_bluff_obs,
+        which must be called before this method each turn.
+        """
         history = ctx.bet_history
         if not history or ctx.prior_bet is None:
             return True
-        current_round = history[-1]["round"]
-        current_game = history[-1]["game"]
-        for entry in reversed(history):
-            if entry["game"] != current_game or entry["round"] != current_round:
-                break
-            if entry["bet"].face == 1:
-                return False
-        return True
+        key = (history[-1]["game"], history[-1]["round"])
+        return key not in self._no_wilds_rounds
 
     def _round_opening_bids(self, ctx: GameContext) -> dict[str, tuple[int, float, int]]:
         """Returns {player: (bid_face, effective_qty, dice_count)} for each other player's first bid this round.
@@ -142,7 +153,14 @@ class EvilStewie:
         return result
 
     def _infer_held(
-        self, bid_face: int, bid_qty: float, d: int, total_dice: int, face: int, wilds: bool
+        self,
+        bid_face: int,
+        bid_qty: float,
+        d: int,
+        total_dice: int,
+        face: int,
+        wilds: bool,
+        bluff_rate: float = 0.0,
     ) -> tuple[int, int]:
         """Infer how many dice matching `face` a player holds given their opening bid.
 
@@ -150,6 +168,9 @@ class EvilStewie:
             bid_qty ≈ own_matches + (total_dice - d) * p
 
         Inverting: own_matches ≈ bid_qty - (total_dice - d) * p
+
+        `bluff_rate` discounts the inferred count: a known bluffer's signal is trusted
+        proportionally less, shifting dice from `certain` back into `uncertain`.
 
         Returns (certain, uncertain):
           certain  — inferred matching dice from this player (treated as guaranteed)
@@ -161,7 +182,8 @@ class EvilStewie:
         p = 1 / 6 if (face == 1 or not wilds) else 2 / 6
         expected_from_others = (total_dice - d) * p
         inferred = round(max(0.0, min(float(d), bid_qty - expected_from_others)))
-        return inferred, d - inferred
+        certain = round(inferred * (1.0 - bluff_rate))
+        return certain, d - certain
 
     def _p_holds(
         self,
@@ -188,8 +210,10 @@ class EvilStewie:
         if opening_bids:
             accounted = sum(d for _, _, d in opening_bids.values())
             uncertain += total_dice - len(hand) - accounted  # dice from players with no opening bid
-            for bid_face, bid_qty, d in opening_bids.values():
-                c, u = self._infer_held(bid_face, bid_qty, d, total_dice, face, wilds)
+            for player, (bid_face, bid_qty, d) in opening_bids.items():
+                c, u = self._infer_held(
+                    bid_face, bid_qty, d, total_dice, face, wilds, self._bluff_rate(player)
+                )
                 certain += c
                 uncertain += u
         else:
@@ -277,6 +301,73 @@ class EvilStewie:
             self._ct_count[challenger] += 1
         self._outcomes_seen = len(outcomes)
 
+    def _bluff_rate(self, player: str) -> float:
+        """Estimated fraction of opening bids where this player bluffed.
+
+        Returns 0 until at least 3 observations to avoid overreacting to noise.
+        """
+        n = self._bluff_count.get(player, 0)
+        if n < 3:
+            return 0.0
+        return self._bluff_sum[player] / n
+
+    def _update_bluff_obs(self, ctx: GameContext) -> None:
+        """Update per-player opening-bid bluff propensity from newly completed rounds.
+
+        Maintains an incremental index (_bluff_opens, _bluff_round_keys) so each
+        history entry and each outcome is processed exactly once — O(new entries)
+        per call rather than O(outcomes × history).
+
+        Wilds are always active at round open, so p = 2/6 for face > 1, 1/6 for face == 1.
+        """
+        outcomes = ctx.outcomes
+        history = ctx.bet_history
+
+        # Step 1: extend the index with any new history entries
+        for entry in history[self._bluff_history_seen :]:
+            key = (entry["game"], entry["round"])
+            if key not in self._bluff_opens:
+                self._bluff_opens[key] = {}
+                self._bluff_round_keys.append(key)
+            opens = self._bluff_opens[key]
+            p = entry["player"]
+            if p not in opens:
+                opens[p] = entry
+            if entry["bet"].face == 1:
+                self._no_wilds_rounds.add(key)
+        self._bluff_history_seen = len(history)
+
+        # Step 2: score any newly completed rounds against revealed hands
+        limit = min(len(outcomes), len(self._bluff_round_keys))
+        for i in range(self._bluff_outcomes_seen, limit):
+            outcome = outcomes[i]
+            key = self._bluff_round_keys[i]
+            hands = outcome["hands"]
+            total_dice = sum(len(h) for h in hands.values())
+            wilds_on = key not in self._no_wilds_rounds
+
+            for p, entry in self._bluff_opens[key].items():
+                if p not in hands:
+                    continue
+                face = entry["bet"].face
+                qty = entry["bet"].quantity
+                d = entry["dice_count"]
+
+                # Inferred matches under rational no-bluffing assumption
+                p_val = 1 / 6 if (face == 1 or not wilds_on) else 2 / 6
+                expected_from_others = (total_dice - d) * p_val
+                inferred = round(max(0.0, min(float(d), qty - expected_from_others)))
+
+                # Actual matches in revealed hand (wilds count only if active this round)
+                actual = hands[p].count(face)
+                if face != 1 and wilds_on:
+                    actual += hands[p].count(1)
+
+                self._bluff_sum[p] += 1.0 if actual < inferred else 0.0
+                self._bluff_count[p] += 1
+
+        self._bluff_outcomes_seen = limit
+
     def _p_call_conditional(
         self, player: str | None, p_holds_pub: float, base_rate: float
     ) -> float:
@@ -308,6 +399,7 @@ class EvilStewie:
         prior bet, and returns whichever action has the higher expected value.
         """
         self._update_call_obs(ctx)
+        self._update_bluff_obs(ctx)
 
         hand = ctx.hand
         prior = ctx.prior_bet
