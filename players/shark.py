@@ -38,5 +38,11 @@ class Shark:
             for k in range(need, unseen + 1)
         )
 
+    def _estimate_threshold(self, player: str, stats) -> float:
+        cr = stats.challenge_rate.get(player) if stats is not None else None
+        if cr is None:
+            return self.BASE_THRESHOLD
+        return max(0.15, min(0.45, self.CR_INTERCEPT + cr * self.CR_SLOPE))
+
     def algo(self, ctx: GameContext) -> Bet | None:
         raise NotImplementedError
