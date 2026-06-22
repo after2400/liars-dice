@@ -44,5 +44,27 @@ class Shark:
             return self.BASE_THRESHOLD
         return max(0.15, min(0.45, self.CR_INTERCEPT + cr * self.CR_SLOPE))
 
+    def _follower_threshold(self, round_players: list[str], stats) -> float:
+        try:
+            idx = round_players.index(self.name)
+        except ValueError:
+            return self.BASE_THRESHOLD
+        follower = round_players[(idx + 1) % len(round_players)]
+        return self._estimate_threshold(follower, stats)
+
+    def _aggressive_threshold(self, round_players: list[str], stats) -> float:
+        try:
+            idx = round_players.index(self.name)
+        except ValueError:
+            return self.BASE_THRESHOLD
+        follower_idx = (idx + 1) % len(round_players)
+        others = [
+            p for i, p in enumerate(round_players)
+            if i != idx and i != follower_idx
+        ]
+        if not others:
+            return self.BASE_THRESHOLD
+        return max(self._estimate_threshold(p, stats) for p in others)
+
     def algo(self, ctx: GameContext) -> Bet | None:
         raise NotImplementedError
