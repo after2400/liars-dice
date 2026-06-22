@@ -2,6 +2,10 @@
 .claude/worktrees/
 .worktrees/
 
+# Player strategy docs — secret sauce, never committed
+docs/specs/
+docs/plans/
+
 # Local player test sandbox — write tests here freely; never committed
 player_tests/*.py
 
