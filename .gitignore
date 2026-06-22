@@ -223,7 +223,3 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-
-run_debug_game*
-tune_*
-*.csv
