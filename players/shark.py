@@ -101,5 +101,45 @@ class Shark:
 
         return None
 
+    def _sniper_threshold(self, prior_bet: Bet | None, stats) -> float:
+        if prior_bet is None or stats is None:
+            return self.BASE_SNIPER_THRESHOLD
+        bluff_rate = stats.bluff_rate.get(prior_bet.player, 0.5)
+        adj = (bluff_rate - 0.5) * self.BLUFF_SENSITIVITY
+        return max(0.15, min(0.45, self.BASE_SNIPER_THRESHOLD + adj))
+
+    def _mean_held_penalty(self, face: int, stats) -> float:
+        if stats is None:
+            return 0.0
+        mhq = stats.mean_held_quantity_by_face
+        values = [mhq[p].get(face, 0.0) for p in mhq if p != self.name and face in mhq[p]]
+        if not values:
+            return 0.0
+        return (sum(values) / len(values)) * self.MEAN_HELD_WEIGHT
+
+    def _sniper_raise(self, hand: list[int], prior_bet: Bet, total_dice: int, stats) -> Bet:
+        candidates = []
+        # Same face, quantity+1
+        own = hand.count(prior_bet.face) + (hand.count(1) if prior_bet.face != 1 else 0)
+        penalty = self._mean_held_penalty(prior_bet.face, stats)
+        candidates.append((prior_bet.quantity + 1, prior_bet.face, own - penalty))
+        # Higher faces, same quantity
+        for face in range(prior_bet.face + 1, 7):
+            own = hand.count(face) + hand.count(1)
+            penalty = self._mean_held_penalty(face, stats)
+            candidates.append((prior_bet.quantity, face, own - penalty))
+        best = max(candidates, key=lambda c: c[2])
+        return Bet(best[0], best[1], self.name)
+
+    def _sniper_opening_factor(self, round_players: list[str], stats) -> float:
+        if stats is None or not stats.challenge_rate:
+            return self.BASE_OPENING_FACTOR
+        others = [p for p in round_players if p != self.name]
+        if not others:
+            return self.BASE_OPENING_FACTOR
+        avg_cr = sum(stats.challenge_rate.get(p, 0.20) for p in others) / len(others)
+        adj = (self.OPENING_CR_PIVOT - avg_cr) * self.OPENING_CR_SENSITIVITY
+        return max(self.OPENING_FACTOR_MIN, min(self.OPENING_FACTOR_MAX, self.BASE_OPENING_FACTOR + adj))
+
     def algo(self, ctx: GameContext) -> Bet | None:
         raise NotImplementedError
