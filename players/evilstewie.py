@@ -58,6 +58,14 @@ class EvilStewie:
     # Higher values = sharper transition from likely-to-call to unlikely-to-call.
     CHALLENGE_SLOPE = 3.0
 
+    # Late-game aggression: when avg dice/player falls below this threshold, opening bids
+    # receive a quantity-scaled EV bonus to encourage higher opens. This counters the
+    # "squeeze" problem where a conservative open wraps the full table back to EvilStewie
+    # with an unsupportable bid. Tuning: LATE_GAME_AVG_DICE sets when it kicks in;
+    # LATE_GAME_AGGRESSION sets the bonus per unit of quantity at maximum intensity.
+    LATE_GAME_AVG_DICE = 3.0
+    LATE_GAME_AGGRESSION = 0.25
+
     def __init__(self) -> None:
         self._outcomes_seen: int = 0
         # Per-player running stats for challenge threshold (mean p_holds_public at challenge time)
@@ -309,6 +317,13 @@ class EvilStewie:
         wilds = self._wilds_active(ctx)
         opening_bids = self._round_opening_bids(ctx)
         if prior is None:
+            # Late-game aggression: bonus scales with quantity when avg dice/player is low.
+            # Prevents EvilStewie from opening too conservatively and getting squeezed when
+            # the bet escalates all the way around the table before returning to him.
+            n_players = len(ctx.round_players)
+            avg_dice = total / n_players if n_players else total
+            late_factor = max(0.0, 1.0 - avg_dice / self.LATE_GAME_AVG_DICE)
+
             candidates = [(q, f) for q in range(1, total + 1) for f in range(1, 7)]
             scored = sorted(
                 (
@@ -321,7 +336,7 @@ class EvilStewie:
                                 next_p, self._p_holds_public(f, q, total, wilds), p_call
                             )
                         ),
-                        self._ev_bid(ph, pca),
+                        self._ev_bid(ph, pca) + late_factor * self.LATE_GAME_AGGRESSION * q,
                     )
                     for q, f in candidates
                 ),
