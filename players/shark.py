@@ -66,5 +66,40 @@ class Shark:
             return self.BASE_THRESHOLD
         return max(self._estimate_threshold(p, stats) for p in others)
 
+    def _pressure_bid(
+        self,
+        hand: list[int],
+        prior_bet: Bet | None,
+        total_dice: int,
+        round_players: list[str],
+        stats,
+    ) -> Bet | None:
+        follower_thr = self._follower_threshold(round_players, stats)
+        aggressive_thr = self._aggressive_threshold(round_players, stats)
+
+        # Faces 2-6 sorted by own support (best first); skip 1s in attrition mode
+        faces = sorted(
+            range(2, 7),
+            key=lambda f: hand.count(f) + hand.count(1),
+            reverse=True,
+        )
+
+        for face in faces:
+            if prior_bet is not None:
+                if face < prior_bet.face:
+                    continue
+                min_qty = prior_bet.quantity + 1 if face == prior_bet.face else prior_bet.quantity
+            else:
+                min_qty = 1
+
+            # Search from ceiling down to min_qty
+            for q in range(total_dice, min_qty - 1, -1):
+                p_self = self._prob_bet_holds(hand, face, q, total_dice)
+                p_after = self._prob_bet_holds(hand, face, q + 1, total_dice)
+                if p_self > follower_thr and p_after < aggressive_thr:
+                    return Bet(q, face, self.name)
+
+        return None
+
     def algo(self, ctx: GameContext) -> Bet | None:
         raise NotImplementedError
