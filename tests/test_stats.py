@@ -207,3 +207,89 @@ def test_raw_bluff_rate_by_face_no_entry_when_no_data_for_face():
     stats.update_outcome(_outcome("Alice", "Bruno", 3, 5, bet_held=False))
     # face 2 has no data — should have no entry (caller uses .get with 0.5 default)
     assert stats.raw_bluff_rate_by_face.get("Alice", {}).get(2) is None
+
+
+# --- dice_counts ---
+
+
+def test_dice_counts_empty_before_start_game():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    assert stats.dice_counts == {}
+
+
+def test_start_game_initializes_all_players_to_five():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    stats.start_game(["Alice", "Bruno", "Carol"])
+    assert stats.dice_counts == {"Alice": 5, "Bruno": 5, "Carol": 5}
+
+
+def test_update_outcome_decrements_loser():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    stats.start_game(["Alice", "Bruno"])
+    hands = {"Alice": (1, 2, 3, 4, 5), "Bruno": (2, 3, 4, 5, 6)}
+    stats.update_outcome(_outcome("Alice", "Bruno", 3, 3, bet_held=True, hands=hands))
+    # bet held → Bruno (challenger) loses a die
+    assert stats.dice_counts["Alice"] == 5
+    assert stats.dice_counts["Bruno"] == 4
+
+
+def test_update_outcome_decrements_bidder_on_failed_bluff():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    stats.start_game(["Alice", "Bruno"])
+    hands = {"Alice": (1, 2, 3, 4, 5), "Bruno": (2, 3, 4, 5, 6)}
+    stats.update_outcome(_outcome("Alice", "Bruno", 3, 3, bet_held=False, hands=hands))
+    # bet failed → Alice (bidder) loses a die
+    assert stats.dice_counts["Alice"] == 4
+    assert stats.dice_counts["Bruno"] == 5
+
+
+def test_update_outcome_tracks_shrinking_hands():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    stats.start_game(["Alice", "Bruno"])
+    # Round 1: both have 5 dice, Bruno loses
+    stats.update_outcome(_outcome(
+        "Alice", "Bruno", 3, 3, bet_held=True,
+        hands={"Alice": (1, 2, 3, 4, 5), "Bruno": (2, 3, 4, 5, 6)},
+    ))
+    # Round 2: Bruno has 4 dice now
+    stats.update_outcome(_outcome(
+        "Bruno", "Alice", 2, 2, bet_held=False,
+        hands={"Alice": (1, 2, 3, 4, 5), "Bruno": (2, 3, 4, 5)},
+    ))
+    # Bruno bluffed and loses again → 3 dice
+    assert stats.dice_counts["Alice"] == 5
+    assert stats.dice_counts["Bruno"] == 3
+
+
+def test_start_game_resets_dice_counts_between_games():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    stats.start_game(["Alice", "Bruno"])
+    hands = {"Alice": (1, 2, 3, 4, 5), "Bruno": (2, 3, 4, 5, 6)}
+    stats.update_outcome(_outcome("Alice", "Bruno", 3, 3, bet_held=True, hands=hands))
+    assert stats.dice_counts["Bruno"] == 4
+
+    # New game — counts reset
+    stats.start_game(["Alice", "Bruno"])
+    assert stats.dice_counts == {"Alice": 5, "Bruno": 5}
+
+
+def test_dice_counts_returns_copy():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    stats.start_game(["Alice"])
+    copy = stats.dice_counts
+    copy["Alice"] = 999
+    assert stats.dice_counts["Alice"] == 5

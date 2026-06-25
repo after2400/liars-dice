@@ -59,6 +59,8 @@ def game_orchestrator(
     logger.info("=== New Game ===")
     rng.shuffle(players)
     logger.info(f"Players: {', '.join(p.name for p in players)}")
+    if stats is not None:
+        stats.start_game([p.name for p in players])
 
     n = len(players)
     dice_counts = [5] * n

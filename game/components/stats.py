@@ -27,6 +27,9 @@ class GameStats:
         self._revealed_hand_frequency: dict[str, dict[int, float]] = {}
         self._rounds_with_hand: dict[str, int] = {}
 
+        # Backing store: current dice count per active player (reset each game)
+        self._dice_counts: dict[str, int] = {}
+
         # Backing store: current-round context (reset each round)
         self._current_round_velocity: float = 1.0
 
@@ -106,7 +109,15 @@ class GameStats:
     def current_round_velocity(self) -> float:
         return self._current_round_velocity
 
+    @property
+    def dice_counts(self) -> dict[str, int]:
+        return dict(self._dice_counts)
+
     # ── Mutation methods (engine-internal only) ───────────────────────────────
+
+    def start_game(self, player_names: list[str]) -> None:
+        """Call at the start of each game. Resets dice_counts to 5 for all players."""
+        self._dice_counts = {name: 5 for name in player_names}
 
     def update_bet(self, bet_entry: dict, is_opening_bid: bool, total_dice: int) -> None:
         """Call after each accepted bid. Updates face_bias, bid_increment, opening_aggression,
@@ -232,6 +243,13 @@ class GameStats:
                 self._revealed_hand_frequency[player_name][f] = (
                     self._revealed_face_sum[player_name][f] / self._revealed_dice_count[player_name]
                 )
+
+        # dice_counts: sync from round-start hand sizes, then apply the loser's loss
+        loser = outcome["loser"]
+        for player_name, hand in hands.items():
+            self._dice_counts[player_name] = len(hand)
+        if loser in self._dice_counts:
+            self._dice_counts[loser] -= 1
 
     def reset_round(self, new_round_num: int) -> None:
         """Call after update_outcome at the end of each round. Clears current-round bet tracking
