@@ -8,7 +8,8 @@ export default {
       [
         "config", // commitlint, ruff, pre-commit config
         "workflows", // .github/workflows/
-        "game", // core game engine (game/)
+        "engine", // game engine runtime components (game/components/)
+        "game", // broader game package changes (game/)
         // "players" scope removed — use `player:` type for all player additions/updates
         "leaderboard", // leaderboard schema and data
         "scripts", // .github/scripts/
