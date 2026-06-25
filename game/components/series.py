@@ -19,7 +19,7 @@ def run_series(players: list, n_games: int, tier: str | None = None) -> dict[str
     """
     from game.components.script import game_orchestrator
 
-    wins = {type(p).__name__: 0 for p in players}
+    wins = {p.name: 0 for p in players}
     bet_history: list[dict] = []
     outcomes: list[dict] = []
     stats = GameStats()
@@ -39,8 +39,8 @@ def run_series(players: list, n_games: int, tier: str | None = None) -> dict[str
             stats=stats,
             tier=tier,
         )
-        wins[type(winner).__name__] += 1
-        logger.info(f"Game {game_num}/{n_games}: {type(winner).__name__} wins")
+        wins[winner.name] += 1
+        logger.info(f"Game {game_num}/{n_games}: {winner.name} wins")
 
     return wins
 

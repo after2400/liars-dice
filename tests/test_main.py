@@ -204,8 +204,8 @@ def test_no_leaderboard_update_written(tmp_path):
     assert lb_path.read_text() == original_content
 
 
-def test_class_name_used_as_leaderboard_key(tmp_path):
-    """Game results dict uses class name (type(p).__name__), not p.name attribute."""
+def test_display_name_used_in_series_results(tmp_path):
+    """Series results dict keys are player display names (p.name), not class names."""
     from game.components.utils import import_player_classes_from_dir
 
     now = "2026-01-01T00:00:00Z"
@@ -216,9 +216,9 @@ def test_class_name_used_as_leaderboard_key(tmp_path):
         type(p).__name__ for p in import_player_classes_from_dir(str(REPO_ROOT / "players"))
     }
 
-    def _entry(tier, stats=None):
+    def _entry(tier, display_name="", stats=None):
         return {
-            "display_name": "",
+            "display_name": display_name,
             "github_username": "",
             "tier": tier,
             "date_added": now,
@@ -230,9 +230,9 @@ def test_class_name_used_as_leaderboard_key(tmp_path):
     lb = {
         "total_runs": 1,
         "players": {
-            name: _entry("PRM", {"PRM": {"wins": 40, "games": 100, "win_pct": 40.0}})
+            name: _entry("PRM", "Alice", {"PRM": {"wins": 40, "games": 100, "win_pct": 40.0}})
             if name == "Alice"
-            else _entry("PRM", {"PRM": {"wins": 30, "games": 100, "win_pct": 30.0}})
+            else _entry("PRM", "Bruno", {"PRM": {"wins": 30, "games": 100, "win_pct": 30.0}})
             if name == "Bruno"
             else _entry("inactive")
             for name in all_names
