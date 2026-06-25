@@ -97,8 +97,8 @@ def test_register_exits_0_if_already_registered(tmp_path):
     assert lb_result["players"]["Alice"]["github_username"] == "someone"
 
 
-def test_register_enters_ch_when_l1_full(tmp_path):
-    """When L1 is at capacity, new player goes to CH (next lowest with room)."""
+def test_register_enters_l1_when_l1_overcrowded(tmp_path):
+    """When L1 exists but is over capacity, new player still enters L1."""
 
     def _p(tier):
         return {
@@ -111,8 +111,8 @@ def test_register_enters_ch_when_l1_full(tmp_path):
             "tier_stats": {},
         }
 
-    # 25 players: 4 PRM + 4 CH + 17 L1 → tier_capacities(26) = {PRM:5, CH:5, L1:16}
-    # L1_count=17 >= 16, CH_count=4 < 5 → CH
+    # 25 players with L1 overcrowded: tier_capacities(26)={PRM:8,CH:8,L1:10,DED:0}
+    # L1 cap=10 > 0 → enter L1 regardless of count (17).
     players = {f"P{i}": _p("PRM") for i in range(4)}
     players.update({f"C{i}": _p("CH") for i in range(4)})
     players.update({f"L{i}": _p("L1") for i in range(17)})  # 25 players total
@@ -121,11 +121,11 @@ def test_register_enters_ch_when_l1_full(tmp_path):
     rc, out = run_register(player_file, lb, tmp_path)
     assert rc == 0, out
     lb_result = yaml.safe_load((tmp_path / "leaderboard.yaml").read_text())
-    assert lb_result["players"]["Alice"]["tier"] == "CH"
+    assert lb_result["players"]["Alice"]["tier"] == "L1"
 
 
-def test_register_enters_prm_when_ch_full_and_l1_not_open(tmp_path):
-    """With ≤8 total players and CH full, new player goes to PRM."""
+def test_register_enters_ch_when_l1_not_open(tmp_path):
+    """With ≤8 total players L1 has no capacity yet; new player enters CH (lowest existing tier)."""
 
     def _p(tier):
         return {
@@ -138,14 +138,14 @@ def test_register_enters_prm_when_ch_full_and_l1_not_open(tmp_path):
             "tier_stats": {},
         }
 
-    # 4 CH players, L1 not open (n_after=5 → L1 cap=0), CH at cap=4 → PRM
+    # 4 CH players, n_after=5 → tier_capacities(5)={PRM:4,CH:4,L1:0} → CH (lowest existing)
     players = {f"C{i}": _p("CH") for i in range(4)}
     lb = {"total_runs": 0, "players": players}
     player_file = REPO_ROOT / "players" / "alice.py"
     rc, out = run_register(player_file, lb, tmp_path)
     assert rc == 0, out
     lb_result = yaml.safe_load((tmp_path / "leaderboard.yaml").read_text())
-    assert lb_result["players"]["Alice"]["tier"] == "PRM"
+    assert lb_result["players"]["Alice"]["tier"] == "CH"
 
 
 def test_register_enters_ch_when_l1_empty(tmp_path):

@@ -68,16 +68,19 @@ def tier_capacities(n_players: int) -> dict[str, int]:
 
 
 def detect_entry_tier(lb: dict) -> str:
-    """Return the lowest-prestige tier with capacity for the next registered player."""
+    """Return the entry tier for a new player: always the lowest tier that exists.
+
+    Current occupancy is intentionally ignored — a temporarily over-capacity L1
+    is fine; the next season run promotes/relegates to restore balance. New players
+    should never skip directly to CH or PRM because a higher tier has a free slot.
+    """
     players = lb.get("players", {})
     n_after = len(players) + 1
     caps = tier_capacities(n_after)
-    counts: dict[str, int] = {}
-    for p in players.values():
-        t = p.get("tier", "")
-        counts[t] = counts.get(t, 0) + 1
-    for tier in ("L1", "CH", "PRM", "DED"):
-        if caps.get(tier, 0) > 0 and counts.get(tier, 0) < caps[tier]:
+    if caps.get("L1", 0) > 0:
+        return "L1"
+    for tier in ("CH", "PRM"):
+        if caps.get(tier, 0) > 0:
             return tier
     return "DED"
 
