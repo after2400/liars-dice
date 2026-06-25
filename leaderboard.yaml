@@ -338,11 +338,7 @@ players:
     display_name: Meg Griffin
     github_username: after2400
     date_added: '2026-06-25T03:17:47Z'
-    tier: CH
-    tier_since: '2026-06-25T03:20:24Z'
+    tier: L1
+    tier_since: '2026-06-25T03:17:47Z'
     times_inactive: 0
-    tier_stats:
-      PRM:
-        wins: 20
-        games: 1000
-        win_pct: 2.0
+    tier_stats: {}
