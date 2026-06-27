@@ -7,6 +7,15 @@ from game.components.context import GameContext
 
 logger = logging.getLogger(__name__)
 
+# Decisions log: writes independently of the game logging setup.
+# Each run overwrites decisions.log so it reflects only the latest game(s).
+_dlog = logging.getLogger("evilstewie.decisions")
+_dlog.propagate = False
+_dlog.setLevel(logging.DEBUG)
+_d_handler = logging.FileHandler("decisions.log", mode="w", delay=True)
+_d_handler.setFormatter(logging.Formatter("%(message)s"))
+_dlog.addHandler(_d_handler)
+
 
 class EvilStewie:
     """Insufferable EV-maximizing Liar's Dice bot who has read too many poker textbooks.
@@ -429,6 +438,15 @@ class EvilStewie:
         """
         return p_holds * self.EV_LOSE_CALL + (1.0 - p_holds) * self.EV_WIN_CALL
 
+    def _log_context(self, ctx: GameContext) -> tuple[int, int]:
+        """Return (game_id, current_round) derived from ctx, for use in decision log labels."""
+        if ctx.bet_history:
+            game_id = ctx.bet_history[-1]["game"]
+        else:
+            game_id = 1
+        current_round = sum(1 for o in ctx.outcomes if o["game"] == game_id) + 1
+        return game_id, current_round
+
     def algo(self, ctx: GameContext) -> Bet | None:
         """Choose the highest-EV action: place a bid or call liar (return None).
 
@@ -446,6 +464,30 @@ class EvilStewie:
         next_p = self._next_player(ctx)
         wilds = self._wilds_active(ctx)
         opening_bids = self._round_opening_bids(ctx)
+
+        game_id, current_round = self._log_context(ctx)
+        prior_label = f"{prior.quantity}x{prior.face} by {prior.player}" if prior else "None"
+        _dlog.debug(
+            f"=== G{game_id} R{current_round} | hand={sorted(hand)} total={total}"
+            f" wilds={wilds} prior={prior_label} ==="
+        )
+
+        # Log opponent opening bid signals
+        if opening_bids:
+            parts = []
+            for p, (bid_face, eff_qty, d) in opening_bids.items():
+                br = self._conditional_bluff_rate(p, d)
+                parts.append(f"{p}→(face={bid_face} eff_qty={eff_qty:.1f} d={d} bluff={br:.2f})")
+            _dlog.debug(f"  signals: {' | '.join(parts)}")
+
+        # Log next-player challenge estimate
+        challenge_rate = (
+            ctx.stats.challenge_rate.get(next_p, 0.3)
+            if next_p and ctx.stats and ctx.stats.challenge_rate
+            else 0.3
+        )
+        _dlog.debug(f"  next={next_p} challenge_rate={challenge_rate:.2f} p_call={p_call:.2f}")
+
         if prior is None:
             # Late-game aggression: bonus scales with quantity when avg dice/player is low.
             # Prevents EvilStewie from opening too conservatively and getting squeezed when
@@ -453,32 +495,36 @@ class EvilStewie:
             n_players = len(ctx.round_players)
             avg_dice = total / n_players if n_players else total
             late_factor = max(0.0, 1.0 - avg_dice / self.LATE_GAME_AVG_DICE)
+            _dlog.debug(f"  OPENING | avg_dice={avg_dice:.1f} late_factor={late_factor:.2f}")
 
             candidates = [(q, f) for q in range(1, total + 1) for f in range(1, 7)]
-            scored = sorted(
-                (
-                    (
-                        q,
-                        f,
-                        ph := self._p_holds(hand, f, q, total, wilds, opening_bids),
-                        (
-                            pca := self._p_call_conditional(
-                                next_p, self._p_holds_public(f, q, total, wilds), p_call
-                            )
-                        ),
-                        self._ev_bid(ph, pca) + late_factor * self.LATE_GAME_AGGRESSION * q,
-                    )
-                    for q, f in candidates
-                ),
-                key=lambda x: (x[4], x[0], x[1]),
-                reverse=True,
-            )
-            best_q, best_f, _, _, _ = scored[0]
+            scored = []
+            for q, f in candidates:
+                ph = self._p_holds(hand, f, q, total, wilds, opening_bids)
+                pca = self._p_call_conditional(
+                    next_p, self._p_holds_public(f, q, total, wilds), p_call
+                )
+                bonus = late_factor * self.LATE_GAME_AGGRESSION * q
+                ev = self._ev_bid(ph, pca) + bonus
+                scored.append((q, f, ph, pca, ev))
+            scored.sort(key=lambda x: (x[4], x[0], x[1]), reverse=True)
+
+            _dlog.debug("  top bids (qty,face | p_holds p_call ev):")
+            for q, f, ph, pca, ev in scored[:5]:
+                bonus = late_factor * self.LATE_GAME_AGGRESSION * q
+                _dlog.debug(
+                    f"    {q},{f} | ph={ph:.3f} pc={pca:.3f}"
+                    f" ev={ev - bonus:.3f}+{bonus:.3f}={ev:.3f}"
+                )
+
+            best_q, best_f, _, _, best_ev = scored[0]
+            _dlog.debug(f"  → BET({best_q},{best_f}) ev={best_ev:.3f}")
             return Bet(best_q, best_f, self.name)
 
         # Evaluate calling liar vs every valid raise
         p_prior_holds = self._p_holds(hand, prior.face, prior.quantity, total, wilds, opening_bids)
         ev_liar = self._ev_call_liar(p_prior_holds)
+        _dlog.debug(f"  prior p_holds={p_prior_holds:.3f} ev_liar={ev_liar:.3f}")
 
         # Bidding on 1s is only legal if the round was opened on 1s (wilds already off).
         # If wilds are still active, the opening wasn't on 1s, so face=1 is forbidden.
@@ -490,27 +536,22 @@ class EvilStewie:
             if q > prior.quantity or (q == prior.quantity and f > prior.face)
         ]
 
-        scored = sorted(
-            (
-                (
-                    q,
-                    f,
-                    ph := self._p_holds(hand, f, q, total, wilds, opening_bids),
-                    (
-                        pca := self._p_call_conditional(
-                            next_p, self._p_holds_public(f, q, total, wilds), p_call
-                        )
-                    ),
-                    self._ev_bid(ph, pca),
-                )
-                for q, f in candidates
-            ),
-            key=lambda x: (x[4], x[0], x[1]),
-            reverse=True,
-        )
+        scored = []
+        for q, f in candidates:
+            ph = self._p_holds(hand, f, q, total, wilds, opening_bids)
+            pca = self._p_call_conditional(next_p, self._p_holds_public(f, q, total, wilds), p_call)
+            scored.append((q, f, ph, pca, self._ev_bid(ph, pca)))
+        scored.sort(key=lambda x: (x[4], x[0], x[1]), reverse=True)
+
+        _dlog.debug("  top bids (qty,face | p_holds p_call ev):")
+        for q, f, ph, pca, ev in scored[:5]:
+            _dlog.debug(f"    {q},{f} | ph={ph:.3f} pc={pca:.3f} ev={ev:.3f}")
 
         if not candidates or ev_liar > scored[0][4]:
+            best_bid_ev = scored[0][4] if scored else float("-inf")
+            _dlog.debug(f"  → CALL LIAR [ev_liar={ev_liar:.3f} > best_bid={best_bid_ev:.3f}]")
             return None
 
         best_q, best_f, _, _, best_ev = scored[0]
+        _dlog.debug(f"  → BET({best_q},{best_f}) ev={best_ev:.3f} [liar_ev={ev_liar:.3f}]")
         return Bet(best_q, best_f, self.name)
