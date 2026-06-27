@@ -66,6 +66,10 @@ class EvilStewie:
     LATE_GAME_AVG_DICE = 3.0
     LATE_GAME_AGGRESSION = 0.25
 
+    # Desperation threshold: openers at or below this many dice are in "panic" mode
+    # and tracked in a separate bluff bucket from comfortable openers.
+    DESPERATION_DICE = 2
+
     def __init__(self) -> None:
         self._outcomes_seen: int = 0
         # Per-player running stats for challenge threshold (mean p_holds_public at challenge time)
@@ -84,6 +88,10 @@ class EvilStewie:
         self._no_wilds_rounds: set[tuple[int, int]] = (
             set()
         )  # rounds where any face=1 bet was placed
+        # Desperation-conditioned bluff buckets: [bluffs, holds] per player
+        # Routed by the opener's dice count at opening-bid time.
+        self._desperate: dict[str, list[int]] = {}  # openers with <= DESPERATION_DICE dice
+        self._comfortable: dict[str, list[int]] = {}  # openers with > DESPERATION_DICE dice
 
     def _wilds_active(self, ctx: GameContext) -> bool:
         """Wilds are off for the whole round once any bet on 1s has been placed.
@@ -212,7 +220,13 @@ class EvilStewie:
             uncertain += total_dice - len(hand) - accounted  # dice from players with no opening bid
             for player, (bid_face, bid_qty, d) in opening_bids.items():
                 c, u = self._infer_held(
-                    bid_face, bid_qty, d, total_dice, face, wilds, self._bluff_rate(player)
+                    bid_face,
+                    bid_qty,
+                    d,
+                    total_dice,
+                    face,
+                    wilds,
+                    self._conditional_bluff_rate(player, d),
                 )
                 certain += c
                 uncertain += u
@@ -311,6 +325,25 @@ class EvilStewie:
             return 0.0
         return self._bluff_sum[player] / n
 
+    def _conditional_bluff_rate(self, player: str, opener_dice_count: int) -> float:
+        """Bluff rate conditioned on the opener's desperation state.
+
+        Uses a separate bucket (desperate vs comfortable) based on how many dice
+        the player had when they made their opening bid. Laplace-smoothed to avoid
+        extreme estimates from small samples.
+
+        Falls back to the global _bluff_rate when the relevant bucket has fewer
+        than 3 observations.
+        """
+        bucket = (
+            self._desperate if opener_dice_count <= self.DESPERATION_DICE else self._comfortable
+        )
+        counts = bucket.get(player)
+        if counts is None or counts[0] + counts[1] < 3:
+            return self._bluff_rate(player)
+        bluffs, holds = counts
+        return (bluffs + 1) / (bluffs + holds + 2)
+
     def _update_bluff_obs(self, ctx: GameContext) -> None:
         """Update per-player opening-bid bluff propensity from newly completed rounds.
 
@@ -363,8 +396,13 @@ class EvilStewie:
                 if face != 1 and wilds_on:
                     actual += hands[p].count(1)
 
-                self._bluff_sum[p] += 1.0 if actual < inferred else 0.0
+                is_bluff = actual < inferred
+                self._bluff_sum[p] += 1.0 if is_bluff else 0.0
                 self._bluff_count[p] += 1
+                # Route to desperation bucket based on dice count at opening-bid time
+                bucket = self._desperate if d <= self.DESPERATION_DICE else self._comfortable
+                counts = bucket.setdefault(p, [0, 0])
+                counts[0 if is_bluff else 1] += 1
 
         self._bluff_outcomes_seen = limit
 
@@ -435,7 +473,7 @@ class EvilStewie:
                 key=lambda x: (x[4], x[0], x[1]),
                 reverse=True,
             )
-            best_q, best_f, _, _, best_ev = scored[0]
+            best_q, best_f, _, _, _ = scored[0]
             return Bet(best_q, best_f, self.name)
 
         # Evaluate calling liar vs every valid raise
