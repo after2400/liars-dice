@@ -1,6 +1,7 @@
 from math import comb
 
 from game.components.bets import Bet
+from game.components.context import GameContext
 
 DESPERATE_DICE = 2  # bidder counts as "desperate" at this many dice or fewer
 
@@ -24,7 +25,9 @@ class DeepThought:
 
     name = "Deep Thought"
 
-    # Call liar whenever P(bet holds) drops below this. Same base as Peter Beter.
+    # Call liar whenever P(bet holds) drops below this. Empirically confirmed
+    # optimal at 0.22 against the real PRM field; raising it to 0.28+ costs
+    # 2-6pp (EvilStewie's bids are genuinely well-supported — calling them loses dice).
     BASE_THRESHOLD = 0.22
 
     # How much of the unseen dice's expected count to claim when opening.
@@ -43,10 +46,9 @@ class DeepThought:
     # 0.45 peaked at z=+4.61 vs control.
     FACE_WEIGHT = 0.45
 
-    # Penalty multiplier applied to (1 - p_holds) of a raise, scaled by the
-    # estimated next-player challenge rate. Discourages bidding into aggressive
-    # challengers with weak support. No constant needed — uses challenge_rate
-    # from stats directly.
+    # Penalty applied to (1 - p_holds) of a raise, scaled by the next-player
+    # challenge rate. Discourages bidding into aggressive challengers with weak
+    # support. Validated: z=+3.07, +1.74pp in the real PRM field.
     CALL_PENALTY_WEIGHT = 2.0
 
     def __init__(self) -> None:
@@ -60,7 +62,10 @@ class DeepThought:
         self._desperate: dict[str, list[int]] = {}
         self._comfortable: dict[str, list[int]] = {}
 
-    def _sync(self, bet_history: list[dict], outcomes: list[dict]) -> None:
+    def _sync(self, ctx: GameContext) -> None:
+        bet_history = ctx.bet_history
+        outcomes = ctx.outcomes
+
         n = len(bet_history)
         for i in range(self._bh_idx, n):
             entry = bet_history[i]
@@ -90,7 +95,7 @@ class DeepThought:
         self._oc_idx = m
 
     def _round_opening_bids(
-        self, bet_history: list[dict]
+        self, bet_history
     ) -> dict[str, tuple[int, float, int]]:
         """Return {player: (face, effective_qty, dice_count)} for each other player's first bid this round.
 
@@ -100,7 +105,7 @@ class DeepThought:
         """
         if not bet_history or self._round_key is None:
             return {}
-        entries: list[dict] = []
+        entries = []
         for entry in reversed(bet_history):
             if (entry["game"], entry["round"]) != self._round_key:
                 break
@@ -155,26 +160,19 @@ class DeepThought:
         certain = round(inferred * (1.0 - bluff_rate))
         return certain, d - certain
 
-    def _next_player(self, bet_history: list[dict]) -> str | None:
-        """Infer who follows us in the current round from the bet sequence.
+    def _next_player(self, ctx: GameContext) -> str | None:
+        """Return who acts immediately after Deep Thought this round.
 
-        Scans this round's bets in order, finds the last position where DT bet,
-        and returns whoever bet right after. Returns None when DT hasn't bet yet
-        this round (e.g. we're the first to respond).
+        Uses ctx.round_players (exact v2 ordering) — no inference needed.
         """
-        if not bet_history or self._round_key is None:
+        players = ctx.round_players
+        if not players:
             return None
-        players_this_round: list[str] = []
-        for entry in reversed(bet_history):
-            if (entry["game"], entry["round"]) != self._round_key:
-                break
-            players_this_round.append(entry["player"])
-        players_this_round.reverse()
-
-        for i in range(len(players_this_round) - 1, -1, -1):
-            if players_this_round[i] == self.name and i + 1 < len(players_this_round):
-                return players_this_round[i + 1]
-        return None
+        try:
+            idx = players.index(self.name)
+        except ValueError:
+            return None
+        return players[(idx + 1) % len(players)]
 
     def _conditional_bluff_rate(self, bidder: str, desperate: bool) -> float | None:
         bucket = self._desperate if desperate else self._comfortable
@@ -236,7 +234,7 @@ class DeepThought:
         )
 
     def _face_bias(self, face: int, stats) -> float:
-        if stats is None or not stats.face_bias:
+        if not stats.face_bias:
             return 1 / 6
         biases = [pb.get(face, 1 / 6) for pb in stats.face_bias.values()]
         return sum(biases) / len(biases)
@@ -260,10 +258,7 @@ class DeepThought:
         bidder, dice_count = last
         desperate = dice_count <= DESPERATE_DICE
         desp_rate = self._conditional_bluff_rate(bidder, desperate)
-
-        face_rate = None
-        if stats is not None:
-            face_rate = stats.bluff_rate_by_face.get(bidder, {}).get(prior_bet.face)
+        face_rate = stats.bluff_rate_by_face.get(bidder, {}).get(prior_bet.face)
 
         if desp_rate is None and face_rate is None:
             return self.BASE_THRESHOLD
@@ -315,16 +310,13 @@ class DeepThought:
         best = max(scored, key=lambda x: x[0])
         return best[1], best[2]
 
-    def algo(
-        self,
-        hand: list[int],
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-        stats=None,
-    ) -> Bet | None:
-        self._sync(bet_history, outcomes)
+    def algo(self, ctx: GameContext) -> Bet | None:
+        self._sync(ctx)
+
+        hand = ctx.hand
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
+        stats = ctx.stats
 
         if prior_bet is None:
             self._wilds_active = True
@@ -334,15 +326,13 @@ class DeepThought:
             quantity = max(1, round(own + unseen * (2 / 6) * self.OPENING_MULTIPLIER))
             return Bet(quantity, best_face, self.name)
 
-        # Compute opening bid inference and bluff rates once for this turn
-        opening_bids = self._round_opening_bids(bet_history)
-        bluff_rates = stats.bluff_rate if stats is not None else {}
+        # Opening bid inference and bluff rates for this turn
+        opening_bids = self._round_opening_bids(ctx.bet_history)
+        bluff_rates = stats.bluff_rate
 
-        # Estimate next-player challenge rate for raise scoring
-        next_p = self._next_player(bet_history)
-        p_call = 0.3
-        if stats is not None and next_p is not None:
-            p_call = stats.challenge_rate.get(next_p, 0.3)
+        # Exact next-player from v2 round_players — no inference needed
+        next_p = self._next_player(ctx)
+        p_call = stats.challenge_rate.get(next_p, 0.3) if next_p else 0.3
 
         threshold = self._effective_threshold(prior_bet, stats)
         if self._prob_holds(prior_bet.face, prior_bet.quantity, hand, total_dice, opening_bids, bluff_rates) < threshold:
