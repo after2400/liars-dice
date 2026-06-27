@@ -1,4 +1,4 @@
-from math import comb
+from math import comb, exp
 
 from game.components.bets import Bet
 from game.components.context import GameContext
@@ -19,10 +19,10 @@ class DeepThought:
     signals overextension.
 
     Opening bids use inference from each player's first bet to partition unseen
-    dice into "likely matches" and "uncertain" pools (EvilStewie's approach). The
-    opening factor scales with table aggression — passive tables absorb higher
-    opens. Raises score own support, face bias, hold probability, and a penalty
-    for the next player's challenge rate (exact, from ctx.round_players v2).
+    dice into "likely matches" and "uncertain" pools. The opening factor scales
+    with table aggression — passive tables absorb higher opens. Raises score all
+    legal bids by EV (p_pass*EV_SAFE + p_call*p_holds*EV_WIN + p_call*(1-p_holds)*EV_LOSE),
+    including bids beyond DT's own support when inference signals others hold the face.
     """
 
     name = "Deep Thought"
@@ -35,8 +35,16 @@ class DeepThought:
     # How much of the unseen dice's expected count to claim when opening.
     OPENING_MULTIPLIER = 0.70
 
-    # Weight given to our own raise's hold probability in candidate scoring.
-    RAISE_PROB_WEIGHT = 6.0
+    # EV weights for each bid outcome (matches EvilStewie's calibrated values).
+    EV_SAFE = 0.3  # bid passes — opponent follows
+    EV_WIN_CALL = 0.7  # we induce a failed challenge — opponent loses die
+    EV_LOSE_CALL = -1.0  # our bluff is caught — we lose die
+
+    # Challenge-probability calibration. CHALLENGE_SLOPE controls how sharply
+    # p_call responds around each player's observed challenge threshold; MIN_P_CALL
+    # floors p_call so we never assume a player will never call.
+    CHALLENGE_SLOPE = 3.0
+    MIN_P_CALL = 0.1
 
     # How strongly a bidder's desperation-conditioned bluff rate shifts the
     # call threshold for their bids specifically. Swept 0.15-0.4 against the
@@ -47,11 +55,6 @@ class DeepThought:
     # the desperation-conditioned rate. Swept 0.15-0.6 at 750 paired trials;
     # 0.45 peaked at z=+4.61 vs control.
     FACE_WEIGHT = 0.45
-
-    # Penalty applied to (1 - p_holds) of a raise, scaled by the next-player
-    # challenge rate. Discourages bidding into aggressive challengers with weak
-    # support. Validated: z=+3.07, +1.74pp in the real PRM field.
-    CALL_PENALTY_WEIGHT = 2.0
 
     # How much each unit of round velocity above 1.0 tightens the call threshold.
     # Velocity = avg quantity increment per bid this round; fast escalation signals
@@ -76,6 +79,9 @@ class DeepThought:
         # name -> [bluffs, holds], tracked separately for desperate vs comfortable bids
         self._desperate: dict[str, list[int]] = {}
         self._comfortable: dict[str, list[int]] = {}
+        # per-player running stats: sum and count of p_holds_public at challenge time
+        self._ct_sum: dict[str, float] = {}
+        self._ct_count: dict[str, int] = {}
 
     def _sync(self, ctx: GameContext) -> None:
         bet_history = ctx.bet_history
@@ -96,6 +102,18 @@ class DeepThought:
         m = len(outcomes)
         for j in range(self._oc_idx, m):
             outcome = outcomes[j]
+
+            # Track each challenger's observed challenge threshold for p_call calibration
+            final_bet = outcome.get("final_bet")
+            challenger = outcome.get("challenger")
+            hands = outcome.get("hands", {})
+            if final_bet and challenger and hands:
+                total_dice_round = sum(len(h) for h in hands.values())
+                p_pub = self._p_holds_public(final_bet.face, final_bet.quantity, total_dice_round)
+                self._ct_sum[challenger] = self._ct_sum.get(challenger, 0.0) + p_pub
+                self._ct_count[challenger] = self._ct_count.get(challenger, 0) + 1
+
+            # Track desperation-conditioned bluff rates
             round_key = (outcome["game"], outcome["round"])
             last = self._last_bid_dice.get(round_key)
             if last is None or last[0] != outcome["bidder"]:
@@ -172,6 +190,38 @@ class DeepThought:
         inferred = round(max(0.0, min(float(d), bid_qty - expected_from_others)))
         certain = round(inferred * (1.0 - bluff_rate))
         return certain, d - certain
+
+    def _p_holds_public(self, face: int, qty: int, total_dice: int, wilds: bool = True) -> float:
+        """P(bid holds) from public info — all dice treated as unknown binomial.
+
+        Used to scale how likely the next player is to call: higher/rarer bids
+        look suspicious and attract more challenges.
+        """
+        p = 1 / 6 if (face == 1 or not wilds) else 2 / 6
+        if qty <= 0:
+            return 1.0
+        if qty > total_dice:
+            return 0.0
+        return sum(
+            comb(total_dice, k) * (p**k) * ((1 - p) ** (total_dice - k))
+            for k in range(qty, total_dice + 1)
+        )
+
+    def _p_call_conditional(
+        self, player: str | None, p_holds_pub: float, base_rate: float
+    ) -> float:
+        """Estimate p(call) for this bid conditioned on its public hold probability.
+
+        Uses the player's observed challenge threshold (mean p_holds_public at challenge
+        time) to scale the base_rate — lower for bids safer than their typical call floor,
+        higher for bids riskier than it. Falls back to a simple formula without data.
+        """
+        n = self._ct_count.get(player, 0) if player else 0
+        if not n:
+            return 1.0 - (1.0 - base_rate) * p_holds_pub
+        mean_threshold = self._ct_sum[player] / n
+        scale = exp(-self.CHALLENGE_SLOPE * (p_holds_pub - mean_threshold))
+        return max(self.MIN_P_CALL, min(1.0, base_rate * scale))
 
     def _next_player(self, ctx: GameContext) -> str | None:
         """Return who acts immediately after Deep Thought this round.
@@ -261,12 +311,6 @@ class DeepThought:
             for k in range(need, uncertain + 1)
         )
 
-    def _face_bias(self, face: int, stats) -> float:
-        if not stats.face_bias:
-            return 1 / 6
-        biases = [pb.get(face, 1 / 6) for pb in stats.face_bias.values()]
-        return sum(biases) / len(biases)
-
     def _effective_threshold(self, prior_bet: Bet, stats) -> float:
         """
         Blends three signals into one call threshold:
@@ -309,38 +353,43 @@ class DeepThought:
         hand: list[int],
         prior_bet: Bet,
         total_dice: int,
-        stats,
         opening_bids: dict[str, tuple[int, float, int]] | None = None,
         bluff_rates: dict[str, float] | None = None,
-        p_call: float = 0.3,
+        next_p: str | None = None,
+        base_p_call: float = 0.3,
     ) -> tuple[int, int]:
-        candidates = []
-        own_on_bid_face = self._support(hand, prior_bet.face)
-        if own_on_bid_face > 0:
-            bias = self._face_bias(prior_bet.face, stats)
-            candidates.append((prior_bet.quantity + 1, prior_bet.face, own_on_bid_face, bias))
-        for face in range(prior_bet.face + 1, 7):
-            own = self._support(hand, face)
-            if own > 0:
-                bias = self._face_bias(face, stats)
-                candidates.append((prior_bet.quantity, face, own, bias))
+        """Score every legal bid by EV and return the best (quantity, face).
 
-        if not candidates:
-            return prior_bet.quantity + 1, prior_bet.face
+        EV = (1-p_call)*EV_SAFE + p_call*p_holds*EV_WIN_CALL + p_call*(1-p_holds)*EV_LOSE_CALL
 
-        scored = []
-        for qty, face, own, bias in candidates:
-            ph = self._prob_holds(face, qty, hand, total_dice, opening_bids, bluff_rates)
-            score = (
-                own * 2.0
-                - bias * 3.0
-                + ph * self.RAISE_PROB_WEIGHT
-                - p_call * (1.0 - ph) * self.CALL_PENALTY_WEIGHT
-            )
-            scored.append((score, qty, face))
+        p_call is calibrated per-bid via _p_call_conditional using the next player's
+        observed challenge threshold — lower for safe bids (next player rarely calls
+        those), higher for risky ones. Scans all legal bids, not just supported ones.
+        """
+        wilds = self._wilds_active
+        allowed_faces = range(2, 7) if wilds else range(1, 7)
 
-        best = max(scored, key=lambda x: x[0])
-        return best[1], best[2]
+        best_ev = float("-inf")
+        best_q, best_f = prior_bet.quantity + 1, prior_bet.face
+
+        for q in range(1, total_dice + 1):
+            for f in allowed_faces:
+                if not (q > prior_bet.quantity or (q == prior_bet.quantity and f > prior_bet.face)):
+                    continue
+                ph = self._prob_holds(f, q, hand, total_dice, opening_bids, bluff_rates)
+                p_holds_pub = self._p_holds_public(f, q, total_dice, wilds)
+                p_call = self._p_call_conditional(next_p, p_holds_pub, base_p_call)
+                ev = (
+                    (1.0 - p_call) * self.EV_SAFE
+                    + p_call * ph * self.EV_WIN_CALL
+                    + p_call * (1.0 - ph) * self.EV_LOSE_CALL
+                )
+                # tie-break toward higher (q, f) — prefer aggressive bids when EV is equal
+                if ev > best_ev or (abs(ev - best_ev) < 1e-9 and (q, f) > (best_q, best_f)):
+                    best_ev = ev
+                    best_q, best_f = q, f
+
+        return best_q, best_f
 
     def algo(self, ctx: GameContext) -> Bet | None:
         self._sync(ctx)
@@ -365,7 +414,7 @@ class DeepThought:
 
         # Exact next-player from v2 round_players — no inference needed
         next_p = self._next_player(ctx)
-        p_call = stats.challenge_rate.get(next_p, 0.3) if next_p else 0.3
+        base_p_call = stats.challenge_rate.get(next_p, 0.3) if next_p else 0.3
 
         threshold = self._effective_threshold(prior_bet, stats)
         if (
@@ -377,6 +426,6 @@ class DeepThought:
             return None
 
         quantity, face = self._best_raise(
-            hand, prior_bet, total_dice, stats, opening_bids, bluff_rates, p_call
+            hand, prior_bet, total_dice, opening_bids, bluff_rates, next_p, base_p_call
         )
         return Bet(quantity, face, self.name)
