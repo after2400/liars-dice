@@ -18,11 +18,11 @@ class DeepThought:
     the engine, blended at FACE_WEIGHT=0.45; (3) round velocity — fast escalation
     signals overextension.
 
-    Opening bids use inference from each player's first bet to partition unseen
-    dice into "likely matches" and "uncertain" pools. The opening factor scales
-    with table aggression — passive tables absorb higher opens. Raises score all
-    legal bids by EV (p_pass*EV_SAFE + p_call*p_holds*EV_WIN + p_call*(1-p_holds)*EV_LOSE),
-    including bids beyond DT's own support when inference signals others hold the face.
+    Raises use a full EV scan over all legal bids with per-bid p_call calibration
+    via each player's observed challenge threshold. Opening bids use a formula
+    (own + expected_others * multiplier) with a late-game boost when avg dice/player
+    is low. Opening-bid bluff propensity is tracked from revealed hands to correctly
+    discount inference from known bluffers in _prob_holds.
     """
 
     name = "Deep Thought"
@@ -31,9 +31,6 @@ class DeepThought:
     # optimal at 0.22 vs the PRM field; raising to 0.28+ costs 2-6pp — both
     # Stewie and EvilStewie's bids are genuinely well-supported.
     BASE_THRESHOLD = 0.22
-
-    # How much of the unseen dice's expected count to claim when opening.
-    OPENING_MULTIPLIER = 0.70
 
     # EV weights for each bid outcome (matches EvilStewie's calibrated values).
     EV_SAFE = 0.3  # bid passes — opponent follows
@@ -61,13 +58,12 @@ class DeepThought:
     # overextension. Mirrors Stewie's validated approach.
     VELOCITY_SENSITIVITY = 0.02
 
-    # Pivot and sensitivity for the adaptive opening factor. The opening factor
-    # scales how much of the expected-others count to claim when opening a round.
-    # Passive tables (low avg challenge rate) → open higher; aggressive → lower.
-    OPENING_CR_PIVOT = 0.22
-    OPENING_CR_SENSITIVITY = 2.0
-    OPENING_FACTOR_MIN = 0.50
-    OPENING_FACTOR_MAX = 1.10
+    # How much of the expected-others count to claim when opening a round.
+    # Late-game modifier scales this up when avg dice/player is low to prevent
+    # getting squeezed by an escalating bid that wraps back unsupported.
+    OPENING_MULTIPLIER = 0.70
+    LATE_GAME_AVG_DICE = 3.0
+    LATE_GAME_AGGRESSION = 0.25
 
     def __init__(self) -> None:
         self._bh_idx = 0
@@ -82,6 +78,14 @@ class DeepThought:
         # per-player running stats: sum and count of p_holds_public at challenge time
         self._ct_sum: dict[str, float] = {}
         self._ct_count: dict[str, int] = {}
+        # opening-bid bluff propensity tracker (separate watermarks from _sync)
+        self._bluff_history_seen: int = 0
+        self._bluff_outcomes_seen: int = 0
+        self._bluff_round_keys: list[tuple[int, int]] = []
+        self._bluff_opens: dict[tuple[int, int], dict[str, dict]] = {}
+        self._bluff_sum: dict[str, float] = {}
+        self._bluff_count: dict[str, int] = {}
+        self._no_wilds_rounds: set[tuple[int, int]] = set()
 
     def _sync(self, ctx: GameContext) -> None:
         bet_history = ctx.bet_history
@@ -126,6 +130,7 @@ class DeepThought:
             else:
                 counts[0] += 1
         self._oc_idx = m
+        self._update_bluff_obs(ctx)
 
     def _round_opening_bids(self, bet_history) -> dict[str, tuple[int, float, int]]:
         """Return {player: (face, effective_qty, dice_count)} for each other player's first bid this round.
@@ -237,6 +242,61 @@ class DeepThought:
             return None
         return players[(idx + 1) % len(players)]
 
+    def _update_bluff_obs(self, ctx: GameContext) -> None:
+        """Track per-player opening-bid bluff propensity from newly completed rounds.
+
+        Incremental: processes each new history entry and each new outcome exactly once.
+        Uses revealed hands to check whether each opener's bid quantity was supported.
+        """
+        history = ctx.bet_history
+        outcomes = ctx.outcomes
+
+        for entry in history[self._bluff_history_seen :]:
+            key = (entry["game"], entry["round"])
+            if key not in self._bluff_opens:
+                self._bluff_opens[key] = {}
+                self._bluff_round_keys.append(key)
+            opens = self._bluff_opens[key]
+            p = entry["player"]
+            if p not in opens:
+                opens[p] = entry
+            if entry["bet"].face == 1:
+                self._no_wilds_rounds.add(key)
+        self._bluff_history_seen = len(history)
+
+        limit = min(len(outcomes), len(self._bluff_round_keys))
+        for i in range(self._bluff_outcomes_seen, limit):
+            outcome = outcomes[i]
+            key = self._bluff_round_keys[i]
+            hands = outcome.get("hands", {})
+            total_dice_round = sum(len(h) for h in hands.values())
+            wilds_on = key not in self._no_wilds_rounds
+
+            for p, entry in self._bluff_opens[key].items():
+                if p not in hands:
+                    continue
+                face = entry["bet"].face
+                qty = entry["bet"].quantity
+                d = entry["dice_count"]
+                p_val = 1 / 6 if (face == 1 or not wilds_on) else 2 / 6
+                expected_from_others = (total_dice_round - d) * p_val
+                inferred = round(max(0.0, min(float(d), qty - expected_from_others)))
+                actual = hands[p].count(face)
+                if face != 1 and wilds_on:
+                    actual += hands[p].count(1)
+                self._bluff_sum[p] = self._bluff_sum.get(p, 0.0) + (
+                    1.0 if actual < inferred else 0.0
+                )
+                self._bluff_count[p] = self._bluff_count.get(p, 0) + 1
+        self._bluff_outcomes_seen = limit
+
+    def _opening_bluff_rate(self, player: str) -> float:
+        """Opening-bid bluff rate for this player. Returns 0 until 3 observations."""
+        n = self._bluff_count.get(player, 0)
+        if n < 3:
+            return 0.0
+        return self._bluff_sum[player] / n
+
     def _conditional_bluff_rate(self, bidder: str, desperate: bool) -> float | None:
         bucket = self._desperate if desperate else self._comfortable
         counts = bucket.get(bidder)
@@ -244,21 +304,6 @@ class DeepThought:
             return None
         bluffs, holds = counts
         return (bluffs + 1) / (bluffs + holds + 2)
-
-    def _opening_factor(self, stats) -> float:
-        """Scale opening bid aggressiveness by table's average challenge rate.
-
-        Passive tables (avg CR < pivot) tolerate higher opens; aggressive tables
-        punish them. Mirrors Stewie's validated dynamic opening logic.
-        """
-        if not stats.challenge_rate:
-            return self.OPENING_MULTIPLIER
-        avg_cr = sum(stats.challenge_rate.values()) / len(stats.challenge_rate)
-        adj = (self.OPENING_CR_PIVOT - avg_cr) * self.OPENING_CR_SENSITIVITY
-        return max(
-            self.OPENING_FACTOR_MIN,
-            min(self.OPENING_FACTOR_MAX, self.OPENING_MULTIPLIER + adj),
-        )
 
     def _wild_bonus(self, face: int) -> bool:
         return self._wilds_active and face != 1
@@ -404,13 +449,16 @@ class DeepThought:
             best_face = max(range(2, 7), key=lambda f: hand.count(f) + hand.count(1))
             own = hand.count(best_face) + hand.count(1)
             unseen = total_dice - len(hand)
-            factor = self._opening_factor(stats)
-            quantity = max(1, round(own + unseen * (2 / 6) * factor))
+            n_players = len(ctx.round_players)
+            avg_dice = total_dice / n_players if n_players else total_dice
+            late_factor = max(0.0, 1.0 - avg_dice / self.LATE_GAME_AVG_DICE)
+            multiplier = self.OPENING_MULTIPLIER + late_factor * self.LATE_GAME_AGGRESSION
+            quantity = max(1, round(own + unseen * (2 / 6) * multiplier))
             return Bet(quantity, best_face, self.name)
 
-        # Opening bid inference and bluff rates for this turn
+        # Opening bid inference and opening-specific bluff rates for this turn
         opening_bids = self._round_opening_bids(ctx.bet_history)
-        bluff_rates = stats.bluff_rate
+        bluff_rates = {p: self._opening_bluff_rate(p) for p in self._bluff_count}
 
         # Exact next-player from v2 round_players — no inference needed
         next_p = self._next_player(ctx)
