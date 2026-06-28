@@ -39,14 +39,14 @@ class ReplayDB:
         path = Path(path)
         if path.exists():
             path.unlink()
-        conn = sqlite3.connect(str(path))
+        conn = sqlite3.connect(str(path), check_same_thread=False)
         conn.executescript(_SCHEMA)
         conn.commit()
         return cls(conn)
 
     @classmethod
     def load(cls, path: str | Path) -> "ReplayDB":
-        conn = sqlite3.connect(f"file:{Path(path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(f"file:{Path(path)}?mode=ro", uri=True, check_same_thread=False)
         return cls(conn)
 
     def save_meta(
@@ -77,6 +77,22 @@ class ReplayDB:
         )
         self._conn.commit()
 
+    def save_seeds(
+        self,
+        week_num: int,
+        tier: str | None,
+        series_idx: int,
+        seeds: list[int],
+    ) -> None:
+        self._conn.executemany(
+            "INSERT INTO game_seed (week_num, tier, series_idx, game_num, seed) VALUES (?, ?, ?, ?, ?)",
+            [
+                (week_num, tier, series_idx, i + 1, _to_signed64(seed))
+                for i, seed in enumerate(seeds)
+            ],
+        )
+        self._conn.commit()
+
     def save_seed(
         self,
         week_num: int,
@@ -85,12 +101,8 @@ class ReplayDB:
         game_num: int,
         seed: int,
     ) -> None:
-        self._conn.execute(
-            "INSERT INTO game_seed (week_num, tier, series_idx, game_num, seed) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (week_num, tier, series_idx, game_num, _to_signed64(seed)),
-        )
-        self._conn.commit()
+        """Compatibility shim — prefer save_seeds for batch writes."""
+        self.save_seeds(week_num, tier, series_idx, [seed])
 
     def get_meta(self) -> dict[str, str]:
         return dict(self._conn.execute("SELECT key, value FROM meta").fetchall())

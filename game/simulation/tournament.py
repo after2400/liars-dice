@@ -114,8 +114,7 @@ def run_tournament(
         )
 
         if record_seeds is not None and replaydb is not None:
-            for gn, seed in enumerate(record_seeds, 1):
-                replaydb.save_seed(week_num, None, i, gn, seed)
+            replaydb.save_seeds(week_num, None, i, record_seeds)
 
         if dashboard:
             dashboard.on_series_complete(key, result)

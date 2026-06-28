@@ -17,14 +17,14 @@ def _make_replaydb(tmp_path):
 
 
 def test_run_tournament_records_seeds(tmp_path, monkeypatch):
-    """When recording=True, seeds are saved to replaydb."""
+    """When recording=True, seeds are saved to replaydb in a single batch per pool."""
     from game.simulation.tournament import run_tournament
 
     db = _make_replaydb(tmp_path)
 
     saved: list[tuple] = []
-    original_save = db.save_seed
-    db.save_seed = lambda *a: saved.append(a) or original_save(*a)
+    original_save_seeds = db.save_seeds
+    db.save_seeds = lambda *a: saved.append(a) or original_save_seeds(*a)
 
     lb = tmp_path / "lb.yaml"
     lb.write_text(_LB_YAML)
@@ -33,10 +33,13 @@ def test_run_tournament_records_seeds(tmp_path, monkeypatch):
     run_tournament(n_games=5, lb_path=str(lb), replaydb=db, week_num=1, recording=True)
     db.close()
 
-    assert len(saved) == 5
-    assert all(row[0] == 1 for row in saved)  # week_num=1
-    assert all(row[1] is None for row in saved)  # tier=None for tournament pools
-    assert all(row[3] in range(1, 6) for row in saved)  # game_num 1-5
+    # One batch call per pool (Alice+Bruno → 1 pool)
+    assert len(saved) == 1
+    week_num, tier, series_idx, seeds = saved[0]
+    assert week_num == 1  # week_num=1
+    assert tier is None  # tier=None for tournament pools
+    assert series_idx == 0  # pool_0
+    assert len(seeds) == 5  # one seed per game
 
 
 def test_run_tournament_replay_uses_stored_seeds(tmp_path, monkeypatch):

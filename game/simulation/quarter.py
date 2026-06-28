@@ -35,6 +35,9 @@ def run_step(
     n_games: int,
     lb_path: str,
     dashboard=None,
+    replaydb=None,
+    week_num: int = 1,
+    recording: bool = False,
 ) -> str:
     """Run one Monday step in-process. Returns captured stdout text for the report.
 
@@ -49,7 +52,14 @@ def run_step(
         if mode == "tournament":
             from game.simulation.tournament import run_tournament
 
-            run_tournament(n_games=n_games, lb_path=lb_path, dashboard=dashboard)
+            run_tournament(
+                n_games=n_games,
+                lb_path=lb_path,
+                dashboard=dashboard,
+                replaydb=replaydb,
+                week_num=week_num,
+                recording=recording,
+            )
         else:
             from game.simulation.season import run_season
 
@@ -58,6 +68,9 @@ def run_step(
                 top_n=int(os.environ.get("TOP_N", "4")),
                 lb_path=lb_path,
                 dashboard=dashboard,
+                replaydb=replaydb,
+                week_num=week_num,
+                recording=recording,
             )
     output = buf.getvalue()
     print(output, end="")
@@ -170,6 +183,47 @@ def write_report(
     print(f"[done] Report written to {output_file}")
 
 
+def write_diff_report(
+    original_standings: dict,
+    replay_lb_path: str,
+    output_file: Path,
+) -> None:
+    """Write a Markdown table comparing original vs replay per-player stats."""
+    from game.season.utils import _load_lb
+
+    replay_players = _load_lb(replay_lb_path).get("players", {})
+
+    def _total_win_pct(player_data: dict) -> float:
+        ts = player_data.get("tier_stats", {}).values()
+        wins = sum(t.get("wins", 0) for t in ts)
+        games = sum(t.get("games", 0) for t in ts)
+        return round(wins / games * 100, 1) if games else 0.0
+
+    all_names = sorted(set(original_standings) | set(replay_players))
+    lines = [
+        "# Replay Diff Report",
+        "",
+        "| Player | Orig Tier | Replay Tier | Orig Win% | Replay Win% | Delta |",
+        "|--------|-----------|-------------|-----------|-------------|-------|",
+    ]
+    for name in all_names:
+        orig = original_standings.get(name, {})
+        repl = replay_players.get(name, {})
+        display = orig.get("display_name") or repl.get("display_name") or name
+        orig_tier = orig.get("tier", "—")
+        repl_tier = repl.get("tier", "—")
+        orig_pct = _total_win_pct(orig)
+        repl_pct = _total_win_pct(repl)
+        delta = round(repl_pct - orig_pct, 1)
+        delta_str = f"+{delta}" if delta > 0 else str(delta)
+        lines.append(
+            f"| {display} | {orig_tier} | {repl_tier} | {orig_pct}% | {repl_pct}% | {delta_str}% |"
+        )
+    lines.append("")
+    output_file.write_text("\n".join(lines))
+    print(f"[done] Diff report written to {output_file}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Simulate a full quarter locally (DRY_RUN=true, no GitHub changes)."
@@ -198,6 +252,24 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Launch the Textual TUI dashboard.",
     )
+    parser.add_argument(
+        "--save-replay",
+        action="store_true",
+        default=False,
+        help="Save seeds and initial state to a .replay file alongside the report.",
+    )
+    parser.add_argument(
+        "--replay",
+        type=Path,
+        default=None,
+        help="Path to a .replay file. Re-runs using stored seeds and leaderboard snapshot.",
+    )
+    parser.add_argument(
+        "--save-leaderboard",
+        action="store_true",
+        default=False,
+        help="When --replay is active, write the resulting leaderboard to leaderboard.yaml.",
+    )
     return parser.parse_args()
 
 
@@ -206,9 +278,16 @@ def main() -> None:
 
     import sys
 
+    if args.save_replay and args.replay:
+        print("[error] --save-replay and --replay are mutually exclusive", file=sys.stderr)
+        sys.exit(1)
+    if args.save_leaderboard and not args.replay:
+        print("[error] --save-leaderboard requires --replay", file=sys.stderr)
+        sys.exit(1)
+
     from game.season.utils import is_tournament_monday
 
-    if not is_tournament_monday(args.start):
+    if not args.replay and not is_tournament_monday(args.start):
         print(
             f"[error] {args.start} is not a tournament Monday "
             "(must be the first Monday of Jan/Apr/Jul/Oct).",
@@ -216,70 +295,165 @@ def main() -> None:
         )
         sys.exit(1)
 
+    from game.simulation.replaydb import ReplayDB
+
+    replaydb = None
+    recording = False
+    temp_lb_path: str | None = None
+
     quarter = current_quarter(args.start)
     output_file = args.output or Path(f"sim-{quarter}.md")
+    replay_path = output_file.with_suffix(".replay")
     lb_path = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
 
-    mondays = compute_mondays(args.start)
-    print(f"[simulate] {quarter}: {len(mondays)} Mondays, {args.n_games} games/run")
+    if args.save_replay:
+        from game.season.utils import _load_lb
+
+        replaydb = ReplayDB.create(replay_path)
+        recording = True
+        replaydb.save_meta(
+            mode="quarter",
+            step_date=args.start,
+            quarter=quarter,
+            n_games=args.n_games,
+            top_n=int(os.environ.get("TOP_N", "4")),
+            lb_snapshot=_load_lb(lb_path),
+        )
+        n_games = args.n_games
+        mondays = compute_mondays(args.start)
+    elif args.replay:
+        import json
+        import tempfile
+
+        import yaml as _yaml
+
+        replaydb = ReplayDB.load(args.replay)
+        meta = replaydb.get_meta()
+        lb_data = json.loads(meta["lb_snapshot"])
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
+        _yaml.safe_dump(lb_data, tmp)
+        tmp.close()
+        temp_lb_path = tmp.name
+        lb_path = temp_lb_path
+        quarter = meta["quarter"]
+        n_games = int(meta["n_games"])
+        os.environ["TOP_N"] = meta["top_n"]
+        step_date = date.fromisoformat(meta["step_date"])
+        mondays = compute_mondays(step_date)
+        output_file = args.output or Path(f"sim-{quarter}.md")
+        print(f"[replay] {args.replay} — quarter {quarter}, {n_games} games/run")
+    else:
+        n_games = args.n_games
+        mondays = compute_mondays(args.start)
+
+    print(f"[simulate] {quarter}: {len(mondays)} Mondays, {n_games} games/run")
     print(f"[simulate] leaderboard: {lb_path}")
     print(f"[simulate] report: {output_file}")
-    print(
-        f"[simulate] WARNING: {lb_path} will be modified in place. "
-        f"Use `git checkout -- {lb_path}` or `just clean` to restore."
-    )
+    if not args.replay:
+        print(
+            f"[simulate] WARNING: {lb_path} will be modified in place. "
+            f"Use `git checkout -- {lb_path}` or `just clean` to restore."
+        )
     print()
 
     steps: list[dict] = []
     t_total = time.perf_counter()
 
-    if args.tui:
-        from game.components.utils import apply_display_names, import_player_classes_from_dir
-        from game.season.utils import _load_lb
-        from game.tui import TuiAdapter
+    try:
+        if args.tui:
+            from game.components.utils import apply_display_names, import_player_classes_from_dir
+            from game.season.utils import _load_lb
+            from game.tui import TuiAdapter
 
-        _all = import_player_classes_from_dir(str(Path(__file__).parent.parent.parent / "players"))
-        apply_display_names(_all, _load_lb(lb_path).get("players", {}))
-        display_names = {type(p).__name__: p.name for p in _all}
+            _all = import_player_classes_from_dir(
+                str(Path(__file__).parent.parent.parent / "players")
+            )
+            apply_display_names(_all, _load_lb(lb_path).get("players", {}))
+            display_names = {type(p).__name__: p.name for p in _all}
 
-        adapter: TuiAdapter | None = TuiAdapter(n_games=args.n_games, display_names=display_names)
+            adapter: TuiAdapter | None = TuiAdapter(n_games=n_games, display_names=display_names)
 
-        def _run_quarter() -> None:
-            week = 1
+            def _run_quarter() -> None:
+                week = 1
+                for i, (step_date, mode) in enumerate(mondays):
+                    if mode == "tournament":
+                        step_label = "Week 1"
+                    else:
+                        week += 1
+                        step_label = f"Week {week}"
+                    adapter.start_step(step_label)
+                    print(f"{'=' * 60}")
+                    print(f"[simulate] {step_date} — {step_label} (step {i + 1}/{len(mondays)})")
+                    print(f"{'=' * 60}")
+                    os.environ["TODAY"] = step_date.isoformat()
+                    t0 = time.perf_counter()
+                    output = run_step(
+                        step_date,
+                        mode,
+                        n_games,
+                        lb_path,
+                        dashboard=adapter,
+                        replaydb=replaydb,
+                        week_num=i + 1,
+                        recording=recording,
+                    )
+                    elapsed = time.perf_counter() - t0
+                    print(f"[simulate] done in {elapsed:.1f}s")
+                    steps.append({"date": step_date, "mode": mode, "output": output})
+                    print()
+
+            adapter.run(_run_quarter)
+        else:
             for i, (step_date, mode) in enumerate(mondays):
-                if mode == "tournament":
-                    step_label = "Week 1"
-                else:
-                    week += 1
-                    step_label = f"Week {week}"
-                adapter.start_step(step_label)
+                label = f"Week {i + 1}"
                 print(f"{'=' * 60}")
-                print(f"[simulate] {step_date} — {step_label} (step {i + 1}/{len(mondays)})")
+                print(f"[simulate] {step_date} — {label} (step {i + 1}/{len(mondays)})")
                 print(f"{'=' * 60}")
                 os.environ["TODAY"] = step_date.isoformat()
                 t0 = time.perf_counter()
-                output = run_step(step_date, mode, args.n_games, lb_path, dashboard=adapter)
+                output = run_step(
+                    step_date,
+                    mode,
+                    n_games,
+                    lb_path,
+                    replaydb=replaydb,
+                    week_num=i + 1,
+                    recording=recording,
+                )
                 elapsed = time.perf_counter() - t0
                 print(f"[simulate] done in {elapsed:.1f}s")
                 steps.append({"date": step_date, "mode": mode, "output": output})
                 print()
 
-        adapter.run(_run_quarter)
-    else:
-        for i, (step_date, mode) in enumerate(mondays):
-            label = f"Week {i + 1}"
-            print(f"{'=' * 60}")
-            print(f"[simulate] {step_date} — {label} (step {i + 1}/{len(mondays)})")
-            print(f"{'=' * 60}")
-            os.environ["TODAY"] = step_date.isoformat()
-            t0 = time.perf_counter()
-            output = run_step(step_date, mode, args.n_games, lb_path, dashboard=None)
-            elapsed = time.perf_counter() - t0
-            print(f"[simulate] done in {elapsed:.1f}s")
-            steps.append({"date": step_date, "mode": mode, "output": output})
-            print()
+        write_report(steps, lb_path, output_file, n_games)
 
-    write_report(steps, lb_path, output_file, args.n_games)
+        if args.save_replay and replaydb:
+            from game.season.utils import _load_lb
+
+            replaydb.save_standings(_load_lb(lb_path).get("players", {}))
+            print(f"[done] Replay saved to {replay_path}")
+
+        if args.replay and replaydb:
+            meta = replaydb.get_meta()
+            if "original_standings" in meta:
+                import json
+
+                original_standings = json.loads(meta["original_standings"])
+                diff_file = output_file.parent / (output_file.stem + "-diff.md")
+                write_diff_report(original_standings, lb_path, diff_file)
+            if args.save_leaderboard:
+                import shutil
+
+                real_lb = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
+                shutil.copy(lb_path, real_lb)
+                print("[done] Leaderboard updated from replay.")
+
+    finally:
+        if replaydb:
+            replaydb.close()
+        if temp_lb_path and Path(temp_lb_path).exists():
+            Path(temp_lb_path).unlink()
+
     print(f"[simulate] total elapsed: {time.perf_counter() - t_total:.1f}s")
 
 

@@ -130,8 +130,7 @@ def run_season(
                     replay_seeds=replay_seeds,
                 )
                 if record_seeds is not None and replaydb is not None:
-                    for gn, seed in enumerate(record_seeds, 1):
-                        replaydb.save_seed(week_num, tier, i, gn, seed)
+                    replaydb.save_seeds(week_num, tier, i, record_seeds)
                 if dashboard:
                     dashboard.on_series_complete(f"L1 Pool {i + 1}", result)
                 wins.update(result.wins)
@@ -157,8 +156,7 @@ def run_season(
                 replay_seeds=replay_seeds,
             )
             if record_seeds is not None and replaydb is not None:
-                for gn, seed in enumerate(record_seeds, 1):
-                    replaydb.save_seed(week_num, tier, 0, gn, seed)
+                replaydb.save_seeds(week_num, tier, 0, record_seeds)
             if dashboard:
                 dashboard.on_series_complete(f"{tier} Tier", result)
             wins = result.wins
@@ -317,8 +315,8 @@ def main() -> None:
     finally:
         if replaydb:
             replaydb.close()
-        if temp_lb_path:
-            os.unlink(temp_lb_path)
+        if temp_lb_path and Path(temp_lb_path).exists():
+            Path(temp_lb_path).unlink()
 
 
 if __name__ == "__main__":

@@ -46,7 +46,7 @@ def test_run_step_calls_run_tournament(monkeypatch):
 
     calls = []
 
-    def fake_run_tournament(n_games, lb_path, dashboard=None):
+    def fake_run_tournament(n_games, lb_path, dashboard=None, **kwargs):
         print("tournament called")
         calls.append(("tournament", n_games, lb_path))
 
@@ -67,7 +67,7 @@ def test_run_step_calls_run_season(monkeypatch):
 
     calls = []
 
-    def fake_run_season(n_games, top_n, lb_path, dashboard=None):
+    def fake_run_season(n_games, top_n, lb_path, dashboard=None, **kwargs):
         print("season called")
         calls.append(("season", n_games, lb_path))
 
@@ -86,7 +86,7 @@ def test_run_step_returns_captured_output(monkeypatch):
     """run_step captures stdout from the in-process call and returns it."""
     from game.simulation.quarter import run_step
 
-    def fake_run_tournament(n_games, lb_path, dashboard=None):
+    def fake_run_tournament(n_games, lb_path, dashboard=None, **kwargs):
         print("line one")
         print("line two")
 
@@ -107,7 +107,7 @@ def test_run_step_passes_dashboard(monkeypatch):
 
     received = []
 
-    def fake_run_tournament(n_games, lb_path, dashboard=None):
+    def fake_run_tournament(n_games, lb_path, dashboard=None, **kwargs):
         received.append(dashboard)
 
     import sys
@@ -119,6 +119,108 @@ def test_run_step_passes_dashboard(monkeypatch):
     sentinel = object()
     run_step(date(2026, 7, 6), "tournament", n_games=50, lb_path="lb.yaml", dashboard=sentinel)
     assert received == [sentinel]
+
+
+def test_parse_args_save_replay_flag(monkeypatch):
+    import sys
+
+    from game.simulation.quarter import parse_args
+
+    monkeypatch.setattr(sys, "argv", ["quarter.py", "--save-replay"])
+    args = parse_args()
+    assert args.save_replay is True
+    assert args.replay is None
+
+
+def test_parse_args_replay_flag(monkeypatch, tmp_path):
+    import sys
+
+    from game.simulation.quarter import parse_args
+
+    replay_file = tmp_path / "sim.replay"
+    replay_file.touch()
+    monkeypatch.setattr(sys, "argv", ["quarter.py", "--replay", str(replay_file)])
+    args = parse_args()
+    assert args.replay == replay_file
+    assert args.save_replay is False
+
+
+def test_parse_args_save_leaderboard_flag(monkeypatch, tmp_path):
+    import sys
+
+    from game.simulation.quarter import parse_args
+
+    replay_file = tmp_path / "sim.replay"
+    replay_file.touch()
+    monkeypatch.setattr(
+        sys, "argv", ["quarter.py", "--replay", str(replay_file), "--save-leaderboard"]
+    )
+    args = parse_args()
+    assert args.save_leaderboard is True
+
+
+def test_run_step_passes_replaydb_to_tournament(monkeypatch):
+    from datetime import date
+
+    from game.simulation.quarter import run_step
+
+    received = {}
+
+    def fake_run_tournament(
+        n_games, lb_path, dashboard=None, replaydb=None, week_num=1, recording=False
+    ):
+        received["replaydb"] = replaydb
+        received["week_num"] = week_num
+        received["recording"] = recording
+        print("ok")
+
+    import sys
+
+    fake_mod = type(sys)("game.simulation.tournament")
+    fake_mod.run_tournament = fake_run_tournament
+    monkeypatch.setitem(sys.modules, "game.simulation.tournament", fake_mod)
+
+    sentinel = object()
+    run_step(
+        date(2026, 7, 6),
+        "tournament",
+        n_games=5,
+        lb_path="lb.yaml",
+        replaydb=sentinel,
+        week_num=3,
+        recording=True,
+    )
+    assert received["replaydb"] is sentinel
+    assert received["week_num"] == 3
+    assert received["recording"] is True
+
+
+def test_run_step_passes_replaydb_to_season(monkeypatch):
+    from datetime import date
+
+    from game.simulation.quarter import run_step
+
+    received = {}
+
+    def fake_run_season(
+        n_games, top_n, lb_path, dashboard=None, replaydb=None, week_num=1, recording=False
+    ):
+        received["replaydb"] = replaydb
+        received["week_num"] = week_num
+        print("ok")
+
+    import sys
+
+    fake_mod = type(sys)("game.simulation.season")
+    fake_mod.run_season = fake_run_season
+    monkeypatch.setitem(sys.modules, "game.simulation.season", fake_mod)
+
+    sentinel = object()
+    run_step(
+        date(2026, 7, 13), "season", n_games=5, lb_path="lb.yaml", replaydb=sentinel, week_num=2
+    )
+    assert received["replaydb"] is sentinel
+    assert received["week_num"] == 2
 
 
 def test_write_report_contains_quarter_header(tmp_path):
