@@ -9,7 +9,8 @@ from __future__ import annotations
 import argparse
 import math
 import os
-from datetime import datetime, timezone
+import sys
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
@@ -20,6 +21,9 @@ def run_tournament(
     lb_path: str,
     players_dir: str | None = None,
     dashboard=None,
+    replaydb=None,
+    week_num: int = 1,
+    recording: bool = False,
 ) -> dict[str, dict[str, int]]:
     """Run a full tournament in-process. Returns {pool_key: {player: win_count}}.
 
@@ -31,6 +35,9 @@ def run_tournament(
         lb_path: Path to leaderboard.yaml.
         players_dir: Path to players/ directory. Defaults to repo root / players.
         dashboard: Optional TuiAdapter instance for live display.
+        replaydb: Optional ReplayDB instance for seed recording/replay.
+        week_num: Week number for seed indexing (default 1 for tournament).
+        recording: If True and replaydb is set, record seeds; if False, replay seeds.
     """
     from game.components.leaderboard import get_tier_players
     from game.components.series import format_results, run_series
@@ -90,11 +97,26 @@ def run_tournament(
         print(f"[run] {key}: {pool_names}")
         if dashboard:
             dashboard.start_series(key.replace("_", " ").title())
+
+        record_seeds: list[int] | None = [] if (replaydb is not None and recording) else None
+        replay_seeds: list[int] | None = (
+            replaydb.get_seeds(week_num, None, i)
+            if (replaydb is not None and not recording)
+            else None
+        )
+
         result = run_series(
             pool,
             n_games,
             on_game_complete=dashboard.update if dashboard else None,
+            record_seeds=record_seeds,
+            replay_seeds=replay_seeds,
         )
+
+        if record_seeds is not None and replaydb is not None:
+            for gn, seed in enumerate(record_seeds, 1):
+                replaydb.save_seed(week_num, None, i, gn, seed)
+
         if dashboard:
             dashboard.on_series_complete(key, result)
         pool_results[key] = result.wins
@@ -161,26 +183,110 @@ def main() -> None:
         default=False,
         help="Launch the Textual TUI dashboard.",
     )
+    parser.add_argument("--save-replay", action="store_true", default=False)
+    parser.add_argument("--replay", type=Path, default=None)
+    parser.add_argument("--save-leaderboard", action="store_true", default=False)
     args = parser.parse_args()
+
+    if args.save_replay and args.replay:
+        print("[error] --save-replay and --replay are mutually exclusive", file=sys.stderr)
+        sys.exit(1)
+    if args.save_leaderboard and not args.replay:
+        print("[error] --save-leaderboard requires --replay", file=sys.stderr)
+        sys.exit(1)
 
     if args.date:
         os.environ["TODAY"] = args.date
 
     lb_path = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
+    step_date = date.fromisoformat(args.date) if args.date else date.today()
 
-    if args.tui:
-        from game.components.utils import apply_display_names, import_player_classes_from_dir
+    from game.simulation.replaydb import ReplayDB
+
+    replaydb = None
+    recording = False
+    temp_lb_path: str | None = None
+
+    if args.save_replay:
         from game.season.utils import _load_lb
-        from game.tui import TuiAdapter
 
-        _all = import_player_classes_from_dir(str(_REPO_ROOT / "players"))
-        apply_display_names(_all, _load_lb(lb_path).get("players", {}))
-        display_names = {type(p).__name__: p.name for p in _all}
+        replay_path = Path(f"sim-{step_date}.replay")
+        replaydb = ReplayDB.create(replay_path)
+        recording = True
+        replaydb.save_meta(
+            mode="tournament",
+            step_date=step_date,
+            quarter="",
+            n_games=args.n_games,
+            top_n=int(os.environ.get("TOP_N", "4")),
+            lb_snapshot=_load_lb(lb_path),
+        )
+    elif args.replay:
+        import json
+        import tempfile
 
-        adapter = TuiAdapter(n_games=args.n_games, display_names=display_names)
-        adapter.run(lambda: run_tournament(args.n_games, lb_path, dashboard=adapter))
-    else:
-        run_tournament(args.n_games, lb_path)
+        import yaml as _yaml
+
+        replaydb = ReplayDB.load(args.replay)
+        meta = replaydb.get_meta()
+        lb_data = json.loads(meta["lb_snapshot"])
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
+        _yaml.safe_dump(lb_data, tmp)
+        tmp.close()
+        temp_lb_path = tmp.name
+        lb_path = temp_lb_path
+        args.n_games = int(meta["n_games"])
+        os.environ["TOP_N"] = meta["top_n"]
+        print(f"[replay] {args.replay} — tournament, {args.n_games} games/run")
+
+    try:
+        if args.tui:
+            from game.components.utils import apply_display_names, import_player_classes_from_dir
+            from game.season.utils import _load_lb
+            from game.tui import TuiAdapter
+
+            _all = import_player_classes_from_dir(str(_REPO_ROOT / "players"))
+            apply_display_names(_all, _load_lb(lb_path).get("players", {}))
+            display_names = {type(p).__name__: p.name for p in _all}
+            adapter = TuiAdapter(n_games=args.n_games, display_names=display_names)
+            adapter.run(
+                lambda: run_tournament(
+                    args.n_games,
+                    lb_path,
+                    dashboard=adapter,
+                    replaydb=replaydb,
+                    week_num=1,
+                    recording=recording,
+                )
+            )
+        else:
+            run_tournament(
+                args.n_games,
+                lb_path,
+                replaydb=replaydb,
+                week_num=1,
+                recording=recording,
+            )
+
+        if args.save_replay and replaydb:
+            from game.season.utils import _load_lb
+
+            replaydb.save_standings(_load_lb(lb_path).get("players", {}))
+            print(f"[done] Replay saved to sim-{step_date}.replay")
+
+        if args.replay and replaydb:
+            if args.save_leaderboard:
+                import shutil
+
+                real_lb = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
+                shutil.copy(lb_path, real_lb)
+                print("[done] Leaderboard updated from replay.")
+
+    finally:
+        if replaydb:
+            replaydb.close()
+        if temp_lb_path and Path(temp_lb_path).exists():
+            Path(temp_lb_path).unlink()
 
 
 if __name__ == "__main__":

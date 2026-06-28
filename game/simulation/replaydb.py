@@ -2,8 +2,18 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import struct
 from datetime import date, datetime
 from pathlib import Path
+
+
+def _to_signed64(n: int) -> int:
+    return struct.unpack("q", struct.pack("Q", n))[0]
+
+
+def _from_signed64(n: int) -> int:
+    return struct.unpack("Q", struct.pack("q", n))[0]
+
 
 _SCHEMA = """
 CREATE TABLE meta (
@@ -78,7 +88,7 @@ class ReplayDB:
         self._conn.execute(
             "INSERT INTO game_seed (week_num, tier, series_idx, game_num, seed) "
             "VALUES (?, ?, ?, ?, ?)",
-            (week_num, tier, series_idx, game_num, seed),
+            (week_num, tier, series_idx, game_num, _to_signed64(seed)),
         )
         self._conn.commit()
 
@@ -87,7 +97,7 @@ class ReplayDB:
 
     def get_seeds(self, week_num: int, tier: str | None, series_idx: int) -> list[int]:
         return [
-            row[0]
+            _from_signed64(row[0])
             for row in self._conn.execute(
                 "SELECT seed FROM game_seed "
                 "WHERE week_num=? AND tier IS ? AND series_idx=? "
