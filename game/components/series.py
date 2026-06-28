@@ -1,4 +1,5 @@
 import logging
+import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -21,6 +22,8 @@ def run_series(
     tier: str | None = None,
     capture_outcomes: bool = False,
     on_game_complete: Callable[[int, dict[str, int], GameStats], None] | None = None,
+    record_seeds: list[int] | None = None,
+    replay_seeds: list[int] | None = None,
 ) -> SeriesResult:
     """Runs n_games games between the given players and returns a SeriesResult.
 
@@ -41,6 +44,11 @@ def run_series(
     """
     from game.components.script import game_orchestrator
 
+    if record_seeds is not None and replay_seeds is not None:
+        raise ValueError("record_seeds and replay_seeds are mutually exclusive")
+    if replay_seeds is not None and len(replay_seeds) != n_games:
+        raise ValueError(f"replay_seeds length {len(replay_seeds)} != n_games {n_games}")
+
     wins = {type(p).__name__: 0 for p in players}
     bet_history: list[dict] = []
     outcomes: list[dict] = []
@@ -53,6 +61,14 @@ def run_series(
                 handler.stream.seek(0)
                 handler.stream.truncate(0)
 
+        if replay_seeds is not None:
+            _seed: int | None = replay_seeds[game_num - 1]
+        elif record_seeds is not None:
+            _seed = secrets.randbits(64)
+            record_seeds.append(_seed)
+        else:
+            _seed = None
+
         winner = game_orchestrator(
             players,
             game_id=game_num,
@@ -60,6 +76,7 @@ def run_series(
             outcomes=outcomes,
             stats=stats,
             tier=tier,
+            seed=_seed,
         )
         wins[type(winner).__name__] += 1
         logger.info(f"Game {game_num}/{n_games}: {winner.name} wins")

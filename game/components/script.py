@@ -19,6 +19,7 @@ def game_orchestrator(
     outcomes: list[dict] | None = None,
     stats=None,
     tier: str | None = None,
+    seed: int | None = None,
 ):
     """Plays a complete game of Liar's Dice between N players.
 
@@ -37,7 +38,7 @@ def game_orchestrator(
     Returns:
         The winning player object.
     """
-    rng = random.Random(secrets.randbits(64))
+    rng = random.Random(seed if seed is not None else secrets.randbits(64))
     _sigs = {p: inspect.signature(p.algo).parameters for p in players}
     _wants_stats = {p: "stats" in _sigs[p] for p in players}
     _wants_tier = {p: "tier" in _sigs[p] for p in players}
