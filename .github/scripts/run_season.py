@@ -404,6 +404,47 @@ def _standings_table(
     return lines
 
 
+def _quarter_leaderboard_table(
+    players: dict[str, dict], display_names: dict[str, str]
+) -> list[str]:
+    """Unified quarter view — one row per player, win% columns for each tier.
+
+    Sort order: PRM W% desc → CH W% desc → L1 W% desc; players with no stats
+    in a tier sort below players who have any stats there.
+    """
+    TIERS = ("PRM", "CH", "L1")
+
+    def _pct(ts: dict, tier: str) -> float:
+        return ts[tier].get("win_pct", 0.0) if tier in ts else -999.0
+
+    sorted_players = sorted(
+        players.items(),
+        key=lambda item: tuple(-_pct(item[1].get("tier_stats", {}), t) for t in TIERS),
+    )
+
+    lines = [
+        "| Player | Tier | PRM W% | CH W% | L1 W% | Total W% | Games |",
+        "|--------|------|--------|-------|-------|----------|-------|",
+    ]
+    for name, p in sorted_players:
+        display = display_names.get(name, name)
+        tier_label = _TIER_LABEL.get(p.get("tier", ""), p.get("tier", ""))
+        ts = p.get("tier_stats", {})
+
+        prm_pct = str(ts["PRM"].get("win_pct", 0.0)) if "PRM" in ts else "—"
+        ch_pct = str(ts["CH"].get("win_pct", 0.0)) if "CH" in ts else "—"
+        l1_pct = str(ts["L1"].get("win_pct", 0.0)) if "L1" in ts else "—"
+
+        total_wins = sum(t.get("wins", 0) for t in ts.values())
+        total_games = sum(t.get("games", 0) for t in ts.values())
+        total_win_pct = round(total_wins / total_games * 100, 1) if total_games else 0.0
+
+        lines.append(
+            f"| {display} | {tier_label} | {prm_pct} | {ch_pct} | {l1_pct} | {total_win_pct} | {total_games} |"
+        )
+    return lines
+
+
 def _update_readme(readme_path: str, lb_path: str) -> None:
     """Replace the <!-- leaderboard-start/end --> section in README.md with current standings."""
     if _DRY_RUN:
@@ -443,6 +484,11 @@ def _update_readme(readme_path: str, lb_path: str) -> None:
         lines.append("")
         lines.append("</details>")
         lines.append("")
+
+    lines.append("### Quarter Leaderboard")
+    lines.append("")
+    lines.extend(_quarter_leaderboard_table(players, display_names))
+    lines.append("")
 
     lines.extend(["<!-- leaderboard-end -->", _README_END])
     block = "\n".join(lines)

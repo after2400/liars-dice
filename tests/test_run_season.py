@@ -310,6 +310,151 @@ def test_standings_games_column_shows_total_games_not_current_tier():
 
 
 # ---------------------------------------------------------------------------
+# _quarter_leaderboard_table
+# ---------------------------------------------------------------------------
+
+
+def test_quarter_leaderboard_sort_prm_first():
+    """Players are sorted PRM W% desc → CH W% desc → L1 W% desc."""
+    mod = _load_run_season()
+    players = {
+        "Alpha": {
+            "tier": "CH",
+            "display_name": "Alpha",
+            "tier_stats": {"CH": {"wins": 200, "games": 1000, "win_pct": 20.0}},
+        },
+        "Beta": {
+            "tier": "PRM",
+            "display_name": "Beta",
+            "tier_stats": {"PRM": {"wins": 150, "games": 1000, "win_pct": 15.0}},
+        },
+        "Gamma": {
+            "tier": "PRM",
+            "display_name": "Gamma",
+            "tier_stats": {"PRM": {"wins": 180, "games": 1000, "win_pct": 18.0}},
+        },
+    }
+    rows = mod._quarter_leaderboard_table(players, {n: n for n in players})
+    names = [r.split("|")[1].strip() for r in rows[2:]]
+    assert names == ["Gamma", "Beta", "Alpha"]
+
+
+def test_quarter_leaderboard_ch_tiebreak():
+    """When PRM W% is equal, CH W% breaks the tie."""
+    mod = _load_run_season()
+    players = {
+        "A": {
+            "tier": "PRM",
+            "display_name": "A",
+            "tier_stats": {
+                "PRM": {"wins": 150, "games": 1000, "win_pct": 15.0},
+                "CH": {"wins": 200, "games": 1000, "win_pct": 20.0},
+            },
+        },
+        "B": {
+            "tier": "PRM",
+            "display_name": "B",
+            "tier_stats": {
+                "PRM": {"wins": 150, "games": 1000, "win_pct": 15.0},
+                "CH": {"wins": 100, "games": 1000, "win_pct": 10.0},
+            },
+        },
+    }
+    rows = mod._quarter_leaderboard_table(players, {"A": "A", "B": "B"})
+    names = [r.split("|")[1].strip() for r in rows[2:]]
+    assert names == ["A", "B"]
+
+
+def test_quarter_leaderboard_no_stats_sorts_last():
+    """Players with no tier_stats sort below players who have any stats."""
+    mod = _load_run_season()
+    players = {
+        "HasStats": {
+            "tier": "L1",
+            "display_name": "HasStats",
+            "tier_stats": {"L1": {"wins": 100, "games": 1000, "win_pct": 10.0}},
+        },
+        "NoStats": {
+            "tier": "L1",
+            "display_name": "NoStats",
+            "tier_stats": {},
+        },
+    }
+    rows = mod._quarter_leaderboard_table(players, {n: n for n in players})
+    names = [r.split("|")[1].strip() for r in rows[2:]]
+    assert names == ["HasStats", "NoStats"]
+
+
+def test_quarter_leaderboard_dash_for_missing_tier():
+    """Tiers the player has never played in show '—'."""
+    mod = _load_run_season()
+    players = {
+        "OnlyL1": {
+            "tier": "L1",
+            "display_name": "OnlyL1",
+            "tier_stats": {"L1": {"wins": 100, "games": 1000, "win_pct": 10.0}},
+        },
+    }
+    rows = mod._quarter_leaderboard_table(players, {"OnlyL1": "OnlyL1"})
+    data_row = rows[2]
+    # PRM and CH should show "—", L1 should show 10.0
+    assert "| — | — | 10.0 |" in data_row
+
+
+def test_quarter_leaderboard_total_win_pct_across_tiers():
+    """Total W% and Games aggregate all tiers, not just the current one."""
+    mod = _load_run_season()
+    players = {
+        "Multi": {
+            "tier": "PRM",
+            "display_name": "Multi",
+            "tier_stats": {
+                "PRM": {"wins": 200, "games": 1000, "win_pct": 20.0},
+                "CH": {"wins": 300, "games": 2000, "win_pct": 15.0},
+                "L1": {"wins": 500, "games": 4000, "win_pct": 12.5},
+            },
+        },
+    }
+    rows = mod._quarter_leaderboard_table(players, {"Multi": "Multi"})
+    data_row = rows[2]
+    # total wins = 1000, total games = 7000, total W% = 14.3
+    assert data_row.endswith("| 14.3 | 7000 |")
+
+
+def test_update_readme_includes_quarter_leaderboard(tmp_path):
+    """_update_readme must emit a Quarter Leaderboard section."""
+    rs = _load_run_season()
+    lb_path = tmp_path / "lb.yaml"
+    readme = tmp_path / "README.md"
+    readme.write_text(
+        "intro\n"
+        "<!-- prettier-ignore-start -->\n"
+        "<!-- leaderboard-start -->\n"
+        "OLD\n"
+        "<!-- leaderboard-end -->\n"
+        "<!-- prettier-ignore-end -->\n"
+        "footer\n"
+    )
+    data = {
+        "players": {
+            "Eva": {
+                "display_name": "Eva",
+                "github_username": "",
+                "tier": "PRM",
+                "tier_stats": {"PRM": {"wins": 200, "games": 1000, "win_pct": 20.0}},
+            },
+        },
+    }
+    lb_path.write_text(yaml.dump(data))
+    rs._update_readme(str(readme), str(lb_path))
+    text = readme.read_text()
+    assert "### Quarter Leaderboard" in text
+    assert "PRM W%" in text
+    assert "CH W%" in text
+    assert "L1 W%" in text
+
+
+# ---------------------------------------------------------------------------
 # Task 3: end-to-end run_season with settlement
 # ---------------------------------------------------------------------------
 
