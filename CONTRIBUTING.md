@@ -23,11 +23,6 @@ Always submit PRs from a **feature branch**, not from your fork's `main`. PRing 
 ```bash
 git checkout -b my-player-name
 # make your changes
-
-# rebase onto the latest main before opening the PR
-git fetch upstream
-git rebase upstream/main
-
 git push origin my-player-name
 # open the PR from that branch
 ```
