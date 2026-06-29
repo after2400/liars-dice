@@ -70,6 +70,46 @@ def test_standings_widget_cursor_clamps():
     assert widget._cursor == 2
 
 
+def test_app_inner_tab_id_syncs_on_outer_tab_change():
+    """`_current_step_inner_id` must follow the outer tab that is activated."""
+    import threading
+    from types import SimpleNamespace
+
+    from game.tui.app import LiarsDiceApp
+
+    app = LiarsDiceApp(n_games=10, ready_event=threading.Event())
+
+    # Simulate two steps having been started
+    app._step_count = 2
+    app._current_step_inner_id = "step-tabs-2"
+    app._outer_tab_ids = ["live", "step-1", "step-2"]
+
+    # Fire a synthetic TabActivated pointing at "step-1"
+    event = SimpleNamespace(
+        tabbed_content=SimpleNamespace(id="tabs"),
+        pane=SimpleNamespace(id="step-1"),
+    )
+    app.on_tabbed_content_tab_activated(event)
+
+    assert app._current_step_inner_id == "step-tabs-1"
+
+    # Switching to a non-step tab (live) must not change the inner id
+    event2 = SimpleNamespace(
+        tabbed_content=SimpleNamespace(id="tabs"),
+        pane=SimpleNamespace(id="live"),
+    )
+    app.on_tabbed_content_tab_activated(event2)
+    assert app._current_step_inner_id == "step-tabs-1"
+
+    # Events from inner TabbedContents must be ignored
+    event3 = SimpleNamespace(
+        tabbed_content=SimpleNamespace(id="step-tabs-1"),
+        pane=SimpleNamespace(id="hist-1"),
+    )
+    app.on_tabbed_content_tab_activated(event3)
+    assert app._current_step_inner_id == "step-tabs-1"
+
+
 def test_standings_widget_drill_in_no_players_is_noop():
     """action_drill_in with empty player list does not post a message."""
     from game.tui.widgets import StandingsWidget

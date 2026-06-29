@@ -154,6 +154,14 @@ class LiarsDiceApp(App):
         self.query_one("#tabs", TabbedContent).add_pane(pane)
         self._outer_tab_ids.append(outer_id)
 
+    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+        if event.tabbed_content.id != "tabs":
+            return
+        pane_id = event.pane.id if event.pane else None
+        if pane_id and pane_id.startswith("step-"):
+            n = pane_id[len("step-") :]
+            self._current_step_inner_id = f"step-tabs-{n}"
+
     def on_series_started(self, message: SeriesStarted) -> None:
         self._current_label = message.label
         self._current_tier = _extract_tier(message.label)

@@ -358,6 +358,7 @@ def main() -> None:
 
     steps: list[dict] = []
     t_total = time.perf_counter()
+    t_sim_end: list[float] = []
 
     try:
         if args.tui:
@@ -401,6 +402,7 @@ def main() -> None:
                     print(f"[simulate] done in {elapsed:.1f}s")
                     steps.append({"date": step_date, "mode": mode, "output": output})
                     print()
+                t_sim_end.append(time.perf_counter())
 
             adapter.run(_run_quarter)
         else:
@@ -454,7 +456,9 @@ def main() -> None:
         if temp_lb_path and Path(temp_lb_path).exists():
             Path(temp_lb_path).unlink()
 
-    print(f"[simulate] total elapsed: {time.perf_counter() - t_total:.1f}s")
+    print(
+        f"[simulate] total elapsed: {(t_sim_end[0] if t_sim_end else time.perf_counter()) - t_total:.1f}s"
+    )
 
 
 if __name__ == "__main__":
