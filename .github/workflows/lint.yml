@@ -1,6 +1,8 @@
 name: Lint
 
 on:
+  pull_request:
+    branches: [main]
   pull_request_target:
     branches: [main]
 
@@ -28,7 +30,7 @@ jobs:
 
   commitlint:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request_target'
+    if: github.event_name == 'pull_request_target' || github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
         with:
