@@ -98,3 +98,40 @@ def test_run_series_no_seed_args_unchanged():
 
     result = run_series(_two_players(), n_games=3)
     assert sum(result.wins.values()) == 3
+
+
+def test_run_series_replay_deterministic_with_global_random_player():
+    """Players calling global random.random() must produce identical results on replay.
+
+    Regression test: before seeding the global random module per-game, players
+    like Cleo/Rick/Nuke that call random.random() directly produced different
+    outcomes between recording and replay runs.
+    """
+    import random as _random
+
+    from game.components.bets import Bet
+    from game.components.series import run_series
+
+    class _GlobalRandomPlayer:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            if prior_bet is None:
+                return Bet(1, 1, self.name)
+            return None if _random.random() < 0.4 else Bet(prior_bet.quantity + 1, 1, self.name)
+
+    class _GRA(_GlobalRandomPlayer):
+        pass
+
+    class _GRB(_GlobalRandomPlayer):
+        pass
+
+    def _players():
+        return [_GRA("A"), _GRB("B")]
+
+    seeds: list[int] = []
+    result_a = run_series(_players(), n_games=30, record_seeds=seeds)
+    result_b = run_series(_players(), n_games=30, replay_seeds=seeds)
+
+    assert result_a.wins == result_b.wins

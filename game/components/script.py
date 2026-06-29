@@ -38,7 +38,9 @@ def game_orchestrator(
     Returns:
         The winning player object.
     """
-    rng = random.Random(seed if seed is not None else secrets.randbits(64))
+    _game_seed = seed if seed is not None else secrets.randbits(64)
+    rng = random.Random(_game_seed)
+    random.seed(_game_seed)
     _sigs = {p: inspect.signature(p.algo).parameters for p in players}
     _wants_stats = {p: "stats" in _sigs[p] for p in players}
     _wants_tier = {p: "tier" in _sigs[p] for p in players}
