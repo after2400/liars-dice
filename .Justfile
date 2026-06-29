@@ -37,27 +37,29 @@ lint:
 register-player file username:
     PLAYER_FILE={{file}} GITHUB_USERNAME={{username}} DRY_RUN=1 uv run python .github/scripts/register_player.py
 
-# Simulate a season run (dry run). Optional date arg defaults to today.
+# Simulate a season run (dry run). Optional date and extra args.
 # Usage: just simulate-season
-#        just simulate-season 2026-07-07
+#        just simulate-season 2026-07-13
+#        just simulate-season 2026-07-13 --tui
 [group('algorithms')]
-simulate-season date=`date +%Y-%m-%d`:
-    TODAY={{date}} DRY_RUN=1 uv run python .github/scripts/run_season.py
+simulate-season *ARGS:
+    DRY_RUN=1 uv run python -m game.simulation.season {{ARGS}}
 
 # Simulate the next tournament (dry run). Finds the next quarterly Monday automatically.
+# Usage: just simulate-tournament
+#        just simulate-tournament --tui
 [group('algorithms')]
-simulate-tournament:
-    TODAY=$(uv run python -c "from game.season.utils import next_tournament_monday; print(next_tournament_monday())") DRY_RUN=1 uv run python .github/scripts/reset_season.py
+simulate-tournament *ARGS:
+    DRY_RUN=1 uv run python -m game.simulation.tournament {{ARGS}}
 
 # Simulate a full quarter: tournament + all regular Mondays. Writes sim-YYYY-QN.md.
 # Usage: just simulate-quarter
-#        just simulate-quarter 2026-07-06
-#        just simulate-quarter 2026-07-06 500
+#        just simulate-quarter --start 2026-07-06
+#        just simulate-quarter --start 2026-07-06 --n-games 500
+#        just simulate-quarter --n-games 500 --tui
 [group('algorithms')]
-simulate-quarter start='' n-games='':
-    uv run python -m game.simulation.quarter \
-        $([ -n "{{start}}" ] && echo "--start {{start}}") \
-        $([ -n "{{n-games}}" ] && echo "--n-games {{n-games}}")
+simulate-quarter *ARGS:
+    uv run python -m game.simulation.quarter {{ARGS}}
 
 # Reset files written by simulate-* recipes. Optional path for worktrees.
 # Usage: just clean

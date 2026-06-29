@@ -40,93 +40,85 @@ def test_compute_mondays_all_mondays():
         assert d.weekday() == 0  # Monday
 
 
-def test_run_step_sets_dry_run(monkeypatch):
+def test_run_step_calls_run_tournament(monkeypatch):
+    """run_step dispatches to run_tournament for mode='tournament'."""
     from game.simulation.quarter import run_step
 
     calls = []
 
-    class FakeProc:
-        stdout = iter(["[dry-run] would post\n"])
-        returncode = 0
+    def fake_run_tournament(n_games, lb_path, dashboard=None):
+        print("tournament called")
+        calls.append(("tournament", n_games, lb_path))
 
-        def wait(self):
-            pass
+    import sys
 
-    def fake_popen(cmd, **kwargs):
-        calls.append(kwargs.get("env", {}))
-        return FakeProc()
+    fake_mod = type(sys)("game.simulation.tournament")
+    fake_mod.run_tournament = fake_run_tournament
+    monkeypatch.setitem(sys.modules, "game.simulation.tournament", fake_mod)
 
-    monkeypatch.setattr("game.simulation.quarter.subprocess.Popen", fake_popen)
-    run_step(date(2026, 7, 6), "tournament", n_games=50, lb_path="leaderboard.yaml")
-
-    assert calls[0]["DRY_RUN"] == "true"
+    output = run_step(date(2026, 7, 6), "tournament", n_games=50, lb_path="lb.yaml")
+    assert calls == [("tournament", 50, "lb.yaml")]
+    assert "tournament called" in output
 
 
-def test_run_step_sets_today(monkeypatch):
+def test_run_step_calls_run_season(monkeypatch):
+    """run_step dispatches to run_season for mode='season'."""
     from game.simulation.quarter import run_step
 
     calls = []
 
-    class FakeProc:
-        stdout = iter([])
-        returncode = 0
+    def fake_run_season(n_games, top_n, lb_path, dashboard=None):
+        print("season called")
+        calls.append(("season", n_games, lb_path))
 
-        def wait(self):
-            pass
+    import sys
 
-    def fake_popen(cmd, **kwargs):
-        calls.append(kwargs.get("env", {}))
-        return FakeProc()
+    fake_mod = type(sys)("game.simulation.season")
+    fake_mod.run_season = fake_run_season
+    monkeypatch.setitem(sys.modules, "game.simulation.season", fake_mod)
 
-    monkeypatch.setattr("game.simulation.quarter.subprocess.Popen", fake_popen)
-    run_step(date(2026, 7, 13), "season", n_games=50, lb_path="leaderboard.yaml")
-
-    assert calls[0]["TODAY"] == "2026-07-13"
-
-
-def test_run_step_calls_correct_script(monkeypatch):
-    from game.simulation.quarter import run_step
-
-    cmds = []
-
-    class FakeProc:
-        stdout = iter([])
-        returncode = 0
-
-        def wait(self):
-            pass
-
-    def fake_popen(cmd, **kwargs):
-        cmds.append(cmd)
-        return FakeProc()
-
-    monkeypatch.setattr("game.simulation.quarter.subprocess.Popen", fake_popen)
-
-    run_step(date(2026, 7, 6), "tournament", n_games=50, lb_path="leaderboard.yaml")
-    assert "reset_season.py" in cmds[-1][-1]
-
-    run_step(date(2026, 7, 13), "season", n_games=50, lb_path="leaderboard.yaml")
-    assert "run_season.py" in cmds[-1][-1]
+    output = run_step(date(2026, 7, 13), "season", n_games=50, lb_path="lb.yaml")
+    assert calls == [("season", 50, "lb.yaml")]
+    assert "season called" in output
 
 
 def test_run_step_returns_captured_output(monkeypatch):
+    """run_step captures stdout from the in-process call and returns it."""
     from game.simulation.quarter import run_step
 
-    class FakeProc:
-        stdout = iter(["line one\n", "line two\n"])
-        returncode = 0
+    def fake_run_tournament(n_games, lb_path, dashboard=None):
+        print("line one")
+        print("line two")
 
-        def wait(self):
-            pass
+    import sys
 
-    monkeypatch.setattr(
-        "game.simulation.quarter.subprocess.Popen",
-        lambda *a, **kw: FakeProc(),
-    )
+    fake_mod = type(sys)("game.simulation.tournament")
+    fake_mod.run_tournament = fake_run_tournament
+    monkeypatch.setitem(sys.modules, "game.simulation.tournament", fake_mod)
 
-    output = run_step(date(2026, 7, 6), "tournament", n_games=50, lb_path="leaderboard.yaml")
+    output = run_step(date(2026, 7, 6), "tournament", n_games=50, lb_path="lb.yaml")
     assert "line one" in output
     assert "line two" in output
+
+
+def test_run_step_passes_dashboard(monkeypatch):
+    """run_step passes dashboard arg through to the in-process call."""
+    from game.simulation.quarter import run_step
+
+    received = []
+
+    def fake_run_tournament(n_games, lb_path, dashboard=None):
+        received.append(dashboard)
+
+    import sys
+
+    fake_mod = type(sys)("game.simulation.tournament")
+    fake_mod.run_tournament = fake_run_tournament
+    monkeypatch.setitem(sys.modules, "game.simulation.tournament", fake_mod)
+
+    sentinel = object()
+    run_step(date(2026, 7, 6), "tournament", n_games=50, lb_path="lb.yaml", dashboard=sentinel)
+    assert received == [sentinel]
 
 
 def test_write_report_contains_quarter_header(tmp_path):
@@ -163,9 +155,9 @@ def test_write_report_contains_monday_sections(tmp_path):
 
     text = out.read_text()
     assert "2026-07-06" in text
-    assert "Tournament" in text
-    assert "2026-07-13" in text
     assert "Week 1" in text
+    assert "2026-07-13" in text
+    assert "Week 2" in text
     assert "tournament output" in text
     assert "season output" in text
 

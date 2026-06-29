@@ -117,9 +117,11 @@ if len(players) < 2:
 if not args.no_game_results:
     print(f"Playing: {[type(p).__name__ for p in players]}")
 
-wins = run_series(players, N_GAMES, tier=args.tier)
-print(format_results(wins, N_GAMES))
+result = run_series(players, N_GAMES, tier=args.tier)
+display_names = {type(p).__name__: p.name for p in players}
+display_wins = {display_names.get(k, k): v for k, v in result.wins.items()}
+print(format_results(display_wins, N_GAMES))
 
 if args.results_file:
     with open(args.results_file, "w") as f:
-        json.dump(wins, f)
+        json.dump(result.wins, f)

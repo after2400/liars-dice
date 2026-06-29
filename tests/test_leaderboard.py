@@ -1,3 +1,5 @@
+from collections import namedtuple as _nt
+
 import yaml
 
 from game.components.leaderboard import (
@@ -260,6 +262,185 @@ def test_apply_season_results_no_relegation_when_tier_below_capacity(tmp_path):
 
     assert result["players"]["P1"]["tier"] == "CH"  # top promotes
     assert result["players"]["P2"]["tier"] == "L1"  # stays — L1 is below capacity, no relegation
+
+
+# --- H2H tiebreaker ---
+
+# Die exchange data extracted from a real 500-game PRM session (Oracle, Nuke LaLoosh,
+# Stewie screenshot). Verified: column sums = 0 (every exchange counted from both sides).
+#
+#  Oracle vs Nuke:   Lost B/C=269/100  Won B/C=208/189  Net +28
+#  Oracle vs Stewie: Lost B/C=238/113  Won B/C=178/126  Net -47  → Oracle aggregate: -19
+#  Nuke   vs Oracle: Lost B/C=208/189  Won B/C=269/100  Net -28
+#  Nuke   vs Stewie: Lost B/C=214/152  Won B/C=230/135  Net  -1  → Nuke   aggregate: -29
+#  Stewie vs Oracle: Lost B/C=178/126  Won B/C=238/113  Net +47
+#  Stewie vs Nuke:   Lost B/C=230/135  Won B/C=214/152  Net  +1  → Stewie aggregate: +48
+
+_MockStats = _nt("_MockStats", ["die_losses_from_bluff", "die_losses_from_challenge"])
+
+_SAMPLE_STATS = _MockStats(
+    die_losses_from_bluff={
+        "Oracle": {"Nuke": 269, "Stewie": 238},
+        "Nuke": {"Oracle": 208, "Stewie": 214},
+        "Stewie": {"Oracle": 178, "Nuke": 230},
+    },
+    die_losses_from_challenge={
+        "Oracle": {"Nuke": 100, "Stewie": 113},
+        "Nuke": {"Oracle": 189, "Stewie": 152},
+        "Stewie": {"Oracle": 126, "Nuke": 135},
+    },
+)
+
+
+def test_h2h_aggregate_sample_data():
+    """_h2h_aggregate matches the +28/-47/-1/+47/+1/-28 values from the screenshot."""
+    from game.components.leaderboard import _h2h_aggregate
+
+    group = ["Oracle", "Nuke", "Stewie"]
+    assert _h2h_aggregate("Oracle", group, _SAMPLE_STATS) == -19  # +28 + -47
+    assert _h2h_aggregate("Nuke", group, _SAMPLE_STATS) == -29  # -28 + -1
+    assert _h2h_aggregate("Stewie", group, _SAMPLE_STATS) == +48  # +47 + +1
+    # Sanity: the three aggregates must sum to zero
+    total = sum(_h2h_aggregate(n, group, _SAMPLE_STATS) for n in group)
+    assert total == 0
+
+
+def test_h2h_aggregate_name_map_translates_class_to_display():
+    """When class names differ from display names, name_map bridges the gap.
+
+    Without name_map, lookups against display-name-keyed stats silently return
+    0 for every player whose class name != display name.
+    """
+    from game.components.leaderboard import _h2h_aggregate
+
+    # Class names are different from the display names in _SAMPLE_STATS
+    name_map = {"OracleBot": "Oracle", "NukeLaLoosh": "Nuke", "EvilStewie": "Stewie"}
+    group = ["OracleBot", "NukeLaLoosh", "EvilStewie"]
+
+    # Without name_map every lookup misses → all zeros
+    assert _h2h_aggregate("OracleBot", group, _SAMPLE_STATS) == 0
+    assert _h2h_aggregate("NukeLaLoosh", group, _SAMPLE_STATS) == 0
+
+    # With name_map results match the display-name variants exactly
+    assert _h2h_aggregate("OracleBot", group, _SAMPLE_STATS, name_map=name_map) == -19
+    assert _h2h_aggregate("NukeLaLoosh", group, _SAMPLE_STATS, name_map=name_map) == -29
+    assert _h2h_aggregate("EvilStewie", group, _SAMPLE_STATS, name_map=name_map) == +48
+    total = sum(_h2h_aggregate(n, group, _SAMPLE_STATS, name_map=name_map) for n in group)
+    assert total == 0
+
+
+def test_settle_h2h_breaks_two_way_win_tie_relegates_nuke(tmp_path):
+    """Oracle and Nuke both at 58 wins — H2H (+28 Oracle over Nuke) sends Nuke down."""
+    from game.components.leaderboard import settle_relegations
+
+    players = {
+        "Alice": _p("PRM"),
+        "Bruno": _p("PRM"),
+        "Cleo": _p("PRM"),
+        "Oracle": _p("PRM"),
+        "Nuke": _p("PRM"),
+    }
+    path = _write(tmp_path, players)
+
+    # top_n=4, 5 players → capacity=4, excess=1. Alice/Bruno/Cleo safe; Oracle vs Nuke
+    # tied at 20 wins. Without H2H the tiebreak would be tier_since (identical), so
+    # result is undefined. With H2H, Oracle dominates Nuke → Nuke relegated.
+    tier_results = {"PRM": {"Alice": 80, "Bruno": 70, "Cleo": 60, "Oracle": 20, "Nuke": 20}}
+    moves = settle_relegations(
+        tier_results,
+        top_n=4,
+        path=path,
+        tier_stats={"PRM": _SAMPLE_STATS},
+    )
+
+    with open(path) as f:
+        result = yaml.safe_load(f)["players"]
+    assert result["Nuke"]["tier"] == "CH"
+    assert result["Oracle"]["tier"] == "PRM"
+    assert moves == ["Relegated: Nuke → CH"]
+
+
+def test_settle_h2h_three_way_win_tie_relegates_nuke(tmp_path):
+    """Oracle, Nuke, and Stewie all at 20 wins. Nuke (aggregate -29) is worst; Oracle
+    (-19) and Stewie (+48) stay. Capacity=4 with 5 players forces exactly 1 relegation."""
+    from game.components.leaderboard import settle_relegations
+
+    players = {
+        "Alice": _p("PRM"),
+        "Bruno": _p("PRM"),
+        "Oracle": _p("PRM"),
+        "Nuke": _p("PRM"),
+        "Stewie": _p("PRM"),
+    }
+    path = _write(tmp_path, players)
+
+    tier_results = {"PRM": {"Alice": 80, "Bruno": 70, "Oracle": 20, "Nuke": 20, "Stewie": 20}}
+    moves = settle_relegations(
+        tier_results,
+        top_n=4,
+        path=path,
+        tier_stats={"PRM": _SAMPLE_STATS},
+    )
+
+    with open(path) as f:
+        result = yaml.safe_load(f)["players"]
+    assert result["Nuke"]["tier"] == "CH"
+    assert result["Oracle"]["tier"] == "PRM"
+    assert result["Stewie"]["tier"] == "PRM"
+    assert moves == ["Relegated: Nuke → CH"]
+
+
+def test_settle_h2h_not_used_when_wins_differ(tmp_path):
+    """H2H is only a tiebreaker — never overrides a real win difference."""
+    from game.components.leaderboard import settle_relegations
+
+    players = {
+        "Alice": _p("PRM"),
+        "Bruno": _p("PRM"),
+        "Cleo": _p("PRM"),
+        "Oracle": _p("PRM"),
+        "Nuke": _p("PRM"),
+    }
+    path = _write(tmp_path, players)
+
+    # Nuke has FEWER wins than Oracle, so Nuke is relegated regardless of H2H advantage.
+    # _SAMPLE_STATS gives Oracle net +28 over Nuke, but wins dominate.
+    tier_results = {"PRM": {"Alice": 80, "Bruno": 70, "Cleo": 60, "Oracle": 30, "Nuke": 10}}
+    settle_relegations(
+        tier_results,
+        top_n=4,
+        path=path,
+        tier_stats={"PRM": _SAMPLE_STATS},
+    )
+
+    with open(path) as f:
+        result = yaml.safe_load(f)["players"]
+    assert result["Nuke"]["tier"] == "CH"
+    assert result["Oracle"]["tier"] == "PRM"
+
+
+def test_settle_h2h_falls_back_gracefully_without_stats(tmp_path):
+    """When tier_stats is None the sort degrades to (wins, tier_games, tier_since) — no error."""
+    from game.components.leaderboard import settle_relegations
+
+    # 5 PRM + 6 others = 11 total → tier_capacities(11)["PRM"]=4 → excess=1
+    players = {
+        "Alice": _p("PRM"),
+        "Bruno": _p("PRM"),
+        "Cleo": _p("PRM"),
+        "Diana": _p("PRM"),
+        "Eve": _p("PRM"),
+        **{f"L{i}": _p("L1") for i in range(6)},
+    }
+    path = _write(tmp_path, players)
+
+    tier_results = {"PRM": {"Alice": 70, "Bruno": 60, "Cleo": 50, "Diana": 40, "Eve": 10}}
+    moves = settle_relegations(tier_results, top_n=4, path=path, tier_stats=None)
+
+    with open(path) as f:
+        result = yaml.safe_load(f)["players"]
+    assert result["Eve"]["tier"] == "CH"  # worst wins, no H2H needed
+    assert moves == ["Relegated: Eve → CH"]
 
 
 # --- build_display_names ---

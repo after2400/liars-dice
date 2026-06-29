@@ -93,12 +93,43 @@ def _TIER_CAPACITY(tier: str, top_n: int) -> float:
     return float("inf")
 
 
+def _h2h_aggregate(
+    name: str,
+    group: list[str],
+    stats,
+    name_map: dict[str, str] | None = None,
+) -> int:
+    """Net die advantage of `name` against all others in `group`.
+
+    Counts dice opponents lost to `name`'s bluffs/challenges, minus dice
+    `name` lost to opponents' bluffs/challenges. Positive = dominated the
+    group; negative = was dominated. Used as a tiebreaker when wins and
+    historical games are both equal.
+
+    name_map: optional class-name → display-name translation. Stats are
+    keyed by display names (p.name); wins/candidates use class names as keys.
+    Pass build_display_names() result to bridge the two namespaces.
+    """
+    tr = (lambda n: name_map.get(n, n)) if name_map else (lambda n: n)
+    score = 0
+    for opp in group:
+        if opp == name:
+            continue
+        ln, lo = tr(name), tr(opp)
+        score += stats.die_losses_from_bluff.get(lo, {}).get(ln, 0)
+        score += stats.die_losses_from_challenge.get(lo, {}).get(ln, 0)
+        score -= stats.die_losses_from_bluff.get(ln, {}).get(lo, 0)
+        score -= stats.die_losses_from_challenge.get(ln, {}).get(lo, 0)
+    return score
+
+
 def apply_season_results(
     wins: dict[str, int],
     n_games: int,
     tier: str,
     top_n: int,
     path: str = _LEADERBOARD_PATH,
+    stats=None,
 ) -> list[str]:
     """Update stats and apply the immediate promotion for a scheduled run."""
     if os.path.exists(path):
@@ -124,12 +155,20 @@ def apply_season_results(
         ts_tier["games"] += n_games
         ts_tier["win_pct"] = round(ts_tier["wins"] / ts_tier["games"] * 100, 1)
 
-    # Rank by wins desc; tiebreak on historical tier games desc, then tier_since asc
+    # Rank by wins desc; tiebreak: historical tier games desc, H2H aggregate desc, tier_since asc
+    players_in_run = list(wins.keys())
+    display_names = build_display_names(data["players"])
+
     def _rank_key(item):
         name, w = item
         p = data["players"].get(name, {})
         tier_games = p.get("tier_stats", {}).get(tier, {}).get("games", 0)
-        return (-w, -tier_games, p.get("tier_since", ""))
+        h2h = (
+            _h2h_aggregate(name, players_in_run, stats, name_map=display_names)
+            if stats is not None
+            else 0
+        )
+        return (-w, -tier_games, -h2h, p.get("tier_since", ""))
 
     ranked = sorted(wins.items(), key=_rank_key)
     players_in_tier = [name for name, _ in ranked if name in data["players"]]
@@ -137,8 +176,6 @@ def apply_season_results(
     tier_above = _TIER_ABOVE.get(tier)
 
     movements: list[str] = []
-
-    display_names = build_display_names(data["players"])
 
     def _display(name: str) -> str:
         return display_names.get(name, name)
@@ -160,6 +197,7 @@ def settle_relegations(
     tier_results: dict[str, dict[str, int]],
     top_n: int,
     path: str = _LEADERBOARD_PATH,
+    tier_stats: dict | None = None,
 ) -> list[str]:
     """Top-down relegation settlement, run once after a full bottom-up season.
 
@@ -170,6 +208,9 @@ def settle_relegations(
 
     tier_results: {tier: {player: win_count}} for this run's games — used to
         rank who played worst in each tier.
+    tier_stats: optional {tier: GameStats} — when provided, H2H die-exchange
+        aggregate is used as a 3rd tiebreaker (after wins and cumulative tier
+        games) so the player most dominated by their peers is relegated first.
     Returns "Relegated: <name> → <tier>" movement strings, in cascade order.
     """
     if os.path.exists(path):
@@ -203,15 +244,20 @@ def settle_relegations(
         protected = parachutists.get(tier, set())
         this_season = tier_results.get(tier, {})
         candidates = [n for n in residents if n in this_season and n not in protected]
+        tier_season_stats = (tier_stats or {}).get(tier)
 
         # Worst-first ordering. Python's sort is stable, so sort by the
         # least-significant key first: tier_since DESC (newest first), then by
-        # (this-season wins ASC, total tier games ASC).
+        # (this-season wins ASC, cumulative tier games ASC, H2H aggregate ASC).
+        # Lower H2H aggregate = more dominated by peers = relegated first.
         candidates.sort(key=lambda n: players[n].get("tier_since", ""), reverse=True)
         candidates.sort(
             key=lambda n: (
                 this_season[n],
                 players[n].get("tier_stats", {}).get(tier, {}).get("games", 0),
+                _h2h_aggregate(n, candidates, tier_season_stats, name_map=display_names)
+                if tier_season_stats is not None
+                else 0,
             )
         )
 

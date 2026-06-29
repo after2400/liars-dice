@@ -55,6 +55,29 @@ class GameStats:
         self._revealed_dice_count: dict[str, int] = defaultdict(int)
         self._current_round_bets: list[int] = []
 
+        # Backing stores: die-loss tracking per opponent
+        self._die_losses_from_bluff: dict[str, dict[str, int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
+        self._die_losses_from_challenge: dict[str, dict[str, int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
+
+        # Backing stores: per-face call accuracy
+        self._challenge_success_by_face: dict[str, dict[int, int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
+        self._challenge_count_by_face: dict[str, dict[int, int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
+
+        # Backing stores: rounds/games counters
+        self._rounds_played: dict[str, int] = defaultdict(int)
+        self._games_played: dict[str, int] = defaultdict(int)
+
+        # Backing store: penalty count
+        self._penalty_count: dict[str, int] = defaultdict(int)
+
     # ── Read-only properties ──────────────────────────────────────────────────
 
     @property
@@ -113,11 +136,41 @@ class GameStats:
     def dice_counts(self) -> dict[str, int]:
         return dict(self._dice_counts)
 
+    @property
+    def die_losses_from_bluff(self) -> dict[str, dict[str, int]]:
+        return {k: dict(v) for k, v in self._die_losses_from_bluff.items()}
+
+    @property
+    def die_losses_from_challenge(self) -> dict[str, dict[str, int]]:
+        return {k: dict(v) for k, v in self._die_losses_from_challenge.items()}
+
+    @property
+    def challenge_success_by_face(self) -> dict[str, dict[int, int]]:
+        return {k: dict(v) for k, v in self._challenge_success_by_face.items()}
+
+    @property
+    def challenge_count_by_face(self) -> dict[str, dict[int, int]]:
+        return {k: dict(v) for k, v in self._challenge_count_by_face.items()}
+
+    @property
+    def rounds_played(self) -> dict[str, int]:
+        return dict(self._rounds_played)
+
+    @property
+    def games_played(self) -> dict[str, int]:
+        return dict(self._games_played)
+
+    @property
+    def penalty_count(self) -> dict[str, int]:
+        return dict(self._penalty_count)
+
     # ── Mutation methods (engine-internal only) ───────────────────────────────
 
     def start_game(self, player_names: list[str]) -> None:
         """Call at the start of each game. Resets dice_counts to 5 for all players."""
         self._dice_counts = {name: 5 for name in player_names}
+        for name in player_names:
+            self._games_played[name] += 1
 
     def update_bet(self, bet_entry: dict, is_opening_bid: bool, total_dice: int) -> None:
         """Call after each accepted bid. Updates face_bias, bid_increment, opening_aggression,
@@ -251,8 +304,30 @@ class GameStats:
         if loser in self._dice_counts:
             self._dice_counts[loser] -= 1
 
+        # Die-loss tracking per opponent
+        if not bet_held:
+            # bidder's bluff was caught — bidder lost a die, challenger won it
+            self._die_losses_from_bluff[bidder][challenger] += 1
+        else:
+            # challenger's call was wrong — challenger lost a die, bidder won it
+            self._die_losses_from_challenge[challenger][bidder] += 1
+
+        # Per-face call accuracy
+        face = final_bet.face
+        self._challenge_count_by_face[challenger][face] += 1
+        if not bet_held:
+            self._challenge_success_by_face[challenger][face] += 1
+
+        # Rounds survived: every player present in hands this round
+        for player_name in hands:
+            self._rounds_played[player_name] += 1
+
     def reset_round(self, new_round_num: int) -> None:
         """Call after update_outcome at the end of each round. Clears current-round bet tracking
         so current_round_velocity reflects only the new round's bids."""
         self._current_round_bets = []
         self._current_round_velocity = 1.0
+
+    def record_penalty(self, player_name: str) -> None:
+        """Call when a player incurs a penalty (exception, invalid bid, liar-with-no-bet)."""
+        self._penalty_count[player_name] += 1

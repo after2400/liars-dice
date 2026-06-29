@@ -204,8 +204,9 @@ def test_no_leaderboard_update_written(tmp_path):
     assert lb_path.read_text() == original_content
 
 
-def test_display_name_used_in_series_results(tmp_path):
-    """Series results dict keys are player display names (p.name), not class names."""
+def test_class_name_used_in_series_results(tmp_path):
+    """Series results dict (JSON) keys are class names, not display names."""
+
     from game.components.utils import import_player_classes_from_dir
 
     now = "2026-01-01T00:00:00Z"
@@ -227,6 +228,7 @@ def test_display_name_used_in_series_results(tmp_path):
             "tier_stats": stats or {},
         }
 
+    # Alice/Bruno: class name == display name — still the class name in results
     lb = {
         "total_runs": 1,
         "players": {
@@ -240,6 +242,23 @@ def test_display_name_used_in_series_results(tmp_path):
     }
     results = run_game(["5", "4", "--tier", "PRM"], lb, tmp_path)
     assert set(results.keys()) == {"Alice", "Bruno"}
+
+    # Nuke: class name "Nuke", display name "Nuke LaLoosh" — results use the class name
+    nuke_entry = _entry("PRM", "Nuke LaLoosh", {"PRM": {"wins": 40, "games": 100, "win_pct": 40.0}})
+    lb2 = {
+        "total_runs": 1,
+        "players": {
+            name: nuke_entry
+            if name == "Nuke"
+            else _entry("PRM", "Bruno", {"PRM": {"wins": 30, "games": 100, "win_pct": 30.0}})
+            if name == "Bruno"
+            else _entry("inactive")
+            for name in all_names
+        },
+    }
+    results2 = run_game(["5", "4", "--tier", "PRM"], lb2, tmp_path)
+    assert "Nuke" in results2, "class key expected, not display name"
+    assert "Nuke LaLoosh" not in results2
 
 
 def test_players_flag_runs_exactly_named_players(tmp_path):
@@ -925,3 +944,357 @@ def test_bet_history_includes_dice_count():
         assert "dice_count" in entry, f"missing dice_count in bet_history entry: {entry}"
         assert isinstance(entry["dice_count"], int)
         assert 1 <= entry["dice_count"] <= 5
+
+
+def _make_outcome(bidder, challenger, bet_held, loser, hands, face=2):
+    """Helper: build a minimal outcome dict for stats testing."""
+    from game.components.bets import Bet
+
+    return {
+        "game": 1,
+        "round": 1,
+        "hands": {k: tuple(v) for k, v in hands.items()},
+        "final_bet": Bet(1, face, bidder),
+        "bidder": bidder,
+        "challenger": challenger,
+        "bet_held": bet_held,
+        "loser": loser,
+    }
+
+
+def test_die_losses_from_bluff_tracked():
+    """die_losses_from_bluff[loser][challenger] increments when bid fails."""
+    from game.components.stats import GameStats
+
+    s = GameStats()
+    s.start_game(["Alice", "Bruno"])
+    outcome = _make_outcome(
+        bidder="Alice",
+        challenger="Bruno",
+        bet_held=False,
+        loser="Alice",
+        hands={"Alice": (1,), "Bruno": (2,)},
+    )
+    s.update_outcome(outcome)
+    assert s.die_losses_from_bluff.get("Alice", {}).get("Bruno", 0) == 1
+    assert s.die_losses_from_challenge.get("Bruno", {}).get("Alice", 0) == 0
+
+
+def test_die_losses_from_challenge_tracked():
+    """die_losses_from_challenge[loser][bidder] increments when call fails."""
+    from game.components.stats import GameStats
+
+    s = GameStats()
+    s.start_game(["Alice", "Bruno"])
+    outcome = _make_outcome(
+        bidder="Alice",
+        challenger="Bruno",
+        bet_held=True,
+        loser="Bruno",
+        hands={"Alice": (2,), "Bruno": (1,)},
+    )
+    s.update_outcome(outcome)
+    assert s.die_losses_from_challenge.get("Bruno", {}).get("Alice", 0) == 1
+    assert s.die_losses_from_bluff.get("Alice", {}).get("Bruno", 0) == 0
+
+
+def test_challenge_accuracy_by_face_tracked():
+    """challenge_success_by_face and challenge_count_by_face increment on calls."""
+    from game.components.stats import GameStats
+
+    s = GameStats()
+    s.start_game(["Alice", "Bruno"])
+    success = _make_outcome(
+        "Alice",
+        "Bruno",
+        bet_held=False,
+        loser="Alice",
+        hands={"Alice": (1,), "Bruno": (2,)},
+        face=3,
+    )
+    fail = _make_outcome(
+        "Alice", "Bruno", bet_held=True, loser="Bruno", hands={"Alice": (3,), "Bruno": (2,)}, face=3
+    )
+    s.update_outcome(success)
+    s.update_outcome(fail)
+    assert s.challenge_count_by_face.get("Bruno", {}).get(3, 0) == 2
+    assert s.challenge_success_by_face.get("Bruno", {}).get(3, 0) == 1
+
+
+def test_rounds_played_increments_per_hand_participant():
+    """rounds_played increments for every player present in hands each round."""
+    from game.components.stats import GameStats
+
+    s = GameStats()
+    s.start_game(["Alice", "Bruno", "Cleo"])
+    outcome = _make_outcome(
+        "Alice",
+        "Bruno",
+        bet_held=False,
+        loser="Alice",
+        hands={"Alice": (1,), "Bruno": (2,), "Cleo": (3,)},
+    )
+    s.update_outcome(outcome)
+    assert s.rounds_played.get("Alice", 0) == 1
+    assert s.rounds_played.get("Bruno", 0) == 1
+    assert s.rounds_played.get("Cleo", 0) == 1
+
+
+def test_games_played_increments_on_start_game():
+    """games_played increments for each player when start_game is called."""
+    from game.components.stats import GameStats
+
+    s = GameStats()
+    s.start_game(["Alice", "Bruno"])
+    s.start_game(["Alice", "Bruno"])
+    assert s.games_played.get("Alice", 0) == 2
+    assert s.games_played.get("Bruno", 0) == 2
+
+
+def test_record_penalty_increments():
+    """record_penalty increments penalty_count for the named player."""
+    from game.components.stats import GameStats
+
+    s = GameStats()
+    s.start_game(["Alice", "Bruno"])
+    s.record_penalty("Alice")
+    s.record_penalty("Alice")
+    s.record_penalty("Bruno")
+    assert s.penalty_count.get("Alice", 0) == 2
+    assert s.penalty_count.get("Bruno", 0) == 1
+
+
+def test_run_series_returns_series_result():
+    """run_series returns a SeriesResult with wins and stats fields."""
+    from game.components.series import SeriesResult, run_series
+
+    class AlwaysBid:
+        name = "A"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            from game.components.bets import Bet
+
+            return (
+                Bet(1, 2, self.name)
+                if prior_bet is None
+                else Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+            )
+
+    class AlwaysCall:
+        name = "B"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            return None
+
+    result = run_series([AlwaysBid(), AlwaysCall()], n_games=3)
+    assert isinstance(result, SeriesResult)
+    assert isinstance(result.wins, dict)
+    assert sum(result.wins.values()) == 3
+    assert result.stats is not None
+    assert result.outcomes is None  # capture_outcomes defaults to False
+
+
+def test_run_series_capture_outcomes():
+    """run_series with capture_outcomes=True populates SeriesResult.outcomes."""
+    from game.components.series import run_series
+
+    class AlwaysBid:
+        name = "A"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            from game.components.bets import Bet
+
+            return (
+                Bet(1, 2, self.name)
+                if prior_bet is None
+                else Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+            )
+
+    class AlwaysCall:
+        name = "B"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            return None
+
+    result = run_series([AlwaysBid(), AlwaysCall()], n_games=2, capture_outcomes=True)
+    assert result.outcomes is not None
+    assert len(result.outcomes) > 0
+
+
+def test_on_game_complete_fires_each_game():
+    """on_game_complete is called once per game with current wins and stats."""
+    from game.components.series import run_series
+    from game.components.stats import GameStats
+
+    calls = []
+
+    def callback(game_num, wins, stats):
+        calls.append((game_num, dict(wins), isinstance(stats, GameStats)))
+
+    class AlwaysBid:
+        name = "A"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            from game.components.bets import Bet
+
+            return (
+                Bet(1, 2, self.name)
+                if prior_bet is None
+                else Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+            )
+
+    class AlwaysCall:
+        name = "B"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            return None
+
+    run_series([AlwaysBid(), AlwaysCall()], n_games=5, on_game_complete=callback)
+    assert len(calls) == 5
+    assert calls[0][0] == 1
+    assert calls[4][0] == 5
+    assert all(c[2] for c in calls)  # each call received a GameStats
+
+
+def test_penalty_count_on_exception(tmp_path):
+    """A player that raises an exception is penalised — penalty_count increments."""
+    import textwrap
+
+    from game.components.series import run_series
+    from game.components.utils import import_player_classes_from_dir
+
+    player_src = textwrap.dedent("""
+        from game.components.bets import Bet
+
+        class Crasher:
+            name = "Crasher"
+            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+                raise RuntimeError("boom")
+    """)
+    player_dir = tmp_path / "players"
+    player_dir.mkdir()
+    (player_dir / "crasher.py").write_text(player_src)
+    (player_dir / "__init__.py").write_text("")
+
+    class AlwaysBid:
+        name = "AlwaysBid"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            from game.components.bets import Bet
+
+            return (
+                Bet(1, 2, self.name)
+                if prior_bet is None
+                else Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+            )
+
+    players = import_player_classes_from_dir(str(player_dir))
+    result = run_series(players + [AlwaysBid()], n_games=3)
+    # Crasher crashes every round it plays (not just once per game), so count >= 3*1
+    assert result.stats.penalty_count.get("Crasher", 0) >= 3
+
+
+def test_tui_adapter_no_crash_without_app():
+    """TuiAdapter methods are no-ops when the app is not running (no terminal needed)."""
+    from game.components.stats import GameStats
+    from game.tui import TuiAdapter
+
+    wins = {"Oracle": 0, "EvilStewie": 0}
+    stats = GameStats()
+    stats.start_game(["Oracle", "EvilStewie"])
+
+    adapter = TuiAdapter(n_games=10)
+    # _app is None before .run() is called — all methods should be no-ops
+    adapter.start_series("Test Series")
+    wins["Oracle"] += 1
+    adapter.update(1, wins, stats)
+    adapter.on_series_complete("Test Series", None)
+
+
+def test_simulation_season_run_season(tmp_path):
+    """run_season runs tier games in-process and updates the leaderboard."""
+    import textwrap
+
+    import yaml
+
+    from game.simulation.season import run_season
+
+    # Build a minimal leaderboard with 2 L1 players
+    lb = {
+        "players": {
+            "AliceBot": {"tier": "L1", "tier_stats": {}, "tier_since": "2026-01-01T00:00:00Z"},
+            "BrunoBot": {"tier": "L1", "tier_stats": {}, "tier_since": "2026-01-01T00:00:00Z"},
+        }
+    }
+    lb_path = str(tmp_path / "leaderboard.yaml")
+    with open(lb_path, "w") as f:
+        yaml.dump(lb, f)
+
+    # Write stub player files
+    players_dir = tmp_path / "players"
+    players_dir.mkdir()
+    for name in ("AliceBot", "BrunoBot"):
+        (players_dir / f"{name.lower()}.py").write_text(
+            textwrap.dedent(f"""
+            from game.components.bets import Bet
+            class {name}:
+                name = "{name}"
+                def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+                    if prior_bet is None:
+                        return Bet(1, 2, self.name)
+                    return None
+        """)
+        )
+    (players_dir / "__init__.py").write_text("")
+
+    results = run_season(n_games=5, top_n=4, lb_path=lb_path, players_dir=str(players_dir))
+    assert "L1" in results
+    assert sum(results["L1"].values()) == 5
+
+
+def test_simulation_tournament_run_tournament(tmp_path):
+    """run_tournament runs pool games and assigns placements."""
+    import textwrap
+
+    import yaml
+
+    from game.simulation.tournament import run_tournament
+
+    lb = {
+        "players": {
+            "AliceBot": {"tier": "L1", "tier_stats": {}, "tier_since": "2026-01-01T00:00:00Z"},
+            "BrunoBot": {"tier": "L1", "tier_stats": {}, "tier_since": "2026-01-01T00:00:00Z"},
+            "CleoBot": {"tier": "CH", "tier_stats": {}, "tier_since": "2026-01-01T00:00:00Z"},
+            "DaveBot": {"tier": "PRM", "tier_stats": {}, "tier_since": "2026-01-01T00:00:00Z"},
+        },
+        "tournament_state": {},
+    }
+    lb_path = str(tmp_path / "leaderboard.yaml")
+    with open(lb_path, "w") as f:
+        yaml.dump(lb, f)
+
+    players_dir = tmp_path / "players"
+    players_dir.mkdir()
+    for name in ("AliceBot", "BrunoBot", "CleoBot", "DaveBot"):
+        (players_dir / f"{name.lower()}.py").write_text(
+            textwrap.dedent(f"""
+            from game.components.bets import Bet
+            class {name}:
+                name = "{name}"
+                def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+                    if prior_bet is None:
+                        return Bet(1, 2, self.name)
+                    return None
+        """)
+        )
+    (players_dir / "__init__.py").write_text("")
+
+    pool_results = run_tournament(n_games=5, lb_path=lb_path, players_dir=str(players_dir))
+    assert len(pool_results) >= 1
+    # After assignment, all players should have a tier
+    import yaml
+
+    with open(lb_path) as f:
+        data = yaml.safe_load(f)
+    tiers = {p["tier"] for p in data["players"].values()}
+    assert tiers <= {"PRM", "CH", "L1", "DED", "inactive"}

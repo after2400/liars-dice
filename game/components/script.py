@@ -155,6 +155,8 @@ def game_orchestrator(
                     traceback.format_exc().rstrip(),
                 )
                 loser = player_idx
+                if stats is not None:
+                    stats.record_penalty(player.name)
                 break
 
             if action is None:
@@ -162,6 +164,8 @@ def game_orchestrator(
                 if current_bet is None:
                     logger.warning(f"{player.name} called liar with no prior bet - penalised")
                     loser = player_idx
+                    if stats is not None:
+                        stats.record_penalty(player.name)
                 else:
                     logger.info(
                         f"{player.name} calls LIAR on [{current_bet}] "
@@ -202,9 +206,13 @@ def game_orchestrator(
                 if ones_allowed is False and action.face == 1:
                     logger.warning(f"{player.name} bid on 1s after non-1 opening bid - penalised")
                     loser = player_idx
+                    if stats is not None:
+                        stats.record_penalty(player.name)
                 elif current_bet is not None and not bet_validator(current_bet, action):
                     logger.warning(f"{player.name} made invalid bid [{action}] - penalised")
                     loser = player_idx
+                    if stats is not None:
+                        stats.record_penalty(player.name)
                 else:
                     if ones_allowed is None:
                         ones_allowed = action.face == 1

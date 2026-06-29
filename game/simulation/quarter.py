@@ -4,16 +4,13 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
 import time
 from datetime import date, datetime, timedelta
-from io import StringIO
 from pathlib import Path
 
 from game.season.utils import current_quarter, next_tournament_monday
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
-_SCRIPTS = _REPO_ROOT / ".github" / "scripts"
 
 
 def compute_mondays(start: date) -> list[tuple[date, str]]:
@@ -37,33 +34,34 @@ def run_step(
     mode: str,
     n_games: int,
     lb_path: str,
+    dashboard=None,
 ) -> str:
-    """Run one Monday step via subprocess. Always sets DRY_RUN=true.
+    """Run one Monday step in-process. Returns captured stdout text for the report.
 
-    Streams stdout+stderr to console line-by-line while accumulating for return.
+    TuiAdapter writes to stderr so it reaches the terminal even while stdout
+    is redirected here for report capture.
     """
-    script = _SCRIPTS / ("reset_season.py" if mode == "tournament" else "run_season.py")
-    env = {
-        **os.environ,
-        "TODAY": step_date.isoformat(),
-        "DRY_RUN": "true",
-        "N_GAMES": str(n_games),
-        "LEADERBOARD_PATH": lb_path,
-    }
-    proc = subprocess.Popen(
-        ["uv", "run", "python", str(script)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        env=env,
-        cwd=str(_REPO_ROOT),
-    )
-    buf = StringIO()
-    for line in proc.stdout:
-        print(line, end="", flush=True)
-        buf.write(line)
-    proc.wait()
-    return buf.getvalue()
+    import io
+    from contextlib import redirect_stdout
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        if mode == "tournament":
+            from game.simulation.tournament import run_tournament
+
+            run_tournament(n_games=n_games, lb_path=lb_path, dashboard=dashboard)
+        else:
+            from game.simulation.season import run_season
+
+            run_season(
+                n_games=n_games,
+                top_n=int(os.environ.get("TOP_N", "4")),
+                lb_path=lb_path,
+                dashboard=dashboard,
+            )
+    output = buf.getvalue()
+    print(output, end="")
+    return output
 
 
 _TIER_LABEL = {"PRM": "Premier", "CH": "Championship", "L1": "Level 1"}
@@ -127,13 +125,9 @@ def write_report(
 
     for i, step in enumerate(steps):
         d = step["date"]
-        mode = step["mode"]
         output = step["output"]
 
-        if mode == "tournament":
-            label = "Tournament"
-        else:
-            label = f"Week {i}"
+        label = f"Week {i + 1}"
 
         lines.append(f"## {d} — {label}")
         lines.append("")
@@ -198,6 +192,12 @@ def parse_args() -> argparse.Namespace:
         default=int(os.environ.get("N_GAMES", "1000")),
         help="Games per tier/pool per run. Default: N_GAMES env var or 1000.",
     )
+    parser.add_argument(
+        "--tui",
+        action="store_true",
+        default=False,
+        help="Launch the Textual TUI dashboard.",
+    )
     return parser.parse_args()
 
 
@@ -225,23 +225,59 @@ def main() -> None:
     print(f"[simulate] leaderboard: {lb_path}")
     print(f"[simulate] report: {output_file}")
     print(
-        f"[simulate] WARNING: {lb_path} will be modified in place. Use `git checkout -- {lb_path}` or `just clean` to restore."
+        f"[simulate] WARNING: {lb_path} will be modified in place. "
+        f"Use `git checkout -- {lb_path}` or `just clean` to restore."
     )
     print()
 
     steps: list[dict] = []
     t_total = time.perf_counter()
-    for i, (step_date, mode) in enumerate(mondays):
-        label = "Tournament" if mode == "tournament" else "season"
-        print(f"{'=' * 60}")
-        print(f"[simulate] {step_date} — {label} (week {i + 1}/{len(mondays)})")
-        print(f"{'=' * 60}")
-        t0 = time.perf_counter()
-        output = run_step(step_date, mode, args.n_games, lb_path)
-        elapsed = time.perf_counter() - t0
-        print(f"[simulate] done in {elapsed:.1f}s")
-        steps.append({"date": step_date, "mode": mode, "output": output})
-        print()
+
+    if args.tui:
+        from game.components.utils import apply_display_names, import_player_classes_from_dir
+        from game.season.utils import _load_lb
+        from game.tui import TuiAdapter
+
+        _all = import_player_classes_from_dir(str(Path(__file__).parent.parent.parent / "players"))
+        apply_display_names(_all, _load_lb(lb_path).get("players", {}))
+        display_names = {type(p).__name__: p.name for p in _all}
+
+        adapter: TuiAdapter | None = TuiAdapter(n_games=args.n_games, display_names=display_names)
+
+        def _run_quarter() -> None:
+            week = 1
+            for i, (step_date, mode) in enumerate(mondays):
+                if mode == "tournament":
+                    step_label = "Week 1"
+                else:
+                    week += 1
+                    step_label = f"Week {week}"
+                adapter.start_step(step_label)
+                print(f"{'=' * 60}")
+                print(f"[simulate] {step_date} — {step_label} (step {i + 1}/{len(mondays)})")
+                print(f"{'=' * 60}")
+                os.environ["TODAY"] = step_date.isoformat()
+                t0 = time.perf_counter()
+                output = run_step(step_date, mode, args.n_games, lb_path, dashboard=adapter)
+                elapsed = time.perf_counter() - t0
+                print(f"[simulate] done in {elapsed:.1f}s")
+                steps.append({"date": step_date, "mode": mode, "output": output})
+                print()
+
+        adapter.run(_run_quarter)
+    else:
+        for i, (step_date, mode) in enumerate(mondays):
+            label = f"Week {i + 1}"
+            print(f"{'=' * 60}")
+            print(f"[simulate] {step_date} — {label} (step {i + 1}/{len(mondays)})")
+            print(f"{'=' * 60}")
+            os.environ["TODAY"] = step_date.isoformat()
+            t0 = time.perf_counter()
+            output = run_step(step_date, mode, args.n_games, lb_path, dashboard=None)
+            elapsed = time.perf_counter() - t0
+            print(f"[simulate] done in {elapsed:.1f}s")
+            steps.append({"date": step_date, "mode": mode, "output": output})
+            print()
 
     write_report(steps, lb_path, output_file, args.n_games)
     print(f"[simulate] total elapsed: {time.perf_counter() - t_total:.1f}s")

@@ -2,7 +2,7 @@
 name = "liars-dice"
 version = "1.12.2"
 requires-python = ">=3.11"
-dependencies = ["pandas", "pyyaml"]
+dependencies = ["pandas", "pyyaml", "rich", "textual>=1.0"]
 
 [dependency-groups]
 dev = ["pytest>=8.0", "ruff>=0.15"]
