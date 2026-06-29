@@ -41,5 +41,9 @@ jobs:
 
             echo "Updating PR #$pr branch…"
             gh pr update-branch "$pr" --repo "$REPO" \
-              || echo "Could not update PR #$pr (conflict or fork permission — needs manual rebase)."
+              || {
+                echo "Could not update PR #$pr (fork PR — needs manual rebase)."
+                gh pr comment "$pr" --repo "$REPO" \
+                  --body "⚠️ Auto-rebase skipped: this PR is from a fork, so the bot can't push to your branch. Please rebase onto \`main\` and force-push."
+              }
           done
