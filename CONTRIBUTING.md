@@ -16,6 +16,24 @@ Run `just develop` once after cloning to install remaining tools and activate pr
 
 ---
 
+## Submitting a PR
+
+Always submit PRs from a **feature branch**, not from your fork's `main`. PRing from `main` prevents the repo's auto-update bot from rebasing your branch when it falls behind — GitHub won't push a merge commit onto a fork's `main`.
+
+```bash
+git checkout -b my-player-name
+# make your changes
+
+# rebase onto the latest main before opening the PR
+git fetch upstream
+git rebase upstream/main
+
+git push origin my-player-name
+# open the PR from that branch
+```
+
+---
+
 ## Running Locally
 
 Requires [`uv`](https://docs.astral.sh/uv/) and [`just`](https://just.systems/).
@@ -56,9 +74,10 @@ just simulate-season 2026-07-13    # dry run with a specific Monday date
 just simulate-tournament           # dry run the next quarterly tournament
 
 # Full quarter — runs tournament + all Mondays in sequence, writes sim-YYYY-QN.md
-uv run python -m game.simulation.quarter
-# --start 2026-07-06   tournament Monday to start from (default: next upcoming)
-# --n-games 500        games per tier per run (default: 1000)
+just simulate-quarter              # next upcoming tournament Monday
+just simulate-quarter 2026-07-06   # specific start date
+just simulate-quarter 2026-07-06 500  # with custom game count
+just simulate-quarter --tui        # with live Textual TUI display
 
 just clean                         # reset leaderboard.yaml and season_summary.md afterward
 ```
