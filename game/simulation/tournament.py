@@ -270,10 +270,33 @@ def main() -> None:
         if args.save_replay and replaydb:
             from game.season.utils import _load_lb
 
-            replaydb.save_standings(_load_lb(lb_path).get("players", {}))
+            lb_data = _load_lb(lb_path)
+            replaydb.save_standings(lb_data.get("players", {}))
+            replaydb.save_pool_results(lb_data.get("tournament_state", {}).get("pool_results", {}))
             print(f"[done] Replay saved to sim-{step_date}.replay")
 
         if args.replay and replaydb:
+            import json
+
+            from game.season.utils import _load_lb
+            from game.simulation.quarter import write_tournament_diff_report
+
+            meta = replaydb.get_meta()
+            if "original_standings" in meta and "original_pool_results" in meta:
+                lb_data = _load_lb(lb_path)
+                diff_file = Path(f"sim-{step_date}-diff.md")
+                write_tournament_diff_report(
+                    json.loads(meta["original_pool_results"]),
+                    lb_data.get("tournament_state", {}).get("pool_results", {}),
+                    json.loads(meta["original_standings"]),
+                    lb_data.get("players", {}),
+                    diff_file,
+                )
+            elif "original_standings" in meta:
+                print(
+                    "[warn] Replay file predates pool_results saving — diff skipped.",
+                    file=__import__("sys").stderr,
+                )
             if args.save_leaderboard:
                 import shutil
 

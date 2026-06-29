@@ -77,6 +77,13 @@ class ReplayDB:
         )
         self._conn.commit()
 
+    def save_pool_results(self, pool_results: dict) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+            ("original_pool_results", json.dumps(pool_results)),
+        )
+        self._conn.commit()
+
     def save_seeds(
         self,
         week_num: int,

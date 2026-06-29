@@ -305,6 +305,15 @@ def main() -> None:
             print(f"[done] Replay saved to sim-{step_date}.replay")
 
         if args.replay and replaydb:
+            import json
+
+            from game.simulation.quarter import write_diff_report
+
+            meta = replaydb.get_meta()
+            if "original_standings" in meta:
+                original_standings = json.loads(meta["original_standings"])
+                diff_file = Path(f"sim-{step_date}-diff.md")
+                write_diff_report(original_standings, lb_path, diff_file)
             if args.save_leaderboard:
                 import shutil
 

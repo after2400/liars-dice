@@ -224,6 +224,41 @@ def write_diff_report(
     print(f"[done] Diff report written to {output_file}")
 
 
+def write_tournament_diff_report(
+    original_pool_results: dict,
+    replay_pool_results: dict,
+    original_standings: dict,
+    replay_standings: dict,
+    output_file: Path,
+) -> None:
+    """Write a Markdown table comparing original vs replay tournament pool results."""
+    lines = [
+        "# Tournament Replay Diff Report",
+        "",
+        "| Pool | Player | Orig Wins | Replay Wins | Δ Wins | Orig Tier | Replay Tier |",
+        "|------|--------|-----------|-------------|--------|-----------|-------------|",
+    ]
+    for pool_key in sorted(set(original_pool_results) | set(replay_pool_results)):
+        orig_pool = original_pool_results.get(pool_key, {})
+        repl_pool = replay_pool_results.get(pool_key, {})
+        pool_num = pool_key.replace("pool_", "")
+        for name in sorted(set(orig_pool) | set(repl_pool)):
+            orig = original_standings.get(name, {})
+            repl = replay_standings.get(name, {})
+            display = orig.get("display_name") or repl.get("display_name") or name
+            orig_wins = orig_pool.get(name, 0)
+            repl_wins = repl_pool.get(name, 0)
+            delta = repl_wins - orig_wins
+            delta_str = f"+{delta}" if delta > 0 else str(delta)
+            lines.append(
+                f"| {pool_num} | {display} | {orig_wins} | {repl_wins} | {delta_str}"
+                f" | {orig.get('tier', '—')} | {repl.get('tier', '—')} |"
+            )
+    lines.append("")
+    output_file.write_text("\n".join(lines))
+    print(f"[done] Tournament diff report written to {output_file}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Simulate a full quarter locally (DRY_RUN=true, no GitHub changes)."
