@@ -96,7 +96,7 @@ jobs:
         with:
           token: ${{ secrets.LEADERBOARD_PAT }}
 
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.2.0
         with:
           python-version: "3.11"
 

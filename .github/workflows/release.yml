@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.LEADERBOARD_PAT }}
 
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.2.0
 
       - name: Install python-semantic-release
         run: uv tool install python-semantic-release

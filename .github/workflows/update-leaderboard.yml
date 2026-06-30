@@ -27,7 +27,7 @@ jobs:
           token: ${{ secrets.LEADERBOARD_PAT }}
           fetch-depth: 2
 
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.2.0
         with:
           python-version: "3.11"
 
