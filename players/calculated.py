@@ -1,6 +1,7 @@
 from math import comb
 
 from game.components.bets import Bet
+from game.components.context import GameContext
 
 
 class CalCulated:
@@ -27,7 +28,7 @@ class CalCulated:
         self._round_key: tuple[int, int] | None = None
         self._wilds_active = True
 
-    def _sync_wilds(self, bet_history: list[dict]) -> None:
+    def _sync_wilds(self, bet_history) -> None:
         for i in range(self._bh_idx, len(bet_history)):
             entry = bet_history[i]
             key = (entry["game"], entry["round"])
@@ -53,15 +54,12 @@ class CalCulated:
             comb(unseen, k) * (p**k) * ((1 - p) ** (unseen - k)) for k in range(need, unseen + 1)
         )
 
-    def algo(
-        self,
-        hand: list[int],
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-    ) -> Bet | None:
-        self._sync_wilds(bet_history)
+    def algo(self, ctx: GameContext) -> Bet | None:
+        self._sync_wilds(ctx.bet_history)
+
+        hand = ctx.hand
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
 
         if prior_bet is None:
             # We always open on a non-1 face, so wilds are on for this round
