@@ -2,6 +2,7 @@ import random
 from math import comb
 
 from game.components.bets import Bet
+from game.components.context import GameContext
 
 
 class Rick:
@@ -18,7 +19,7 @@ class Rick:
     - Calls liar at a low probability threshold; he assumes everyone else is bluffing.
     - Has a 15% chance of making a totally unhinged raise (quantity + 2 or +3) to
       assert dominance. Science.
-    - Tracks opponents' bluff history because he's literally a genius.
+    - Reads opponent bluff rates from ctx.stats rather than tracking them manually.
     """
 
     name = "Rick Sanchez"
@@ -34,29 +35,6 @@ class Rick:
     # to assert intellectual dominance and unsettle the table.
     CHAOS_RAISE_PROB = 0.15
 
-    def __init__(self) -> None:
-        self._opp: dict[str, dict] = {}
-        self._last_outcomes_len: int = 0
-
-    def _ingest(self, outcomes: list[dict]) -> None:
-        for o in outcomes[self._last_outcomes_len :]:
-            if "bidder" not in o:
-                continue
-            bidder = o["bidder"]
-            d = self._opp.setdefault(bidder, {"bluffs": 0, "holds": 0})
-            if o["bet_held"]:
-                d["holds"] += 1
-            else:
-                d["bluffs"] += 1
-        self._last_outcomes_len = len(outcomes)
-
-    def _bluff_rate(self, bidder: str) -> float:
-        d = self._opp.get(bidder)
-        if d is None:
-            return 0.5  # unknown — assume average idiot
-        b, h = d["bluffs"], d["holds"]
-        return (b + 1) / (b + h + 2)
-
     def _prob_holds(self, hand: list[int], face: int, quantity: int, total_dice: int) -> float:
         own = hand.count(face) + (hand.count(1) if face != 1 else 0)
         unseen = total_dice - len(hand)
@@ -70,16 +48,11 @@ class Rick:
             comb(unseen, k) * (p**k) * ((1 - p) ** (unseen - k)) for k in range(need, unseen + 1)
         )
 
-    def algo(
-        self,
-        hand: list[int],
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-        tier: str | None = None,
-    ) -> Bet | None:
-        self._ingest(outcomes)
+    def algo(self, ctx: GameContext) -> Bet | None:
+        hand = ctx.hand
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
+        stats = ctx.stats
 
         if prior_bet is None:
             # Open on 1s (wilds) when Rick has any — the statistically optimal
@@ -99,7 +72,8 @@ class Rick:
             return Bet(quantity, best_face, self.name)
 
         # Adjust call threshold based on how much of an idiot the bidder is.
-        bluff_adj = (self._bluff_rate(prior_bet.player) - 0.5) * 0.2
+        bluff_rate = stats.bluff_rate.get(prior_bet.player, 0.5) if stats is not None else 0.5
+        bluff_adj = (bluff_rate - 0.5) * 0.2
         threshold = max(0.10, self.CALL_THRESHOLD + bluff_adj)
 
         p = self._prob_holds(hand, prior_bet.face, prior_bet.quantity, total_dice)
