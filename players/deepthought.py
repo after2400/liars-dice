@@ -65,6 +65,14 @@ class DeepThought:
     LATE_GAME_AVG_DICE = 3.0
     LATE_GAME_AGGRESSION = 0.25
 
+    # Opening obfuscation: when the top two faces are within this many dice of
+    # each other, open on the second-best face to mislead inference engines.
+    OBFUSCATION_THRESHOLD = 1
+
+    # Targeting: extra EV reward for inducing a failed challenge from the table
+    # leader (most dice) when they sit immediately after us.
+    TARGET_EV_WIN_BONUS = 0.3
+
     def __init__(self) -> None:
         self._bh_idx = 0
         self._oc_idx = 0
@@ -242,6 +250,12 @@ class DeepThought:
             return None
         return players[(idx + 1) % len(players)]
 
+    def _identify_target(self, ctx: GameContext) -> str | None:
+        """Return the opponent with the most dice — the table leader to pressure."""
+        counts = ctx.stats.dice_counts if ctx.stats else {}
+        candidates = {p: c for p, c in counts.items() if p != self.name and c > 0}
+        return max(candidates, key=candidates.__getitem__) if candidates else None
+
     def _update_bluff_obs(self, ctx: GameContext) -> None:
         """Track per-player opening-bid bluff propensity from newly completed rounds.
 
@@ -402,17 +416,22 @@ class DeepThought:
         bluff_rates: dict[str, float] | None = None,
         next_p: str | None = None,
         base_p_call: float = 0.3,
+        target_is_next: bool = False,
     ) -> tuple[int, int]:
         """Score every legal bid by EV and return the best (quantity, face).
 
-        EV = (1-p_call)*EV_SAFE + p_call*p_holds*EV_WIN_CALL + p_call*(1-p_holds)*EV_LOSE_CALL
+        EV = (1-p_call)*EV_SAFE + p_call*p_holds*ev_win + p_call*(1-p_holds)*EV_LOSE_CALL
 
         p_call is calibrated per-bid via _p_call_conditional using the next player's
         observed challenge threshold — lower for safe bids (next player rarely calls
         those), higher for risky ones. Scans all legal bids, not just supported ones.
+
+        When target_is_next, EV_WIN_CALL is boosted by TARGET_EV_WIN_BONUS to
+        prefer bids that trap the table leader into a failed challenge.
         """
         wilds = self._wilds_active
         allowed_faces = range(2, 7) if wilds else range(1, 7)
+        ev_win = self.EV_WIN_CALL + (self.TARGET_EV_WIN_BONUS if target_is_next else 0.0)
 
         best_ev = float("-inf")
         best_q, best_f = prior_bet.quantity + 1, prior_bet.face
@@ -426,7 +445,7 @@ class DeepThought:
                 p_call = self._p_call_conditional(next_p, p_holds_pub, base_p_call)
                 ev = (
                     (1.0 - p_call) * self.EV_SAFE
-                    + p_call * ph * self.EV_WIN_CALL
+                    + p_call * ph * ev_win
                     + p_call * (1.0 - ph) * self.EV_LOSE_CALL
                 )
                 # tie-break toward higher (q, f) — prefer aggressive bids when EV is equal
@@ -446,15 +465,25 @@ class DeepThought:
 
         if prior_bet is None:
             self._wilds_active = True
-            best_face = max(range(2, 7), key=lambda f: hand.count(f) + hand.count(1))
-            own = hand.count(best_face) + hand.count(1)
+            support = {f: hand.count(f) + hand.count(1) for f in range(2, 7)}
+            sorted_faces = sorted(support, key=support.__getitem__, reverse=True)
+            best_face = sorted_faces[0]
+            # Obfuscation: when top two faces are within OBFUSCATION_THRESHOLD dice
+            # of each other, open on the second-best face so inference engines build
+            # incorrect priors about which face we actually hold most of.
+            open_face = best_face
+            if len(sorted_faces) >= 2:
+                second_face = sorted_faces[1]
+                if support[best_face] - support[second_face] <= self.OBFUSCATION_THRESHOLD:
+                    open_face = second_face
+            own = support[open_face]
             unseen = total_dice - len(hand)
             n_players = len(ctx.round_players)
             avg_dice = total_dice / n_players if n_players else total_dice
             late_factor = max(0.0, 1.0 - avg_dice / self.LATE_GAME_AVG_DICE)
             multiplier = self.OPENING_MULTIPLIER + late_factor * self.LATE_GAME_AGGRESSION
             quantity = max(1, round(own + unseen * (2 / 6) * multiplier))
-            return Bet(quantity, best_face, self.name)
+            return Bet(quantity, open_face, self.name)
 
         # Opening bid inference and opening-specific bluff rates for this turn
         opening_bids = self._round_opening_bids(ctx.bet_history)
@@ -473,7 +502,11 @@ class DeepThought:
         ):
             return None
 
+        target = self._identify_target(ctx)
+        target_is_next = target is not None and target == next_p
+
         quantity, face = self._best_raise(
-            hand, prior_bet, total_dice, opening_bids, bluff_rates, next_p, base_p_call
+            hand, prior_bet, total_dice, opening_bids, bluff_rates, next_p, base_p_call,
+            target_is_next=target_is_next,
         )
         return Bet(quantity, face, self.name)
