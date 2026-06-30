@@ -32,6 +32,7 @@ class GameStats:
 
         # Backing store: current-round context (reset each round)
         self._current_round_velocity: float = 1.0
+        self._ones_are_wild: bool = True
 
         # Internal counters
         self._bluff_counts: dict[str, int] = defaultdict(int)
@@ -133,6 +134,10 @@ class GameStats:
         return self._current_round_velocity
 
     @property
+    def ones_are_wild(self) -> bool:
+        return self._ones_are_wild
+
+    @property
     def dice_counts(self) -> dict[str, int]:
         return dict(self._dice_counts)
 
@@ -213,6 +218,9 @@ class GameStats:
             self._opening_aggression[player] = (
                 self._opening_qty_sum[player] / self._opening_count[player]
             )
+
+        if is_opening_bid:
+            self._ones_are_wild = bet.face != 1
 
         # turn count for challenge_rate denominator
         self._turn_count[player] += 1
@@ -327,6 +335,7 @@ class GameStats:
         so current_round_velocity reflects only the new round's bids."""
         self._current_round_bets = []
         self._current_round_velocity = 1.0
+        self._ones_are_wild = True
 
     def record_penalty(self, player_name: str) -> None:
         """Call when a player incurs a penalty (exception, invalid bid, liar-with-no-bet)."""

@@ -305,3 +305,47 @@ def test_dice_counts_returns_copy():
     copy = stats.dice_counts
     copy["Alice"] = 999
     assert stats.dice_counts["Alice"] == 5
+
+
+# --- ones_are_wild ---
+
+
+def test_ones_are_wild_defaults_to_true():
+    from game.components.stats import GameStats
+
+    assert GameStats().ones_are_wild is True
+
+
+def test_ones_are_wild_false_when_opening_bid_is_face_one():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    stats.update_bet(_bet("Alice", 1, 3), is_opening_bid=True, total_dice=20)
+    assert stats.ones_are_wild is False
+
+
+def test_ones_are_wild_true_when_opening_bid_is_not_face_one():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    stats.update_bet(_bet("Alice", 4, 3), is_opening_bid=True, total_dice=20)
+    assert stats.ones_are_wild is True
+
+
+def test_ones_are_wild_not_changed_by_non_opening_bid():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    stats.update_bet(_bet("Alice", 3, 2), is_opening_bid=True, total_dice=20)
+    stats.update_bet(_bet("Bruno", 1, 5), is_opening_bid=False, total_dice=20)
+    assert stats.ones_are_wild is True
+
+
+def test_reset_round_restores_ones_are_wild():
+    from game.components.stats import GameStats
+
+    stats = GameStats()
+    stats.update_bet(_bet("Alice", 1, 3), is_opening_bid=True, total_dice=20)
+    assert stats.ones_are_wild is False
+    stats.reset_round(2)
+    assert stats.ones_are_wild is True
