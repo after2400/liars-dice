@@ -1,6 +1,7 @@
 from math import comb
 
 from game.components.bets import Bet
+from game.components.context import GameContext
 
 
 class Stewie:
@@ -60,10 +61,24 @@ class Stewie:
 
     # --- Core logic ---
 
-    def _prob_holds(self, hand: list, face: int, quantity: int, total_dice: int) -> float:
-        own = hand.count(face) + (hand.count(1) if face != 1 else 0)
+    def _wilds_active(self, prior_bet, bet_history) -> bool:
+        if prior_bet is None or not bet_history:
+            return True
+        current_game = bet_history[-1]["game"]
+        current_round = bet_history[-1]["round"]
+        for entry in reversed(bet_history):
+            if entry["game"] != current_game or entry["round"] != current_round:
+                break
+            if entry["bet"].face == 1:
+                return False
+        return True
+
+    def _prob_holds(
+        self, hand: list, face: int, quantity: int, total_dice: int, wilds: bool = True
+    ) -> float:
+        own = hand.count(face) + (hand.count(1) if face != 1 and wilds else 0)
         unseen = total_dice - len(hand)
-        p = 1 / 6 if face == 1 else 2 / 6
+        p = 1 / 6 if (face == 1 or not wilds) else 2 / 6
         need = quantity - own
         if need <= 0:
             return 1.0
@@ -125,7 +140,9 @@ class Stewie:
         biases = [pb.get(face, 1 / 6) for pb in stats.face_bias.values()]
         return sum(biases) / len(biases)
 
-    def _best_raise(self, hand: list, prior_bet: Bet, stats) -> tuple[int, int] | None:
+    def _best_raise(
+        self, hand: list, prior_bet: Bet, stats, wilds: bool = True
+    ) -> tuple[int, int] | None:
         """
         Choose the best (quantity, face) raise.
 
@@ -136,13 +153,15 @@ class Stewie:
         """
         candidates = []
 
-        own_on_face = hand.count(prior_bet.face) + (hand.count(1) if prior_bet.face != 1 else 0)
+        own_on_face = hand.count(prior_bet.face) + (
+            hand.count(1) if prior_bet.face != 1 and wilds else 0
+        )
         if own_on_face > 0:
             bias = self._avg_opponent_face_bias(prior_bet.face, stats)
             candidates.append((prior_bet.quantity + 1, prior_bet.face, own_on_face, bias))
 
         for face in range(prior_bet.face + 1, 7):
-            own = hand.count(face) + hand.count(1)
+            own = hand.count(face) + (hand.count(1) if wilds else 0)
             if own > 0:
                 bias = self._avg_opponent_face_bias(face, stats)
                 candidates.append((prior_bet.quantity, face, own, bias))
@@ -155,15 +174,12 @@ class Stewie:
         )
         return best[0], best[1]
 
-    def algo(
-        self,
-        hand: list,
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-        stats=None,
-    ) -> Bet | None:
+    def algo(self, ctx: GameContext) -> Bet | None:
+        hand = ctx.hand
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
+        bet_history = ctx.bet_history
+        stats = ctx.stats
 
         if prior_bet is None:
             best_face = max(range(2, 7), key=lambda f: hand.count(f) + hand.count(1))
@@ -173,12 +189,13 @@ class Stewie:
             quantity = max(1, round(own + unseen * (2 / 6) * factor))
             return Bet(quantity, best_face, self.name)
 
-        p_holds = self._prob_holds(hand, prior_bet.face, prior_bet.quantity, total_dice)
+        wilds = self._wilds_active(prior_bet, bet_history)
+        p_holds = self._prob_holds(hand, prior_bet.face, prior_bet.quantity, total_dice, wilds)
         threshold = self._call_threshold(prior_bet.player, prior_bet.face, stats)
         if p_holds < threshold:
             return None
 
-        raise_result = self._best_raise(hand, prior_bet, stats)
+        raise_result = self._best_raise(hand, prior_bet, stats, wilds)
         if raise_result is not None:
             return Bet(raise_result[0], raise_result[1], self.name)
 
