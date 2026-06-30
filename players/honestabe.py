@@ -1,6 +1,7 @@
 from math import comb
 
 from game.components.bets import Bet
+from game.components.context import GameContext
 
 
 class HonestAbe:
@@ -22,7 +23,7 @@ class HonestAbe:
         self._round_key: tuple[int, int] | None = None
         self._wilds_active = True
 
-    def _sync_wilds(self, bet_history: list[dict]) -> None:
+    def _sync_wilds(self, bet_history) -> None:
         for i in range(self._bh_idx, len(bet_history)):
             entry = bet_history[i]
             key = (entry["game"], entry["round"])
@@ -65,16 +66,13 @@ class HonestAbe:
         candidates += [Bet(prior_bet.quantity + 1, f, self.name) for f in raise_faces]
         return max(candidates, key=lambda c: self._prob_holds(c.face, c.quantity, hand, total_dice))
 
-    def algo(
-        self,
-        hand: list[int],
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-        stats=None,
-    ) -> Bet | None:
-        self._sync_wilds(bet_history)
+    def algo(self, ctx: GameContext) -> Bet | None:
+        self._sync_wilds(ctx.bet_history)
+
+        hand = ctx.hand
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
+        stats = ctx.stats
 
         if prior_bet is None:
             return self._open(hand, total_dice)
