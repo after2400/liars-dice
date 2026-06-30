@@ -101,6 +101,11 @@ class EvilStewie:
         # Routed by the opener's dice count at opening-bid time.
         self._desperate: dict[str, list[int]] = {}  # openers with <= DESPERATION_DICE dice
         self._comfortable: dict[str, list[int]] = {}  # openers with > DESPERATION_DICE dice
+        # Outcome logging watermark and liar-call calibration storage
+        self._outcomes_logged: int = 0
+        self._liar_call_estimates: dict[
+            tuple[int, int], float
+        ] = {}  # (game,round) -> p_holds when ES called liar
 
     def _wilds_active(self, ctx: GameContext) -> bool:
         """Wilds are off for the whole round once any bet on 1s has been placed.
@@ -415,6 +420,53 @@ class EvilStewie:
 
         self._bluff_outcomes_seen = limit
 
+    def _log_outcomes(self, ctx: GameContext) -> None:
+        """Log newly completed round outcomes: who won/lost, whether bids held, calibration check.
+
+        Runs after _update_bluff_obs so _bluff_round_keys and _no_wilds_rounds are current.
+        When ES called liar on the round's final bet, compares its p_holds estimate to reality.
+        """
+        outcomes = ctx.outcomes
+        limit = min(len(outcomes), len(self._bluff_round_keys))
+        for i in range(self._outcomes_logged, limit):
+            outcome = outcomes[i]
+            key = self._bluff_round_keys[i]
+            game_id, round_num = key
+            final_bet = outcome["final_bet"]
+            challenger = outcome["challenger"]
+            hands = outcome["hands"]
+            wilds_on = key not in self._no_wilds_rounds
+
+            face = final_bet.face
+            actual = sum(
+                h.count(face) + (h.count(1) if face != 1 and wilds_on else 0)
+                for h in hands.values()
+            )
+            held = actual >= final_bet.quantity
+            bidder = final_bet.player
+            loser = challenger if held else bidder
+
+            _dlog.debug(
+                f"  [OUTCOME G{game_id} R{round_num}] "
+                f"{bidder}'s {final_bet.quantity}x{face} → {'HELD' if held else 'BUSTED'} "
+                f"(actual={actual}) | {loser} loses die"
+            )
+
+            if key in self._liar_call_estimates:
+                est = self._liar_call_estimates.pop(key)
+                surprise = abs(est - (1.0 if held else 0.0))
+                if held:
+                    verdict = "WRONG" + (
+                        " [TRAPPED]" if est > 0.5 else f" [surprise={surprise:.2f}]"
+                    )
+                else:
+                    verdict = "RIGHT" + (f" [confidence={1 - est:.2f}]" if est < 0.3 else "")
+                _dlog.debug(
+                    f"    [CALIBRATION] ES p_holds_est={est:.3f} → "
+                    f"bid {'held' if held else 'busted'} | {verdict}"
+                )
+        self._outcomes_logged = limit
+
     def _p_call_conditional(
         self, player: str | None, p_holds_pub: float, base_rate: float
     ) -> float:
@@ -425,7 +477,9 @@ class EvilStewie:
         """
         n = self._ct_count.get(player, 0) if player else 0
         if not n:
-            return 1.0 - (1.0 - base_rate) * p_holds_pub
+            # Fallback prior: riskier bids attract more calls, but cap at 3x base_rate so
+            # known-passive players (challenge_rate≈0) don't get implausibly high call estimates.
+            return min(base_rate * 3, 1.0 - (1.0 - base_rate) * p_holds_pub)
         mean_threshold = self._ct_sum[player] / n
         scale = exp(-self.CHALLENGE_SLOPE * (p_holds_pub - mean_threshold))
         return max(self.MIN_P_CALL, min(1.0, base_rate * scale))
@@ -456,6 +510,7 @@ class EvilStewie:
         """
         self._update_call_obs(ctx)
         self._update_bluff_obs(ctx)
+        self._log_outcomes(ctx)
 
         hand = ctx.hand
         prior = ctx.prior_bet
@@ -504,21 +559,26 @@ class EvilStewie:
                 pca = self._p_call_conditional(
                     next_p, self._p_holds_public(f, q, total, wilds), p_call
                 )
-                bonus = late_factor * self.LATE_GAME_AGGRESSION * q
+                bonus = late_factor * self.LATE_GAME_AGGRESSION * q * ph
                 ev = self._ev_bid(ph, pca) + bonus
                 scored.append((q, f, ph, pca, ev))
             scored.sort(key=lambda x: (x[4], x[0], x[1]), reverse=True)
 
             _dlog.debug("  top bids (qty,face | p_holds p_call ev):")
             for q, f, ph, pca, ev in scored[:5]:
-                bonus = late_factor * self.LATE_GAME_AGGRESSION * q
+                bonus = late_factor * self.LATE_GAME_AGGRESSION * q * ph
                 _dlog.debug(
                     f"    {q},{f} | ph={ph:.3f} pc={pca:.3f}"
                     f" ev={ev - bonus:.3f}+{bonus:.3f}={ev:.3f}"
                 )
 
             best_q, best_f, _, _, best_ev = scored[0]
-            _dlog.debug(f"  → BET({best_q},{best_f}) ev={best_ev:.3f}")
+            flags = ""
+            if best_f == 1:
+                flags += " [WILDS DISABLED: opening on 1s]"
+            if best_ev < 0:
+                flags += " [TRAPPED: all EVs negative]"
+            _dlog.debug(f"  → BET({best_q},{best_f}) ev={best_ev:.3f}{flags}")
             return Bet(best_q, best_f, self.name)
 
         # Evaluate calling liar vs every valid raise
@@ -549,9 +609,14 @@ class EvilStewie:
 
         if not candidates or ev_liar > scored[0][4]:
             best_bid_ev = scored[0][4] if scored else float("-inf")
-            _dlog.debug(f"  → CALL LIAR [ev_liar={ev_liar:.3f} > best_bid={best_bid_ev:.3f}]")
+            trapped = " [TRAPPED: all EVs negative]" if ev_liar < 0 else ""
+            _dlog.debug(
+                f"  → CALL LIAR [ev_liar={ev_liar:.3f} > best_bid={best_bid_ev:.3f}]{trapped}"
+            )
+            self._liar_call_estimates[(game_id, current_round)] = p_prior_holds
             return None
 
         best_q, best_f, _, _, best_ev = scored[0]
-        _dlog.debug(f"  → BET({best_q},{best_f}) ev={best_ev:.3f} [liar_ev={ev_liar:.3f}]")
+        ev_flag = " [TRAPPED: all EVs negative]" if best_ev < 0 else ""
+        _dlog.debug(f"  → BET({best_q},{best_f}) ev={best_ev:.3f} [liar_ev={ev_liar:.3f}]{ev_flag}")
         return Bet(best_q, best_f, self.name)
