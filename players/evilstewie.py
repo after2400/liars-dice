@@ -7,14 +7,23 @@ from game.components.context import GameContext
 
 logger = logging.getLogger(__name__)
 
+
 # Decisions log: writes independently of the game logging setup.
 # Each run overwrites decisions.log so it reflects only the latest game(s).
-_dlog = logging.getLogger("evilstewie.decisions")
-_dlog.propagate = False
-_dlog.setLevel(logging.DEBUG)
-_d_handler = logging.FileHandler("decisions.log", mode="w", delay=True)
-_d_handler.setFormatter(logging.Formatter("%(message)s"))
-_dlog.addHandler(_d_handler)
+def _setup_decisions_logger() -> logging.Logger:
+    dlog = logging.getLogger("evilstewie.decisions")
+    dlog.propagate = False
+    if "zachaustin" not in __file__:
+        dlog.addHandler(logging.NullHandler())
+        return dlog
+    dlog.setLevel(logging.DEBUG)
+    handler = logging.FileHandler("decisions.log", mode="w", delay=True)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    dlog.addHandler(handler)
+    return dlog
+
+
+_dlog = _setup_decisions_logger()
 
 
 class EvilStewie:
