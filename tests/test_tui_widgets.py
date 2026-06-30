@@ -110,6 +110,33 @@ def test_app_inner_tab_id_syncs_on_outer_tab_change():
     assert app._current_step_inner_id == "step-tabs-1"
 
 
+def test_standings_cursor_highlight_excludes_bar():
+    """The 'bold reverse' cursor highlight must not cover the bar chart column."""
+    from game.tui.widgets import _BAR_FULL, StandingsWidget
+
+    widget = StandingsWidget()
+
+    class _FakeStats:
+        games_played = {"Oracle": 100, "EvilStewie": 100}
+
+    widget._players = ["Oracle", "EvilStewie"]
+    widget._wins = {"Oracle": 50, "EvilStewie": 30}
+    widget._stats = _FakeStats()
+    widget._cursor = 0  # Oracle selected
+    widget._game_num = 50
+    widget._n_games = 100
+
+    result = widget.render()
+    plain = result.plain
+
+    bar_pos = plain.index(_BAR_FULL)
+    for span in result._spans:
+        if span.start <= bar_pos < span.end:
+            assert "reverse" not in str(span.style), (
+                f"bar character at pos {bar_pos} must not be reverse-highlighted (span: {span})"
+            )
+
+
 def test_standings_widget_drill_in_no_players_is_noop():
     """action_drill_in with empty player list does not post a message."""
     from game.tui.widgets import StandingsWidget
@@ -121,3 +148,143 @@ def test_standings_widget_drill_in_no_players_is_noop():
     widget.action_drill_in()
 
     assert posted == []
+
+
+# ── ThisWeekPanel ──────────────────────────────────────────────────────────────
+
+
+def test_this_week_panel_can_focus():
+    from game.tui.widgets import ThisWeekPanel
+
+    assert ThisWeekPanel.can_focus is True
+
+
+def test_this_week_panel_has_copy_and_escape_bindings():
+    from game.tui.widgets import ThisWeekPanel
+
+    keys = {b[0] for b in ThisWeekPanel.BINDINGS}
+    assert "c" in keys, "missing 'c' (copy) binding"
+    assert "escape" in keys, "missing 'escape' (close) binding"
+
+
+def test_this_week_panel_copy_calls_app_clipboard():
+    from unittest.mock import MagicMock, PropertyMock, patch
+
+    from game.tui.widgets import ThisWeekPanel
+
+    panel = ThisWeekPanel(player="Oracle", n_games=100)
+    mock_app = MagicMock()
+    with patch.object(type(panel), "app", new_callable=PropertyMock, return_value=mock_app):
+        panel.action_copy_to_clipboard()
+
+    mock_app.copy_to_clipboard.assert_called_once()
+    text = mock_app.copy_to_clipboard.call_args[0][0]
+    assert "Oracle" in text
+    assert len(text) > 10
+
+
+# ── SimTotalPanel ──────────────────────────────────────────────────────────────
+
+
+def test_sim_total_panel_can_focus():
+    from game.tui.widgets import SimTotalPanel
+
+    assert SimTotalPanel.can_focus is True
+
+
+def test_sim_total_panel_has_copy_and_escape_bindings():
+    from game.tui.widgets import SimTotalPanel
+
+    keys = {b[0] for b in SimTotalPanel.BINDINGS}
+    assert "c" in keys, "missing 'c' (copy) binding"
+    assert "escape" in keys, "missing 'escape' (close) binding"
+
+
+def test_sim_total_panel_copy_calls_app_clipboard():
+    from unittest.mock import MagicMock, PropertyMock, patch
+
+    from game.tui.widgets import PlayerAggregate, SimTotalPanel, TierStats
+
+    panel = SimTotalPanel(player="Oracle")
+    agg = PlayerAggregate(
+        total_games=500,
+        wins=120,
+        per_tier={"PRM": TierStats(games=500, wins=120, rounds_played=5000)},
+    )
+    panel.update_aggregate(agg)
+    mock_app = MagicMock()
+    with patch.object(type(panel), "app", new_callable=PropertyMock, return_value=mock_app):
+        panel.action_copy_to_clipboard()
+
+    mock_app.copy_to_clipboard.assert_called_once()
+    text = mock_app.copy_to_clipboard.call_args[0][0]
+    assert "Oracle" in text
+    assert "500" in text
+
+
+# ── PlayerStatsPanel container ─────────────────────────────────────────────────
+
+
+def test_player_stats_panel_update_aggregate_before_mount_does_not_raise():
+    """update_aggregate called before mounting must not raise MountError."""
+    from game.tui.widgets import PlayerAggregate, PlayerStatsPanel
+
+    panel = PlayerStatsPanel(player="Oracle", n_games=100)
+    agg = PlayerAggregate(total_games=10, wins=3)
+
+    # Must not raise — widget is not yet attached to a DOM
+    panel.update_aggregate(agg)
+
+
+def test_player_stats_panel_update_step_data_before_mount_does_not_raise():
+    """update_step_data called before mounting must not raise."""
+    from game.tui.widgets import PlayerStatsPanel
+
+    class _FakeStats:
+        games_played = {"Oracle": 10}
+        rounds_played = {"Oracle": 100}
+        penalty_count = {"Oracle": 0}
+        die_losses_from_bluff = {}
+        die_losses_from_challenge = {}
+        challenge_success_by_face = {}
+        challenge_count_by_face = {}
+
+    panel = PlayerStatsPanel(player="Oracle", n_games=100)
+    panel.update_step_data({}, {}, _FakeStats(), 5)
+
+
+def test_player_stats_panel_has_player_attribute():
+    from game.tui.widgets import PlayerStatsPanel
+
+    panel = PlayerStatsPanel(player="Oracle", n_games=100)
+    assert panel.player == "Oracle"
+
+
+def test_player_stats_panel_is_not_focusable():
+    """The container itself should not be focusable — only its children are."""
+    from game.tui.widgets import PlayerStatsPanel
+
+    assert not getattr(PlayerStatsPanel, "can_focus", False)
+
+
+# ── _to_plain_text helper ──────────────────────────────────────────────────────
+
+
+def test_to_plain_text_renders_structured_table():
+    from rich.panel import Panel
+    from rich.table import Table
+
+    from game.tui.widgets import _to_plain_text
+
+    table = Table()
+    table.add_column("Name")
+    table.add_column("Score")
+    table.add_row("Oracle", "42")
+    renderable = Panel(table, title="Results")
+
+    text = _to_plain_text(renderable)
+
+    assert "Oracle" in text
+    assert "42" in text
+    assert "Results" in text
+    assert "\033" not in text, "plain text must contain no ANSI escape codes"
