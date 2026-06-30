@@ -309,6 +309,47 @@ def test_standings_games_column_shows_total_games_not_current_tier():
     assert "| 1490 | 2000 |" not in data_row
 
 
+def test_standings_sort_by_current_run_results():
+    """When tier_results is supplied, rows sort by this week's win%, not QTD."""
+    mod = _load_run_season()
+    players = [
+        (
+            "First",
+            {"tier": "PRM", "tier_stats": {"PRM": {"wins": 50, "games": 100, "win_pct": 50.0}}},
+        ),
+        (
+            "Second",
+            {"tier": "PRM", "tier_stats": {"PRM": {"wins": 80, "games": 100, "win_pct": 80.0}}},
+        ),
+    ]
+    # This week: First won 90, Second won 40 — opposite of their QTD order.
+    tier_results = {"PRM": {"First": 90, "Second": 40}}
+    rows = mod._standings_table(players, "PRM", {n: n for n, _ in players}, tier_results, 100)
+    names = [r.split("|")[1].strip() for r in rows[2:]]
+    assert names == ["First", "Second"]
+
+
+def test_standings_relegated_player_pinned_at_top():
+    """Players relegated into a tier this week appear first, labelled 'Relegated'."""
+    mod = _load_run_season()
+    players = [
+        (
+            "Winner",
+            {"tier": "CH", "tier_stats": {"CH": {"wins": 60, "games": 100, "win_pct": 60.0}}},
+        ),
+        (
+            "RelUser",
+            {"tier": "CH", "tier_stats": {"PRM": {"wins": 40, "games": 100, "win_pct": 40.0}}},
+        ),
+    ]
+    # Winner ran in CH; RelUser ran in PRM (higher tier) and was relegated to CH.
+    tier_results = {"CH": {"Winner": 60}, "PRM": {"RelUser": 15}}
+    rows = mod._standings_table(players, "CH", {n: n for n, _ in players}, tier_results, 100)
+    names = [r.split("|")[1].strip() for r in rows[2:]]
+    assert names[0] == "RelUser"
+    assert "Relegated" in rows[2]
+
+
 # ---------------------------------------------------------------------------
 # _quarter_leaderboard_table
 # ---------------------------------------------------------------------------

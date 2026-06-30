@@ -245,7 +245,7 @@ def run_season(
 
     _write_summary(summary_file, tier_results, skipped, n_games, lb_path, v1_players)
     print(f"[done] Season summary written to {summary_file}")
-    _update_readme(readme_path, lb_path)
+    _update_readme(readme_path, lb_path, tier_results, n_games)
     print(
         "[done] README standings updated."
         if not _DRY_RUN
@@ -285,7 +285,7 @@ def _write_summary(
         )
         lines.append(f"### {label}")
         if tier_players:
-            lines.extend(_standings_table(tier_players, tier, display_names))
+            lines.extend(_standings_table(tier_players, tier, display_names, tier_results, n_games))
         else:
             lines.append(f"*No players currently in {label}.*")
         lines.append("")
@@ -385,13 +385,48 @@ _TIER_LABEL = {"PRM": "Premier", "CH": "Championship", "L1": "Level 1", "inactiv
 
 
 def _standings_table(
-    tier_players: list[tuple[str, dict]], tier: str, display_names: dict[str, str]
+    tier_players: list[tuple[str, dict]],
+    tier: str,
+    display_names: dict[str, str],
+    tier_results: dict[str, dict[str, int]] | None = None,
+    n_games: int = 0,
 ) -> list[str]:
+    _RANK = {"inactive": 0, "L1": 1, "CH": 2, "PRM": 3}
+    tier_rank = _RANK.get(tier, -1)
+
+    def _is_relegated(name: str) -> bool:
+        if not tier_results:
+            return False
+        return any(
+            _RANK.get(t, -1) > tier_rank and name in results for t, results in tier_results.items()
+        )
+
+    def _sort_key(item: tuple[str, dict]) -> tuple:
+        name, p = item
+        if tier_results and n_games:
+            if _is_relegated(name):
+                return (0, 0.0)
+            if name in tier_results.get(tier, {}):
+                return (1, -(tier_results[tier][name] / n_games * 100))
+            return (2, 0.0)
+        return (1, -p.get("tier_stats", {}).get(tier, {}).get("win_pct", 0.0))
+
+    def _season_pct(name: str, p: dict) -> str:
+        if tier_results and n_games:
+            if _is_relegated(name):
+                return "Relegated"
+            if name in tier_results.get(tier, {}):
+                return str(round(tier_results[tier][name] / n_games * 100, 1))
+            return "—"
+        return str(p.get("tier_stats", {}).get(tier, {}).get("win_pct", 0.0))
+
+    sorted_players = sorted(tier_players, key=_sort_key)
+
     lines = [
-        f"| Player | Win % in {tier} | Wins in {tier} | Win % Total | Total Wins | Games |",
-        "|--------|----------------|----------------|-------------|------------|-------|",
+        f"| Player | Season W% | Wins in {tier} | Win % Total | Total Wins | Games |",
+        "|--------|-----------|----------------|-------------|------------|-------|",
     ]
-    for name, p in tier_players:
+    for name, p in sorted_players:
         display = display_names.get(name, name)
         ts = p.get("tier_stats", {}).get(tier, {})
         all_stats = p.get("tier_stats", {}).values()
@@ -399,7 +434,7 @@ def _standings_table(
         total_games = sum(t.get("games", 0) for t in p.get("tier_stats", {}).values())
         total_win_pct = round(total_wins / total_games * 100, 1) if total_games else 0.0
         lines.append(
-            f"| {display} | {ts.get('win_pct', 0.0)} | {ts.get('wins', 0)} | {total_win_pct} | {total_wins} | {total_games} |"
+            f"| {display} | {_season_pct(name, p)} | {ts.get('wins', 0)} | {total_win_pct} | {total_wins} | {total_games} |"
         )
     return lines
 
@@ -409,18 +444,15 @@ def _quarter_leaderboard_table(
 ) -> list[str]:
     """Unified quarter view — one row per player, win% columns for each tier.
 
-    Sort order: PRM W% desc → CH W% desc → L1 W% desc; players with no stats
-    in a tier sort below players who have any stats there.
+    Sort order: QTD PRM W% desc → CH W% desc → L1 W% desc.
     """
     TIERS = ("PRM", "CH", "L1")
 
-    def _pct(ts: dict, tier: str) -> float:
-        return ts[tier].get("win_pct", 0.0) if tier in ts else -999.0
+    def _sort_key(item: tuple[str, dict]) -> tuple:
+        ts = item[1].get("tier_stats", {})
+        return tuple(-ts.get(t, {}).get("win_pct", 0.0) for t in TIERS)
 
-    sorted_players = sorted(
-        players.items(),
-        key=lambda item: tuple(-_pct(item[1].get("tier_stats", {}), t) for t in TIERS),
-    )
+    sorted_players = sorted(players.items(), key=_sort_key)
 
     lines = [
         "| Player | Tier | PRM W% | CH W% | L1 W% | Total W% | Games |",
@@ -437,15 +469,20 @@ def _quarter_leaderboard_table(
 
         total_wins = sum(t.get("wins", 0) for t in ts.values())
         total_games = sum(t.get("games", 0) for t in ts.values())
-        total_win_pct = round(total_wins / total_games * 100, 1) if total_games else 0.0
+        total_pct = round(total_wins / total_games * 100, 1) if total_games else 0.0
 
         lines.append(
-            f"| {display} | {tier_label} | {prm_pct} | {ch_pct} | {l1_pct} | {total_win_pct} | {total_games} |"
+            f"| {display} | {tier_label} | {prm_pct} | {ch_pct} | {l1_pct} | {total_pct} | {total_games} |"
         )
     return lines
 
 
-def _update_readme(readme_path: str, lb_path: str) -> None:
+def _update_readme(
+    readme_path: str,
+    lb_path: str,
+    tier_results: dict[str, dict[str, int]] | None = None,
+    n_games: int = 0,
+) -> None:
     """Replace the <!-- leaderboard-start/end --> section in README.md with current standings."""
     if _DRY_RUN:
         return
@@ -470,7 +507,7 @@ def _update_readme(readme_path: str, lb_path: str) -> None:
         tier_players = _sorted_players(tier)
         lines.append(f"### {label}")
         if tier_players:
-            lines.extend(_standings_table(tier_players, tier, display_names))
+            lines.extend(_standings_table(tier_players, tier, display_names, tier_results, n_games))
         else:
             lines.append(f"*No players currently in {label}.*")
         lines.append("")
@@ -480,7 +517,9 @@ def _update_readme(readme_path: str, lb_path: str) -> None:
         lines.append("<details>")
         lines.append(f"<summary>Inactive ({len(inactive_players)} players)</summary>")
         lines.append("")
-        lines.extend(_standings_table(inactive_players, "inactive", display_names))
+        lines.extend(
+            _standings_table(inactive_players, "inactive", display_names, tier_results, n_games)
+        )
         lines.append("")
         lines.append("</details>")
         lines.append("")
