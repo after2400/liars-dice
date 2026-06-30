@@ -34,7 +34,7 @@ class Columbo:
         total = ctx.total_dice
         stats = ctx.stats
 
-        wilds_on = self._wilds_active(ctx)
+        wilds_on = ctx.stats.ones_are_wild
         face_strength = self._infer_opener(ctx)
 
         if prior is None:
@@ -49,16 +49,6 @@ class Columbo:
 
         return self._raise(prior, hand, total, wilds_on, face_strength)
 
-    def _wilds_active(self, ctx: GameContext) -> bool:
-        if not ctx.bet_history:
-            return True
-        last = ctx.bet_history[-1]
-        g, r = last["game"], last["round"]
-        # Did anyone bid on 1s this round? That kills wild status permanently.
-        return not any(
-            h["bet"].face == 1 for h in ctx.bet_history if h["game"] == g and h["round"] == r
-        )
-
     def _infer_opener(self, ctx: GameContext) -> dict[int, float]:
         """Back-solve the opener's likely holding from their first bid."""
         if not ctx.bet_history:
@@ -66,8 +56,13 @@ class Columbo:
 
         last = ctx.bet_history[-1]
         g, r = last["game"], last["round"]
-        round_bids = [h for h in ctx.bet_history if h["game"] == g and h["round"] == r]
-        opener = round_bids[0]
+        # Current round is always a suffix — scan backwards and stop early.
+        round_bids = []
+        for h in reversed(ctx.bet_history):
+            if h["game"] != g or h["round"] != r:
+                break
+            round_bids.append(h)
+        opener = round_bids[-1]  # last item = first bid (reversed order)
 
         # Can't infer from our own bid; 1s bids are too messy to model here.
         if opener["player"] == self.name or opener["bet"].face == 1:
