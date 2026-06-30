@@ -22,7 +22,9 @@ from game.tui.simdb import SimDB
 from game.tui.widgets import (
     LogPanel,
     PlayerStatsPanel,
+    SimTotalPanel,
     StandingsWidget,
+    ThisWeekPanel,
 )
 
 # Minimum terminal width for stats panels to render without wrapping.
@@ -278,7 +280,11 @@ class LiarsDiceApp(App):
         self.query_one(StandingsWidget).focus()
 
     def action_focus_panel(self) -> None:
-        panels = list(self.query(PlayerStatsPanel))
+        # Collect child panels in player order: ThisWeekPanel then SimTotalPanel per container.
+        panels = []
+        for psp in self.query(PlayerStatsPanel):
+            panels.extend(psp.query(ThisWeekPanel))
+            panels.extend(psp.query(SimTotalPanel))
         if not panels:
             return
         try:
