@@ -22,12 +22,12 @@ jobs:
   update-leaderboard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           token: ${{ secrets.LEADERBOARD_PAT }}
           fetch-depth: 2
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v8.2.0
         with:
           python-version: "3.11"
 

@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v2.4.0 (2026-06-30)
+
+### Continuous Integration
+
+- Upgrade actions to node24 runtimes ([#137](https://github.com/after2400/liars-dice/pull/137),
+  [`ecc3e32`](https://github.com/after2400/liars-dice/commit/ecc3e32ede2729df193a44fe6e5c77f964a0e854))
+
+### Features
+
+- **game**: Split PlayerStatsPanel into focusable sub-panels with clipboard copy
+  ([#144](https://github.com/after2400/liars-dice/pull/144),
+  [`af3dadd`](https://github.com/after2400/liars-dice/commit/af3dadd03621ad17cf854ef828f3d878e31814af))
+
+
 ## v2.3.0 (2026-06-30)
 
 ### Features
