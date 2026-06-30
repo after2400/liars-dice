@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass, field
 
-from rich.columns import Columns
-from rich.console import Group
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -57,6 +57,15 @@ def _bar(value: float, total: float, width: int = _BAR_W) -> str:
 
 def _pct(num: int, den: int) -> str:
     return f"{num / den * 100:.1f}%" if den else "—"
+
+
+def _to_plain_text(renderable) -> str:
+    """Render any Rich renderable to a plain-text string with no ANSI escape codes."""
+    import re
+
+    buf = io.StringIO()
+    Console(file=buf, width=120, highlight=False, no_color=True).print(renderable)
+    return re.sub(r"\x1b\[[^m]*m", "", buf.getvalue())
 
 
 # step_tiers type alias: tier → (wins_dict, stats_obj, game_num)
@@ -327,9 +336,12 @@ class StandingsWidget(Widget):
             w = self._wins.get(player, 0)
             gp = (self._stats.games_played.get(player, 1) if self._stats else 1) or 1
             bar = _bar(w, max_wins, width=_OVERVIEW_BAR_W)
-            line = f"  {player:<14}  {w:>5}  {_pct(w, gp):>6}  {bar}\n"
-            style = "bold reverse" if i == self._cursor else ""
-            t.append(line, style=style)
+            label = f"  {player:<14}  {w:>5}  {_pct(w, gp):>6}  "
+            if i == self._cursor:
+                t.append(label, style="bold reverse")
+                t.append(bar + "\n")
+            else:
+                t.append(label + bar + "\n")
         return t
 
     def action_cursor_up(self) -> None:
@@ -347,19 +359,21 @@ class StandingsWidget(Widget):
             self.post_message(DrillInPlayer(self._players[self._cursor]))
 
 
-class PlayerStatsPanel(Static):
-    """Two-column stats panel for one drilled player. Right column shown once any series completes."""
+class ThisWeekPanel(Static):
+    """Focusable panel showing current-series stats for one player."""
 
     can_focus = True
 
-    BINDINGS = [("escape", "close_panel", "Close")]
+    BINDINGS = [
+        ("escape", "close_panel", "Close"),
+        ("c", "copy_to_clipboard", "Copy"),
+    ]
 
     DEFAULT_CSS = """
-    PlayerStatsPanel {
-        height: auto;
-        margin-bottom: 1;
+    ThisWeekPanel {
+        width: 1fr;
     }
-    PlayerStatsPanel:focus {
+    ThisWeekPanel:focus {
         border: solid $accent;
     }
     """
@@ -368,7 +382,6 @@ class PlayerStatsPanel(Static):
         super().__init__("")
         self.player = player
         self._n_games = n_games
-        self._aggregate: PlayerAggregate = PlayerAggregate()
         self._step_tiers: StepTiers = {}
         self._current_wins: dict[str, int] = {}
         self._current_stats = None
@@ -388,18 +401,9 @@ class PlayerStatsPanel(Static):
         self._game_num = game_num
         self.update(self._build_renderable())
 
-    def update_aggregate(self, agg: PlayerAggregate) -> None:
-        self._aggregate = agg
-        self.update(self._build_renderable())
-
-    def action_close_panel(self) -> None:
-        from game.tui.messages import DrillInPlayer
-
-        self.post_message(DrillInPlayer(self.player))
-
     def _build_renderable(self):
-        left_title = f"{self.player}: This Week — Game {self._game_num}/{self._n_games}"
-        left_body = _render_left(
+        title = f"{self.player}: This Week — Game {self._game_num}/{self._n_games}"
+        body = _render_left(
             self.player,
             self._n_games,
             self._step_tiers,
@@ -407,15 +411,113 @@ class PlayerStatsPanel(Static):
             self._current_stats,
             self._game_num,
         )
+        return Panel(body, title=title)
 
-        show_right = self._aggregate.total_games > 0
-        if show_right:
-            right_title = f"{self.player}: Sim Total — {self._aggregate.total_games:,} games"
-            right_body = _render_right(self.player, self._aggregate)
-            return Columns(
-                [Panel(left_body, title=left_title), Panel(right_body, title=right_title)]
-            )
-        return Panel(left_body, title=left_title)
+    def action_copy_to_clipboard(self) -> None:
+        self.app.copy_to_clipboard(_to_plain_text(self._build_renderable()))
+
+    def action_close_panel(self) -> None:
+        from game.tui.messages import DrillInPlayer
+
+        self.post_message(DrillInPlayer(self.player))
+
+
+class SimTotalPanel(Static):
+    """Focusable panel showing cumulative sim-total stats for one player."""
+
+    can_focus = True
+
+    BINDINGS = [
+        ("escape", "close_panel", "Close"),
+        ("c", "copy_to_clipboard", "Copy"),
+    ]
+
+    DEFAULT_CSS = """
+    SimTotalPanel {
+        width: 1fr;
+    }
+    SimTotalPanel:focus {
+        border: solid $accent;
+    }
+    """
+
+    def __init__(self, player: str) -> None:
+        super().__init__("")
+        self.player = player
+        self._aggregate: PlayerAggregate = PlayerAggregate()
+        self.update(self._build_renderable())
+
+    def update_aggregate(self, agg: PlayerAggregate) -> None:
+        self._aggregate = agg
+        self.update(self._build_renderable())
+
+    def _build_renderable(self):
+        title = f"{self.player}: Sim Total — {self._aggregate.total_games:,} games"
+        return Panel(_render_right(self.player, self._aggregate), title=title)
+
+    def action_copy_to_clipboard(self) -> None:
+        self.app.copy_to_clipboard(_to_plain_text(self._build_renderable()))
+
+    def action_close_panel(self) -> None:
+        from game.tui.messages import DrillInPlayer
+
+        self.post_message(DrillInPlayer(self.player))
+
+
+class PlayerStatsPanel(Widget):
+    """Container for per-player stats panels. Holds ThisWeekPanel and (once data arrives) SimTotalPanel side by side."""
+
+    DEFAULT_CSS = """
+    PlayerStatsPanel {
+        height: auto;
+        margin-bottom: 1;
+        layout: horizontal;
+    }
+    """
+
+    def __init__(self, player: str, n_games: int) -> None:
+        super().__init__()
+        self.player = player
+        self._n_games = n_games
+        self._sim_total_mounted = False
+        self._pending_step: tuple | None = None
+        self._pending_aggregate: PlayerAggregate | None = None
+
+    def compose(self):
+        yield ThisWeekPanel(self.player, self._n_games)
+
+    def on_mount(self) -> None:
+        if self._pending_step is not None:
+            self.query_one(ThisWeekPanel).update_step_data(*self._pending_step)
+        if self._pending_aggregate is not None:
+            sim = SimTotalPanel(self.player)
+            sim.update_aggregate(self._pending_aggregate)
+            self.mount(sim)
+            self._sim_total_mounted = True
+
+    def update_step_data(
+        self,
+        step_tiers: StepTiers,
+        wins: dict[str, int],
+        stats,
+        game_num: int,
+    ) -> None:
+        if not self.is_attached:
+            self._pending_step = (step_tiers, wins, stats, game_num)
+            return
+        self.query_one(ThisWeekPanel).update_step_data(step_tiers, wins, stats, game_num)
+
+    def update_aggregate(self, agg: PlayerAggregate) -> None:
+        if not self.is_attached:
+            self._pending_aggregate = agg
+            return
+        if not self._sim_total_mounted:
+            self._sim_total_mounted = True
+            sim = SimTotalPanel(self.player)
+            sim.update_aggregate(agg)
+            self.mount(sim)
+            return
+        self.query_one(SimTotalPanel).update_aggregate(agg)
 
 
 class LogPanel(RichLog):

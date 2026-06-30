@@ -3,6 +3,7 @@ name: Auto-update player PR branches
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   update:
@@ -34,8 +35,8 @@ jobs:
             fi
 
             status=$(gh pr view "$pr" --repo "$REPO" --json mergeStateStatus --jq '.mergeStateStatus')
-            if [ "$status" != "BEHIND" ]; then
-              echo "PR #$pr status is '$status' — skipping."
+            if [ "$status" = "CLEAN" ]; then
+              echo "PR #$pr is already up-to-date — skipping."
               continue
             fi
 
