@@ -24,6 +24,6 @@ def test_resolve_player_names_display_name_passthrough():
     from game.tui import resolve_player_names
 
     lb_path = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
-    result = resolve_player_names(["Oracle"], lb_path, "players")
-    # "Oracle" is a display name, not a class name — returned as-is
-    assert "Oracle" in result
+    result = resolve_player_names(["Nonexistent"], lb_path, "players")
+    # "Nonexistent" is neither a class name nor a display name — returned as-is
+    assert "Nonexistent" in result
