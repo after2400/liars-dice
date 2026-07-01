@@ -443,6 +443,71 @@ def test_settle_h2h_falls_back_gracefully_without_stats(tmp_path):
     assert moves == ["Relegated: Eve → CH"]
 
 
+# --- avatar_img_tag ---
+
+
+def test_avatar_img_tag_uses_cloudinary_when_avatar_set():
+    from game.components.leaderboard import avatar_img_tag
+
+    player = {"avatar": "hdyiihba/The_Merovingian_200x200_rqd12y.png"}
+    tag = avatar_img_tag("Merovingian", player)
+    assert (
+        'src="https://res.cloudinary.com/hdyiihba/image/upload/'
+        'w_64,h_64,c_fill/The_Merovingian_200x200_rqd12y.png"' in tag
+    )
+
+
+def test_avatar_img_tag_falls_back_to_gravatar_when_absent():
+    import hashlib
+
+    from game.components.leaderboard import avatar_img_tag
+
+    player = {}
+    tag = avatar_img_tag("Alice", player)
+    synthetic_hash = hashlib.md5(b"Alice", usedforsecurity=False).hexdigest()
+    assert f'src="https://www.gravatar.com/avatar/{synthetic_hash}?d=identicon&f=y&s=64"' in tag
+
+
+def test_avatar_img_tag_fallback_is_deterministic():
+    from game.components.leaderboard import avatar_img_tag
+
+    tag1 = avatar_img_tag("Alice", {})
+    tag2 = avatar_img_tag("Alice", {})
+    assert tag1 == tag2
+
+
+def test_avatar_img_tag_fallback_differs_per_class_name():
+    from game.components.leaderboard import avatar_img_tag
+
+    tag_alice = avatar_img_tag("Alice", {})
+    tag_bruno = avatar_img_tag("Bruno", {})
+    assert tag_alice != tag_bruno
+
+
+def test_avatar_img_tag_respects_size_param_for_cloudinary():
+    from game.components.leaderboard import avatar_img_tag
+
+    player = {"avatar": "hdyiihba/The_Merovingian_200x200_rqd12y.png"}
+    tag = avatar_img_tag("Merovingian", player, size=32)
+    assert "w_32,h_32,c_fill" in tag
+    assert 'width="32" height="32"' in tag
+
+
+def test_avatar_img_tag_respects_size_param_for_gravatar_fallback():
+    from game.components.leaderboard import avatar_img_tag
+
+    tag = avatar_img_tag("Alice", {}, size=32)
+    assert "s=32" in tag
+    assert 'width="32" height="32"' in tag
+
+
+def test_avatar_img_tag_default_size_is_64():
+    from game.components.leaderboard import avatar_img_tag
+
+    tag = avatar_img_tag("Alice", {})
+    assert 'width="64" height="64"' in tag
+
+
 # --- build_display_names ---
 
 

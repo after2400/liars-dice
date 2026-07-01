@@ -15,6 +15,7 @@ Exits 0 on success, 1 on any failure.
 import ast
 import importlib.util
 import inspect
+import re
 import signal
 import sys
 from pathlib import Path
@@ -43,6 +44,44 @@ def validate_display_name(name: str) -> str | None:
         return f"name '{name}' exceeds {MAX_NAME_LEN} characters"
     if "(" in name or ")" in name:
         return "name may not contain parentheses (reserved for username suffix)"
+    return None
+
+
+# --- avatar rules (imported by registration and rename scripts) ---
+
+_CLOUD_NAME_RE = re.compile(r"^[a-z0-9-]+\Z")
+_PUBLIC_ID_EXT_RE = re.compile(r"^[A-Za-z0-9_./-]+\Z")
+_AVATAR_EXTENSIONS = frozenset({"png", "jpg", "jpeg", "gif", "webp"})
+
+
+def validate_avatar(value: str) -> str | None:
+    """Return an error message if `value` is not a valid avatar identifier, else None.
+
+    Expects "cloud_name/public_id.ext" — the substring of a Cloudinary
+    delivery URL that comes after ".../image/upload/". This is the single
+    source of truth, imported by registration and sync scripts. The host
+    (`res.cloudinary.com`) is always a literal in the code that renders this
+    value, never derived from it, so no value that passes here can ever
+    redirect an <img> tag off Cloudinary's domain.
+    """
+    if not isinstance(value, str) or "/" not in value:
+        return f"avatar '{value}' must be in the form 'cloud_name/public_id.ext'"
+    cloud_name, public_id_ext = value.split("/", 1)
+    if not _CLOUD_NAME_RE.match(cloud_name):
+        return (
+            f"avatar cloud_name '{cloud_name}' is not valid "
+            "(lowercase letters, digits, and hyphens only)"
+        )
+    if ".." in public_id_ext:
+        return f"avatar public_id '{public_id_ext}' may not contain '..'"
+    if not _PUBLIC_ID_EXT_RE.match(public_id_ext):
+        return (
+            f"avatar public_id '{public_id_ext}' is not valid "
+            "(letters, digits, '_', '-', '.', '/' only)"
+        )
+    ext = public_id_ext.rsplit(".", 1)[-1] if "." in public_id_ext else ""
+    if ext not in _AVATAR_EXTENSIONS:
+        return f"avatar '{value}' must end with one of: {', '.join(sorted(_AVATAR_EXTENSIONS))}"
     return None
 
 
@@ -107,6 +146,22 @@ _BLOCKED_BUILTINS: frozenset[str] = frozenset({"exec", "eval", "__import__", "co
 _REQUIRED_ALGO_ARGS = ("self", "hand", "prior_bet", "total_dice", "bet_history", "outcomes")
 _ALLOWED_OPT_ARGS: frozenset[str] = frozenset({"stats", "tier", "round_players"})
 _V2_ALGO_ARGS = ("self", "ctx")
+
+_CLASS_STR_ATTR_VALIDATORS = {
+    "name": validate_display_name,
+    "avatar": validate_avatar,
+}
+
+
+def _check_str_literal(attr_name: str, value_node: ast.expr, errors: list[str]) -> None:
+    """Validate a class-level attribute's AST value is a string literal passing its rule."""
+    validator = _CLASS_STR_ATTR_VALIDATORS[attr_name]
+    if isinstance(value_node, ast.Constant) and isinstance(value_node.value, str):
+        err = validator(value_node.value)
+        if err:
+            errors.append(err)
+    else:
+        errors.append(f"Class '{attr_name}' attribute must be a plain string literal")
 
 
 def _check_algo_signature(node: ast.FunctionDef, errors: list[str]) -> None:
@@ -189,30 +244,20 @@ def _ast_errors(source: str, stem: str) -> list[str]:
     else:
         _check_algo_signature(algo_node, errors)
 
-    # Check display name if present as a class-level attribute. Must be a plain
-    # string literal — dynamic values cannot be validated without execution.
+    # Check name/avatar if present as class-level attributes. Must be plain
+    # string literals — dynamic values cannot be validated without execution.
     for node in class_node.body:
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "name":
-                    if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                        err = validate_display_name(node.value.value)
-                        if err:
-                            errors.append(err)
-                    else:
-                        errors.append("Class 'name' attribute must be a plain string literal")
+                if isinstance(target, ast.Name) and target.id in _CLASS_STR_ATTR_VALIDATORS:
+                    _check_str_literal(target.id, node.value, errors)
         elif isinstance(node, ast.AnnAssign):
             if (
                 isinstance(node.target, ast.Name)
-                and node.target.id == "name"
+                and node.target.id in _CLASS_STR_ATTR_VALIDATORS
                 and node.value is not None
             ):
-                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                    err = validate_display_name(node.value.value)
-                    if err:
-                        errors.append(err)
-                else:
-                    errors.append("Class 'name' attribute must be a plain string literal")
+                _check_str_literal(node.target.id, node.value, errors)
 
     return errors
 
@@ -292,6 +337,12 @@ def _runtime_errors(player_file: str, stem: str) -> list[str]:
     name_error = validate_display_name(display_name)
     if name_error:
         return [name_error]
+
+    avatar = getattr(player_class, "avatar", None)
+    if avatar is not None:
+        avatar_error = validate_avatar(avatar)
+        if avatar_error:
+            return [avatar_error]
 
     return []
 

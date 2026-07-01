@@ -1,3 +1,4 @@
+import hashlib
 import os
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -40,6 +41,31 @@ def build_display_names(players: dict) -> dict[str, str]:
         username_unique = bool(username) and same_username_count == 1
         result[cn] = f"{name} ({username if username_unique else cn})"
     return result
+
+
+_GRAVATAR_BASE = "https://www.gravatar.com/avatar"
+_CLOUDINARY_BASE = "https://res.cloudinary.com"
+
+
+def avatar_img_tag(class_name: str, player: dict, size: int = 64) -> str:
+    """Build an <img> tag for a player's avatar.
+
+    Uses the player's own Cloudinary image if `avatar` ("cloud_name/public_id.ext")
+    is set. Otherwise falls back to a Gravatar identicon keyed off a hash of the
+    (immutable, unique) class name so every player still gets a distinct, stable
+    placeholder; `f=y` forces the identicon even in the astronomically unlikely
+    case that hash coincidentally matches a real Gravatar account.
+    """
+    avatar = player.get("avatar")
+    if avatar:
+        cloud_name, public_id_ext = avatar.split("/", 1)
+        url = (
+            f"{_CLOUDINARY_BASE}/{cloud_name}/image/upload/w_{size},h_{size},c_fill/{public_id_ext}"
+        )
+    else:
+        synthetic_hash = hashlib.md5(class_name.encode("utf-8"), usedforsecurity=False).hexdigest()
+        url = f"{_GRAVATAR_BASE}/{synthetic_hash}?d=identicon&f=y&s={size}"
+    return f'<img src="{url}" width="{size}" height="{size}">'
 
 
 def _now() -> str:

@@ -289,3 +289,143 @@ def test_v2_player_no_deprecation_warning(tmp_path):
     assert result.returncode == 0, f"validate failed: {result.stderr}"
     assert "deprecat" not in result.stdout.lower()
     assert "deprecat" not in result.stderr.lower()
+
+
+def test_avatar_valid_passes(tmp_path):
+    """A well-formed cloud_name/public_id.ext avatar passes validation."""
+    f = tmp_path / "hasavatar.py"
+    f.write_text(
+        "class Hasavatar:\n"
+        "    avatar = 'hdyiihba/The_Merovingian_200x200_rqd12y.png'\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "OK" in result.stdout
+
+
+def test_avatar_missing_slash_fails(tmp_path):
+    """An avatar string with no '/' separating cloud_name from public_id exits 1."""
+    f = tmp_path / "badavatar.py"
+    f.write_text(
+        "class Badavatar:\n"
+        "    avatar = 'no-slash-here'\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+    assert "avatar" in result.stdout.lower()
+
+
+def test_avatar_bad_cloud_name_fails(tmp_path):
+    """Uppercase or invalid characters in cloud_name exit 1."""
+    f = tmp_path / "badavatar.py"
+    f.write_text(
+        "class Badavatar:\n"
+        "    avatar = 'BadCloud/public_id.png'\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+
+
+def test_avatar_bad_public_id_fails(tmp_path):
+    """Disallowed characters (e.g. a space) in public_id exit 1."""
+    f = tmp_path / "badavatar.py"
+    f.write_text(
+        "class Badavatar:\n"
+        "    avatar = 'hdyiihba/has a space.png'\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+
+
+def test_avatar_dotdot_rejected(tmp_path):
+    """A '..' path segment in public_id exits 1."""
+    f = tmp_path / "badavatar.py"
+    f.write_text(
+        "class Badavatar:\n"
+        "    avatar = 'hdyiihba/../secret.png'\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+
+
+def test_avatar_disallowed_extension_fails(tmp_path):
+    """An .svg extension exits 1 (raster formats only)."""
+    f = tmp_path / "badavatar.py"
+    f.write_text(
+        "class Badavatar:\n"
+        "    avatar = 'hdyiihba/public_id.svg'\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+
+
+def test_avatar_missing_extension_fails(tmp_path):
+    """A public_id with no extension at all exits 1."""
+    f = tmp_path / "badavatar.py"
+    f.write_text(
+        "class Badavatar:\n"
+        "    avatar = 'hdyiihba/public_id'\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+
+
+def test_avatar_absent_is_valid(tmp_path):
+    """No avatar attribute at all is perfectly valid (optional)."""
+    f = tmp_path / "noavatar.py"
+    f.write_text(
+        "class Noavatar:\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "OK" in result.stdout
+
+
+def test_avatar_trailing_newline_fails(tmp_path):
+    """An avatar value with a trailing newline exits 1 — '\\Z' must not match before a trailing newline."""
+    f = tmp_path / "badavatar.py"
+    f.write_text(
+        "class Badavatar:\n"
+        "    avatar = 'hdyiihba/public_id.png\\n'\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+
+
+def test_avatar_folder_nested_public_id_passes(tmp_path):
+    """A public_id containing folder slashes (legal in Cloudinary) passes validation."""
+    f = tmp_path / "hasavatar.py"
+    f.write_text(
+        "class Hasavatar:\n"
+        "    avatar = 'hdyiihba/players/merovingian.png'\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "OK" in result.stdout
