@@ -13,6 +13,7 @@ class Zara:
     """
 
     name = "Zara"
+    avatar = "hdyiihba/Zara.png"
 
     def _prob_bet_holds(self, hand: list, face: int, quantity: int, total_dice: int) -> float:
         own = hand.count(face) + (hand.count(1) if face != 1 else 0)
