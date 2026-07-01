@@ -7,6 +7,7 @@ from game.components.context import GameContext
 
 class Nuke:
     name = "Nuke LaLoosh"
+    avatar = "hdyiihba/Nuke_LaLoosh.png"
 
     BASE_CALL_THRESHOLD = 0.28
     CALL_FLOOR = 0.10
