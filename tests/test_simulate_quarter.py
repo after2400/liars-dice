@@ -321,3 +321,27 @@ def test_parse_args_n_games_override(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["quarter.py", "--n-games", "50"])
     args = parse_args()
     assert args.n_games == 50
+
+
+def test_write_report_includes_avatar_img_tag(tmp_path):
+    from game.simulation.quarter import write_report
+
+    lb = tmp_path / "leaderboard.yaml"
+    lb.write_text(
+        "players:\n"
+        "  Diego:\n"
+        "    tier: PRM\n"
+        "    display_name: Diego\n"
+        "    github_username: ''\n"
+        "    tier_stats:\n"
+        "      PRM:\n"
+        "        wins: 100\n"
+        "        games: 200\n"
+        "        win_pct: 50.0\n"
+    )
+    out = tmp_path / "report.md"
+    write_report([], str(lb), out, n_games=50)
+
+    text = out.read_text()
+    assert "<img src=" in text
+    assert 'width="64" height="64"' in text

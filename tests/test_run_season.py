@@ -14,6 +14,12 @@ REPO_ROOT = Path(__file__).parent.parent
 SCRIPT = REPO_ROOT / ".github" / "scripts" / "run_season.py"
 
 
+def _cell_name(cell: str) -> str:
+    """Strip a leading <img ...> avatar tag from a Player cell, if present."""
+    stripped = cell.strip()
+    return stripped.split(">", 1)[-1].strip() if stripped.startswith("<img") else stripped
+
+
 def _make_leaderboard(players: dict) -> dict:
     """Build a minimal leaderboard dict from a mapping of class_name → tier."""
     now = "2026-01-01T00:00:00Z"
@@ -286,6 +292,38 @@ def test_readme_disambiguates_duplicate_names(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Task 5: Avatar rendering tests
+# ---------------------------------------------------------------------------
+
+
+def test_standings_table_includes_avatar_img_tag():
+    """Every Player cell gets a leading <img> avatar tag, even without a real hash."""
+    mod = _load_run_season()
+    player = {"tier_stats": {"PRM": {"wins": 10, "games": 100, "win_pct": 10.0}}}
+    rows = mod._standings_table([("Eva", player)], "PRM", {"Eva": "Eva"})
+    data_row = rows[2]
+    assert "<img src=" in data_row
+    assert 'width="64" height="64"' in data_row
+    assert _cell_name(data_row.split("|")[1]) == "Eva"
+
+
+def test_quarter_leaderboard_includes_avatar_img_tag():
+    """Every Player cell in the quarter leaderboard also gets an avatar tag."""
+    mod = _load_run_season()
+    players = {
+        "Alpha": {
+            "tier": "PRM",
+            "display_name": "Alpha",
+            "tier_stats": {"PRM": {"wins": 100, "games": 1000, "win_pct": 10.0}},
+        },
+    }
+    rows = mod._quarter_leaderboard_table(players, {"Alpha": "Alpha"})
+    data_row = rows[2]
+    assert "<img src=" in data_row
+    assert _cell_name(data_row.split("|")[1]) == "Alpha"
+
+
+# ---------------------------------------------------------------------------
 # Test 5: standings Games column shows total games across all tiers
 # ---------------------------------------------------------------------------
 
@@ -325,7 +363,7 @@ def test_standings_sort_by_current_run_results():
     # This week: First won 90, Second won 40 — opposite of their QTD order.
     tier_results = {"PRM": {"First": 90, "Second": 40}}
     rows = mod._standings_table(players, "PRM", {n: n for n, _ in players}, tier_results, 100)
-    names = [r.split("|")[1].strip() for r in rows[2:]]
+    names = [_cell_name(r.split("|")[1]) for r in rows[2:]]
     assert names == ["First", "Second"]
 
 
@@ -345,7 +383,7 @@ def test_standings_relegated_player_pinned_at_top():
     # Winner ran in CH; RelUser ran in PRM (higher tier) and was relegated to CH.
     tier_results = {"CH": {"Winner": 60}, "PRM": {"RelUser": 15}}
     rows = mod._standings_table(players, "CH", {n: n for n, _ in players}, tier_results, 100)
-    names = [r.split("|")[1].strip() for r in rows[2:]]
+    names = [_cell_name(r.split("|")[1]) for r in rows[2:]]
     assert names[0] == "RelUser"
     assert "Relegated" in rows[2]
 
@@ -376,7 +414,7 @@ def test_quarter_leaderboard_sort_prm_first():
         },
     }
     rows = mod._quarter_leaderboard_table(players, {n: n for n in players})
-    names = [r.split("|")[1].strip() for r in rows[2:]]
+    names = [_cell_name(r.split("|")[1]) for r in rows[2:]]
     assert names == ["Gamma", "Beta", "Alpha"]
 
 
@@ -402,7 +440,7 @@ def test_quarter_leaderboard_ch_tiebreak():
         },
     }
     rows = mod._quarter_leaderboard_table(players, {"A": "A", "B": "B"})
-    names = [r.split("|")[1].strip() for r in rows[2:]]
+    names = [_cell_name(r.split("|")[1]) for r in rows[2:]]
     assert names == ["A", "B"]
 
 
@@ -422,7 +460,7 @@ def test_quarter_leaderboard_no_stats_sorts_last():
         },
     }
     rows = mod._quarter_leaderboard_table(players, {n: n for n in players})
-    names = [r.split("|")[1].strip() for r in rows[2:]]
+    names = [_cell_name(r.split("|")[1]) for r in rows[2:]]
     assert names == ["HasStats", "NoStats"]
 
 

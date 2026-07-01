@@ -119,7 +119,7 @@ def write_report(
     n_games: int,
 ) -> None:
     """Write a plain-Markdown simulation report."""
-    from game.components.leaderboard import build_display_names
+    from game.components.leaderboard import avatar_img_tag, build_display_names
     from game.season.utils import _load_lb
 
     data = _load_lb(lb_path)
@@ -159,7 +159,7 @@ def write_report(
             lines.append(f"| Player | Win % in {tier} | Wins | Win % Total | Total Wins | Games |")
             lines.append("|--------|----------------|------|-------------|------------|-------|")
             for name, p in tier_players:
-                display = display_names.get(name, name)
+                display = f"{avatar_img_tag(name, p)} {display_names.get(name, name)}"
                 ts = p.get("tier_stats", {}).get(tier, {})
                 all_ts = p.get("tier_stats", {}).values()
                 total_wins = sum(t.get("wins", 0) for t in all_ts)

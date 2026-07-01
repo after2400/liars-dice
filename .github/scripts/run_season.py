@@ -391,6 +391,8 @@ def _standings_table(
     tier_results: dict[str, dict[str, int]] | None = None,
     n_games: int = 0,
 ) -> list[str]:
+    from game.components.leaderboard import avatar_img_tag
+
     _RANK = {"inactive": 0, "L1": 1, "CH": 2, "PRM": 3}
     tier_rank = _RANK.get(tier, -1)
 
@@ -427,7 +429,7 @@ def _standings_table(
         "|--------|-----------|----------------|-------------|------------|-------|",
     ]
     for name, p in sorted_players:
-        display = display_names.get(name, name)
+        display = f"{avatar_img_tag(name, p)} {display_names.get(name, name)}"
         ts = p.get("tier_stats", {}).get(tier, {})
         all_stats = p.get("tier_stats", {}).values()
         total_wins = sum(t.get("wins", 0) for t in all_stats)
@@ -446,6 +448,8 @@ def _quarter_leaderboard_table(
 
     Sort order: QTD PRM W% desc → CH W% desc → L1 W% desc.
     """
+    from game.components.leaderboard import avatar_img_tag
+
     TIERS = ("PRM", "CH", "L1")
 
     def _sort_key(item: tuple[str, dict]) -> tuple:
@@ -459,7 +463,7 @@ def _quarter_leaderboard_table(
         "|--------|------|--------|-------|-------|----------|-------|",
     ]
     for name, p in sorted_players:
-        display = display_names.get(name, name)
+        display = f"{avatar_img_tag(name, p)} {display_names.get(name, name)}"
         tier_label = _TIER_LABEL.get(p.get("tier", ""), p.get("tier", ""))
         ts = p.get("tier_stats", {})
 
