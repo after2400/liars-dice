@@ -14,6 +14,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
+          # Safe: no step in this job references a secret, so the fork code
+          # checked out here never has token access. See #154 for the audit.
+          allow-unsafe-pr-checkout: true
 
       - uses: astral-sh/setup-uv@v8.2.0
         with:
@@ -37,6 +40,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
+          # Safe: no step in this job references a secret. See #154 for the audit.
+          allow-unsafe-pr-checkout: true
 
       - uses: wagoid/commitlint-github-action@v6
         with:

@@ -23,35 +23,55 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
+          # Safe: the step that executes fork code below has no secret in its
+          # env — only the later "Comment on validation failure" step (which
+          # runs no contributor code) sees GH_TOKEN. See #154 for the audit.
+          allow-unsafe-pr-checkout: true
 
-      - uses: astral-sh/setup-uv@v8.2.0
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: uv sync --no-install-project
-
-      - name: Validate player can be imported and instantiated
-        id: validate_file
+      - name: Check PR touches only players/*.py
+        id: scope
         run: |
           set -euo pipefail
 
           git fetch origin main
 
-          # Skip non-player PRs (same guard as register job)
+          # Skip non-player PRs (same guard as register job) — runs before any
+          # dependency install so a PR that also modifies pyproject.toml/uv.lock
+          # never gets its lockfile installed. See #154.
           all_changed=$(git diff --name-only origin/main...HEAD || true)
           non_player=$(echo "$all_changed" | grep -v '^players/' || true)
           if [ -n "$non_player" ]; then
             echo "PR touches non-player files — skipping validation."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Only validate added/modified files; deletions don't need an import check
           changed=$(git diff --name-only --diff-filter=AM origin/main...HEAD -- 'players/*.py' || true)
           if [ -z "$changed" ]; then
             echo "No player files added or modified — skipping validation."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+
+      - uses: astral-sh/setup-uv@v8.2.0
+        if: steps.scope.outputs.proceed == 'true'
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        if: steps.scope.outputs.proceed == 'true'
+        run: uv sync --no-install-project
+
+      - name: Validate player can be imported and instantiated
+        id: validate_file
+        if: steps.scope.outputs.proceed == 'true'
+        run: |
+          set -euo pipefail
+
+          # Only validate added/modified files; deletions don't need an import check
+          changed=$(git diff --name-only --diff-filter=AM origin/main...HEAD -- 'players/*.py' || true)
 
           while IFS= read -r player_file; do
             [ -z "$player_file" ] && continue
@@ -89,15 +109,50 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
+          # Safe: this job never imports/executes the fork's players/*.py
+          # content (only reads filenames via basename and looks up
+          # ownership through this repo's own trusted scripts) — the
+          # privileged LEADERBOARD_PAT below is never exposed to fork code.
+          # See #154 for the audit.
+          allow-unsafe-pr-checkout: true
+
+      - name: Check PR touches only players/*.py
+        id: scope
+        run: |
+          set -euo pipefail
+
+          git fetch origin main
+
+          # Runs before any dependency install so a PR that also modifies
+          # pyproject.toml/uv.lock never gets its lockfile installed on a
+          # runner that later holds LEADERBOARD_PAT. See #154.
+          all_changed=$(git diff --name-only origin/main...HEAD || true)
+          if [ -z "$all_changed" ]; then
+            echo "No file changes detected — not a player registration PR, skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          non_player=$(echo "$all_changed" | grep -v '^players/' || true)
+          if [ -n "$non_player" ]; then
+            echo "PR touches non-player files — not a player registration PR, skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
 
       - uses: astral-sh/setup-uv@v8.2.0
+        if: steps.scope.outputs.proceed == 'true'
         with:
           python-version: "3.11"
 
       - name: Install dependencies
+        if: steps.scope.outputs.proceed == 'true'
         run: uv sync --no-install-project
 
       - name: Validate and queue merge
+        if: steps.scope.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ secrets.LEADERBOARD_PAT }}
           COMMENT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -106,20 +161,6 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-
-          git fetch origin main
-
-          # If the PR touches any files outside players/, it's not a player registration PR — skip.
-          all_changed=$(git diff --name-only origin/main...HEAD || true)
-          if [ -z "$all_changed" ]; then
-            echo "No file changes detected — not a player registration PR, skipping."
-            exit 0
-          fi
-          non_player=$(echo "$all_changed" | grep -v '^players/' || true)
-          if [ -n "$non_player" ]; then
-            echo "PR touches non-player files — not a player registration PR, skipping."
-            exit 0
-          fi
 
           added=$(git diff --name-only --diff-filter=A origin/main...HEAD -- 'players/*.py' || true)
           modified=$(git diff --name-only --diff-filter=M origin/main...HEAD -- 'players/*.py' || true)
