@@ -6,6 +6,7 @@ from game.components.context import GameContext
 
 class Sloane:
     name = "Sloane"
+    avatar = "hdyiihba/Sloane_Avery.png"
 
     def _prob_bet_holds(self, hand: list[int], face: int, quantity: int, total_dice: int) -> float:
         own = hand.count(face) + (hand.count(1) if face != 1 else 0)
