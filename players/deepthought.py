@@ -506,7 +506,13 @@ class DeepThought:
         target_is_next = target is not None and target == next_p
 
         quantity, face = self._best_raise(
-            hand, prior_bet, total_dice, opening_bids, bluff_rates, next_p, base_p_call,
+            hand,
+            prior_bet,
+            total_dice,
+            opening_bids,
+            bluff_rates,
+            next_p,
+            base_p_call,
             target_is_next=target_is_next,
         )
         return Bet(quantity, face, self.name)
