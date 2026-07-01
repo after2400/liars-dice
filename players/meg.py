@@ -6,6 +6,7 @@ from game.components.context import GameContext
 
 class Meg:
     name = "Meg Griffin"
+    avatar = "hdyiihba/Meg_Griffin.png"
 
     # ── Tunable parameters ───────────────────────────────────────────────────
 
