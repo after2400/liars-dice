@@ -15,6 +15,7 @@ class Finn:
     """
 
     name = "Finn"
+    avatar = "hdyiihba/Finn_Carter.png"
 
     def _prob_bet_holds(self, hand: list, face: int, quantity: int, total_dice: int) -> float:
         own = hand.count(face) + (hand.count(1) if face != 1 else 0)
