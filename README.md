@@ -163,7 +163,7 @@ players/               # one .py file per player — see full list on GitHub
     lb_owner.py          # looks up github_username by class name
     lb_has_player.py     # checks whether a class name is registered
     lb_delete.py         # removes players from leaderboard by file path
-    lb_update_name.py    # validates and updates display_name on modification
+    lb_update_player.py  # validates and updates display_name/avatar on modification
 
 .Justfile                # local dev recipes (just develop / pytest / lint / simulate-*)
 leaderboard.yaml         # source of truth — tier, stats, github_username per player

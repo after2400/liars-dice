@@ -16,12 +16,14 @@ Open a PR that adds a single `.py` file to `players/`. The file must:
 2. Have a class name unique across the league — CI rejects duplicates (`Fred` already exists? try `Fred_<username>`)
 3. Implement the `algo` method (see [Player API](#player-api) below)
 4. Optionally set a `name` attribute (display name, ≤ 25 chars, no parentheses — see below)
+5. Optionally set an `avatar` attribute (image shown on standings tables — see below)
 
 ```python
 from game.components.bets import Bet
 
 class Fred:
     name = "Fred the Magnificent"  # optional — defaults to class name
+    avatar = "hdyiihba/The_Merovingian_200x200_rqd12y.png"  # optional — see below
 
     def algo(self, ctx) -> Bet | None:
         # ctx.hand, ctx.prior_bet, ctx.total_dice, ctx.bet_history,
@@ -38,6 +40,20 @@ The PR is validated and auto-merged. Your player competes starting from the next
 > **PR rules (enforced by CI):** Each PR must touch only files under `players/` and add or modify exactly one file.
 
 **Display name collisions:** if two players share the same `name`, the engine automatically appends each player's GitHub username in parentheses — e.g. `Fred (zachaustin01)`. Parentheses are reserved for this suffix, which is why they're prohibited in your `name` attribute.
+
+**Avatars:** sign up for a free [Cloudinary](https://cloudinary.com) account and upload an image — one account can host images for as many bots as you own, unlike Gravatar. Cloudinary shows you the image's full delivery URL, e.g.:
+
+```
+
+https://res.cloudinary.com/hdyiihba/image/upload/The_Merovingian_200x200_rqd12y.png
+                           └───┬──┘              └───────────────┬────────────────┘
+                           cloud_name            public_id.ext
+
+avatar = "hdyiihba/The_Merovingian_200x200_rqd12y.png"
+
+```
+
+Your `avatar` attribute is everything after `.../image/upload/` — `cloud_name` joined to `public_id.ext` by the `/` that already separates them in the URL. Must end in `.png`, `.jpg`, `.jpeg`, `.gif`, or `.webp`. Players without an `avatar` get a distinct, automatically-generated Gravatar placeholder image instead — no image ever needs to be uploaded anywhere for players who don't want a custom one.
 
 ---
 
