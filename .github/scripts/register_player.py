@@ -53,7 +53,7 @@ def main():
     if "" not in sys.path and "." not in sys.path:
         sys.path.insert(0, "")
 
-    from game.validate import validate_display_name
+    from game.validate import validate_avatar, validate_display_name
 
     spec = importlib.util.spec_from_file_location(module_name, player_file)
     if spec is None or spec.loader is None:
@@ -91,6 +91,13 @@ def main():
         print(f"ERROR: {name_error}")
         sys.exit(1)
 
+    avatar = getattr(player_class, "avatar", None)
+    if avatar is not None:
+        avatar_error = validate_avatar(avatar)
+        if avatar_error:
+            print(f"ERROR: {avatar_error}")
+            sys.exit(1)
+
     lb = _load_lb()
     players = lb.setdefault("players", {})
 
@@ -110,6 +117,8 @@ def main():
         "times_inactive": 0,
         "tier_stats": {},
     }
+    if avatar is not None:
+        players[class_name]["avatar"] = avatar
 
     _save_lb(lb)
     print(f"Registered {class_name} (display: {display_name}) as {github_username} in {entry_tier}")

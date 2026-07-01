@@ -67,7 +67,7 @@ jobs:
           fi
 
           if [ -n "$modified" ]; then
-            uv run python .github/scripts/lb_update_name.py "$modified"
+            uv run python .github/scripts/lb_update_player.py "$modified"
           fi
 
           if [ -n "$deleted" ]; then

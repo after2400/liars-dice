@@ -229,3 +229,38 @@ def test_register_rejects_name_with_parens(tmp_path):
     )
     assert rc == 1, out
     assert "ERROR" in out
+
+
+def test_register_stores_avatar(tmp_path):
+    player_py = tmp_path / "hasavatar.py"
+    player_py.write_text(
+        "class Hasavatar:\n"
+        "    avatar = 'hdyiihba/The_Merovingian_200x200_rqd12y.png'\n"
+        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "        return None\n"
+    )
+    lb = {"total_runs": 0, "players": {}}
+    rc, out = run_register(str(player_py), lb, tmp_path)
+    assert rc == 0, out
+    lb_result = yaml.safe_load((tmp_path / "leaderboard.yaml").read_text())
+    assert (
+        lb_result["players"]["Hasavatar"]["avatar"] == "hdyiihba/The_Merovingian_200x200_rqd12y.png"
+    )
+
+
+def test_register_omits_avatar_when_not_set(tmp_path):
+    lb = {"total_runs": 0, "players": {}}
+    player_file = REPO_ROOT / "players" / "alice.py"
+    rc, out = run_register(player_file, lb, tmp_path)
+    assert rc == 0, out
+    lb_result = yaml.safe_load((tmp_path / "leaderboard.yaml").read_text())
+    assert "avatar" not in lb_result["players"]["Alice"]
+
+
+def test_register_rejects_invalid_avatar(tmp_path):
+    player_py = tmp_path / "badavatar.py"
+    player_py.write_text("class Badavatar:\n    avatar = 'not-a-valid-avatar'\n")
+    lb = {"total_runs": 0, "players": {}}
+    rc, out = run_register(str(player_py), lb, tmp_path)
+    assert rc == 1, out
+    assert "ERROR" in out
