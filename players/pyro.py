@@ -16,6 +16,7 @@ class Pyro:
     """
 
     name = "Liar², Pants on Fire"
+    avatar = "hdyiihba/Liar_Liar.png"
 
     @staticmethod
     def _step(prior_bet: Bet) -> tuple[int, int]:
