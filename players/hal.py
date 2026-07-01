@@ -75,8 +75,8 @@ class Hal:
 
     # Bidder with 1-2 dice remaining is desperate — more likely to bluff.
     # Applied as a direct downward shift to p_holds on their bets.
-    DESPERATION_ADJ_1 = 0.10   # 1 die left
-    DESPERATION_ADJ_2 = 0.06   # 2 dice left
+    DESPERATION_ADJ_1 = 0.10  # 1 die left
+    DESPERATION_ADJ_2 = 0.06  # 2 dice left
 
     # How strongly a bidder's observed bluff rate shifts p_holds.
     # At baseline (bluff_rate=0.33), adj=0. High bluffers reduce p_holds.
@@ -93,7 +93,7 @@ class Hal:
     LATE_GAME_AGGRESSION = 0.25
 
     # Personalized adjustment weight: how much revealed_hand_frequency shifts the need.
-    REVEAL_ADJ_WEIGHT = 0.6   # 0=ignore, 1=full trust (blended in below)
+    REVEAL_ADJ_WEIGHT = 0.6  # 0=ignore, 1=full trust (blended in below)
     REVEAL_TRUST_ROUNDS = 25  # rounds of observed hands before full trust
 
     # Default challenge rate assumed when we have no data on a player
@@ -330,8 +330,7 @@ class Hal:
         if quantity > total:
             return 0.0
         return sum(
-            comb(total, k) * (p**k) * ((1 - p) ** (total - k))
-            for k in range(quantity, total + 1)
+            comb(total, k) * (p**k) * ((1 - p) ** (total - k)) for k in range(quantity, total + 1)
         )
 
     # ------------------------------------------------------------------
@@ -438,9 +437,7 @@ class Hal:
         # Hard call floor: if the bet almost certainly fails, call immediately.
         # Don't let EV miscalibration talk us out of an obvious challenge.
         bidder = prior.player
-        p_prior = self._p_holds(
-            hand, prior.face, prior.quantity, total, ctx, opening_bids, bidder
-        )
+        p_prior = self._p_holds(hand, prior.face, prior.quantity, total, ctx, opening_bids, bidder)
         if p_prior < 0.25:
             return None
 
