@@ -14,6 +14,7 @@ class Topper:
     """
 
     name = "Topper"
+    avatar = "hdyiihba/Topper.png"
 
     @staticmethod
     def _step(prior_bet: Bet) -> tuple[int, int]:
