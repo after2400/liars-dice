@@ -53,6 +53,7 @@ class Hal:
     """
 
     name = "HAL 9000"
+    avatar = "rzifhdkf/HAL_9000.png"
 
     # EV weights
     EV_SAFE = 0.3
