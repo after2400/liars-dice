@@ -17,6 +17,7 @@ class HonestAbe:
     """
 
     name = "Honest Abe"
+    avatar = "dfcgw5cr6/Honest_Abe.jpg"
 
     def __init__(self) -> None:
         self._bh_idx = 0
