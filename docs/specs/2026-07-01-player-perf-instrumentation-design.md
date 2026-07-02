@@ -42,13 +42,13 @@ class PerfTracker:
 
 - **Wall time:** `time.perf_counter()` before/after. Always recorded — negligible overhead (a counter read).
 - **CPU time:** `time.thread_time()` before/after. Always recorded. Chosen over `time.process_time()` because `process_time()` sums CPU across the whole process, which would be polluted by the Textual TUI's background render thread when `--tui` is active; `thread_time()` isolates the main thread running the game loop. Supported on Linux, macOS, and Windows — covers both local dev and GitHub Actions CI, no fallback needed.
-- **Peak memory (opt-in):** only when `profile_memory=True`. `PerfTracker.__init__` calls `tracemalloc.start()` if not already tracing (idempotent — a second `start()` while already tracing is a no-op per stdlib docs). Each call does `tracemalloc.reset_peak()` on enter and reads `tracemalloc.get_traced_memory()[1]` (peak since reset) on exit. This measures Python-level allocation peaks per call; it's an approximation (doesn't capture C-extension memory) but is precise enough for spotting a bot that's unusually allocation-heavy.
+- **Peak memory (opt-in):** only when `profile_memory=True`. `PerfTracker.__init__` calls `tracemalloc.start()` if not already tracing (idempotent — a second `start()` while already tracing is a no-op per stdlib docs). Each call does `tracemalloc.reset_peak()` on enter, then snapshots `tracemalloc.get_traced_memory()[0]` (current, which now equals the reset peak) as a baseline — `reset_peak()` resets the watermark to the _current_ traced total, not zero, so without this step every call's reading would include whatever memory was already alive in the process (accumulated `GameStats`/replay state, etc.), not just its own allocation. On exit, the recorded sample is `get_traced_memory()[1] - baseline`. This measures Python-level allocation peaks per call; it's an approximation (doesn't capture C-extension memory) but is precise enough for spotting a bot that's unusually allocation-heavy.
 
 Per-player samples are stored as plain lists of floats/ints; aggregates (avg/p95/max) are computed lazily when the report is built — this runs once per simulation step, so O(n log n) sorting for p95 is trivial even at 1000 games.
 
 ### `format_perf(tracker: PerfTracker, n_games: int) -> str`
 
-Text table in the same style as the existing `format_results()` bar chart, sorted by avg wall time descending (slowest bot first, since that's what you'd want to investigate). Columns: `Player | Calls | Avg Wall (ms) | P95 Wall (ms) | Max Wall (ms) | Avg CPU (ms) | Max CPU (ms)`, plus `Avg Peak (KB) | Max Peak (KB)` when memory profiling was on.
+Text table in the same style as the existing `format_results()` bar chart, sorted by avg wall time descending (slowest bot first, since that's what you'd want to investigate). Columns: `Player | Calls | Total Wall (s) | Total CPU (s) | Avg Wall (ms) | P95 Wall (ms) | Max Wall (ms) | Avg CPU (ms) | Max CPU (ms)`, plus `Avg Peak (KB) | Max Peak (KB)` when memory profiling was on.
 
 ### Engine changes
 

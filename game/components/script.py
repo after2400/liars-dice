@@ -20,6 +20,7 @@ def game_orchestrator(
     stats=None,
     tier: str | None = None,
     seed: int | None = None,
+    perf=None,
 ):
     """Plays a complete game of Liar's Dice between N players.
 
@@ -134,7 +135,11 @@ def game_orchestrator(
                         tier=tier,
                         round_players=round_players_order,
                     )
-                    action = player.algo(ctx)
+                    if perf is not None:
+                        with perf.time_call(player.name):
+                            action = player.algo(ctx)
+                    else:
+                        action = player.algo(ctx)
                 else:
                     kwargs: dict = {}
                     if _wants_stats[player]:
@@ -143,14 +148,25 @@ def game_orchestrator(
                         kwargs["tier"] = tier
                     if _wants_round_players[player]:
                         kwargs["round_players"] = list(round_players_order)
-                    action = player.algo(
-                        list(hands[player_idx]),
-                        safe_bet,
-                        total_dice,
-                        list(bet_history),
-                        list(completed_outcomes),
-                        **kwargs,
-                    )
+                    if perf is not None:
+                        with perf.time_call(player.name):
+                            action = player.algo(
+                                list(hands[player_idx]),
+                                safe_bet,
+                                total_dice,
+                                list(bet_history),
+                                list(completed_outcomes),
+                                **kwargs,
+                            )
+                    else:
+                        action = player.algo(
+                            list(hands[player_idx]),
+                            safe_bet,
+                            total_dice,
+                            list(bet_history),
+                            list(completed_outcomes),
+                            **kwargs,
+                        )
             except Exception:
                 logger.error(
                     "%s raised an exception - penalised\n%s",

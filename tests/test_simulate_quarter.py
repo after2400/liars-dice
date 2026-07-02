@@ -167,7 +167,7 @@ def test_run_step_passes_replaydb_to_tournament(monkeypatch):
     received = {}
 
     def fake_run_tournament(
-        n_games, lb_path, dashboard=None, replaydb=None, week_num=1, recording=False
+        n_games, lb_path, dashboard=None, replaydb=None, week_num=1, recording=False, **kwargs
     ):
         received["replaydb"] = replaydb
         received["week_num"] = week_num
@@ -203,7 +203,14 @@ def test_run_step_passes_replaydb_to_season(monkeypatch):
     received = {}
 
     def fake_run_season(
-        n_games, top_n, lb_path, dashboard=None, replaydb=None, week_num=1, recording=False
+        n_games,
+        top_n,
+        lb_path,
+        dashboard=None,
+        replaydb=None,
+        week_num=1,
+        recording=False,
+        **kwargs,
     ):
         received["replaydb"] = replaydb
         received["week_num"] = week_num
@@ -345,3 +352,39 @@ def test_write_report_includes_avatar_img_tag(tmp_path):
     text = out.read_text()
     assert "<img src=" in text
     assert 'width="64" height="64"' in text
+
+
+def test_run_step_passes_profile_memory_to_run_tournament(monkeypatch):
+    from game.simulation.quarter import run_step
+
+    calls = []
+
+    def fake_run_tournament(n_games, lb_path, dashboard=None, **kwargs):
+        calls.append(kwargs.get("profile_memory"))
+
+    import sys
+
+    fake_mod = type(sys)("game.simulation.tournament")
+    fake_mod.run_tournament = fake_run_tournament
+    monkeypatch.setitem(sys.modules, "game.simulation.tournament", fake_mod)
+
+    run_step(date(2026, 7, 6), "tournament", n_games=5, lb_path="lb.yaml", profile_memory=True)
+    assert calls == [True]
+
+
+def test_run_step_defaults_profile_memory_to_false(monkeypatch):
+    from game.simulation.quarter import run_step
+
+    calls = []
+
+    def fake_run_season(n_games, top_n, lb_path, dashboard=None, **kwargs):
+        calls.append(kwargs.get("profile_memory"))
+
+    import sys
+
+    fake_mod = type(sys)("game.simulation.season")
+    fake_mod.run_season = fake_run_season
+    monkeypatch.setitem(sys.modules, "game.simulation.season", fake_mod)
+
+    run_step(date(2026, 7, 13), "season", n_games=5, lb_path="lb.yaml")
+    assert calls == [False]
