@@ -17,6 +17,7 @@ class PeterBeter:
     """
 
     name = "Peter Beter"
+    avatar = "dfcgw5cr6/Peter_Beter.jpg"
 
     # Call liar whenever P(bet holds) drops below this. Same as Peter Griffin.
     CALL_THRESHOLD = 0.22
