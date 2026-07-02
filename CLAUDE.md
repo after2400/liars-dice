@@ -14,13 +14,14 @@
 **Single source of truth:** `leaderboard.yaml` — mutated in-place by every script. The tournament resets it; there is no separate per-quarter file.
 
 **Key env vars:**
-| Var | Default | Purpose |
-|-----|---------|---------|
-| `TODAY` | system date | Override the current date (YYYY-MM-DD) — used in `season_utils._today()` to mock time |
-| `DRY_RUN` | false | Skip GitHub API calls (issue creation, comments, git push) but still run games locally |
-| `N_GAMES` | 1000 | Games per tier/pool per run |
-| `TOP_N` | 4 | League capacity per tier (PRM/CH) |
-| `LEADERBOARD_PATH` | leaderboard.yaml | Path to the leaderboard file |
+
+| Var                | Default          | Purpose                                                                                |
+| ------------------ | ---------------- | -------------------------------------------------------------------------------------- |
+| `TODAY`            | system date      | Override the current date (YYYY-MM-DD) — used in `season_utils._today()` to mock time  |
+| `DRY_RUN`          | false            | Skip GitHub API calls (issue creation, comments, git push) but still run games locally |
+| `N_GAMES`          | 1000             | Games per tier/pool per run                                                            |
+| `TOP_N`            | 4                | League capacity per tier (PRM/CH)                                                      |
+| `LEADERBOARD_PATH` | leaderboard.yaml | Path to the leaderboard file                                                           |
 
 **Key scripts** (in `.github/scripts/` unless noted):
 
@@ -95,6 +96,31 @@ just simulate-quarter 2026-07-06 500         # with custom game count
 ```
 
 Outputs `sim-YYYY-QN.md` in the current directory. `leaderboard.yaml` is mutated in-place.
+
+**Player performance instrumentation** — see how expensive your bot is (wall-clock time, CPU time, and optionally memory) before it hits CI. Works with all three simulation commands above; nothing to enable for timing, it's always on:
+
+```bash
+just simulate-season 2026-07-13                        # wall/CPU timing always included
+just simulate-quarter --start 2026-07-06 --profile-memory   # add peak-memory-per-call tracking too
+```
+
+Each tier/pool's win-rate chart is followed by a `Player Performance` table, sorted slowest-first:
+
+```
+=== Player Performance — 100 games ===
+
+  Player            Calls  TotalWall(s)  TotalCPU(s)  AvgWall(ms)  P95Wall(ms)  MaxWall(ms)  AvgCPU(ms)  MaxCPU(ms)
+  ------------------------------------------------------------------------------------------------------------------
+  MyBot              3196        30.885        30.236        9.664       23.008       56.012       9.460      38.479
+```
+
+- **Calls** — how many `algo()` invocations were timed, across every game in that tier/pool.
+- **TotalWall(s) / TotalCPU(s)** — this bot's cumulative time across all those calls. If your bot's `TotalWall(s)` is a large share of the whole step's wall time, it's likely the bottleneck — but a long game (many rounds, hence many `Calls`) drives this up just as much as a slow bot does, so check `AvgWall(ms)` too before assuming your logic is the problem.
+- **AvgWall(ms) / P95Wall(ms) / MaxWall(ms)** — per-call cost. A `MaxWall` far above `AvgWall`/`P95Wall` usually means an occasional expensive code path (e.g. a cache/table built lazily on first use, or a rare branch that does more work).
+- **AvgCPU(ms) / MaxCPU(ms)** — CPU time, not wall time (`time.thread_time()`, isolated from any TUI rendering). Close to the wall numbers means your bot isn't blocked on I/O; a gap between them would be unusual for this engine.
+- **AvgPeak(KB) / MaxPeak(KB)** (only with `--profile-memory`) — peak Python-level memory allocated _within a single call_, not cumulative. This has real overhead, so it's opt-in — use it when you suspect a specific bot is allocation-heavy, not as a default-on flag.
+
+This is Phase 1: ephemeral, local-only — nothing here is written to `leaderboard.yaml` or shown in CI/README output.
 
 **Clean up afterward:**
 
