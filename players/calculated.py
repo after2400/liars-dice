@@ -19,6 +19,7 @@ class CalCulated:
     """
 
     name = "Cal Culatid"
+    avatar = "dfcgw5cr6/Cal_Culatid.jpg"
 
     OPENING_MULTIPLIER = 0.70
     THRESHOLD = 0.30
