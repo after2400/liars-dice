@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v2.6.0 (2026-07-02)
+
+### Features
+
+- **game**: Player performance instrumentation (wall/CPU/memory)
+  ([#173](https://github.com/after2400/liars-dice/pull/173),
+  [`6ce352b`](https://github.com/after2400/liars-dice/commit/6ce352bb571fb85cf079f9e8d08da9e6759d9d36))
+
+
 ## v2.5.1 (2026-07-02)
 
 ### Bug Fixes
