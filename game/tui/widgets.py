@@ -332,11 +332,12 @@ class StandingsWidget(Widget):
         title = f"  {self._series_label} — Game {self._game_num}/{self._n_games}\n"
         t = Text(title, style="bold")
         max_wins = max((self._wins.get(p, 0) for p in self._players), default=1) or 1
+        name_w = max((len(p) for p in self._players), default=14)
         for i, player in enumerate(self._players):
             w = self._wins.get(player, 0)
             gp = (self._stats.games_played.get(player, 1) if self._stats else 1) or 1
             bar = _bar(w, max_wins, width=_OVERVIEW_BAR_W)
-            label = f"  {player:<14}  {w:>5}  {_pct(w, gp):>6}  "
+            label = f"  {player:<{name_w}}  {w:>5}  {_pct(w, gp):>6}  "
             if i == self._cursor:
                 t.append(label, style="bold reverse")
                 t.append(bar + "\n")
