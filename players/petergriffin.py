@@ -16,6 +16,7 @@ class PeterGriffin:
     """
 
     name = "Peter Griffin"
+    avatar = "dfcgw5cr6/Peter_Griffin.jpg"
 
     # Call liar whenever P(bet holds) drops below this. Lower (more willing
     # to challenge) than the league's typical 0.30 — validated in ablation
