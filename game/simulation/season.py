@@ -49,6 +49,7 @@ def run_season(
     replaydb=None,
     week_num: int = 1,
     recording: bool = False,
+    profile_memory: bool = False,
 ) -> dict[str, dict[str, int]]:
     """Run one season step in-process. Returns {tier: {player: win_count}}.
 
@@ -61,15 +62,20 @@ def run_season(
         replaydb: Optional ReplayDB instance for seed recording/replay.
         week_num: Week number for seed indexing (default 1).
         recording: If True and replaydb is set, record seeds; if False, replay seeds.
+        profile_memory: If True, also track tracemalloc peak-allocation bytes per
+            algo() call (adds overhead — off by default).
     """
     from game.components.leaderboard import (
         apply_season_results,
         get_tier_players,
         settle_relegations,
     )
-    from game.components.series import format_results, run_series
+    from game.components.perf import PerfTracker
+    from game.components.series import format_perf, format_results, run_series
     from game.components.utils import apply_display_names, import_player_classes_from_dir
     from game.season.utils import _load_lb, form_pools
+
+    perf = PerfTracker(profile_memory=profile_memory)
 
     if players_dir is None:
         players_dir = str(_REPO_ROOT / "players")
@@ -128,6 +134,7 @@ def run_season(
                     on_game_complete=dashboard.update if dashboard else None,
                     record_seeds=record_seeds,
                     replay_seeds=replay_seeds,
+                    perf=perf,
                 )
                 if record_seeds is not None and replaydb is not None:
                     replaydb.save_seeds(week_num, tier, i, record_seeds)
@@ -154,6 +161,7 @@ def run_season(
                 on_game_complete=dashboard.update if dashboard else None,
                 record_seeds=record_seeds,
                 replay_seeds=replay_seeds,
+                perf=perf,
             )
             if record_seeds is not None and replaydb is not None:
                 replaydb.save_seeds(week_num, tier, 0, record_seeds)
@@ -178,6 +186,10 @@ def run_season(
         print("[settle] cross-tier relegations:")
         for m in relegations:
             print(f"  {m}")
+
+    perf_output = format_perf(perf, n_games)
+    if perf_output:
+        print(perf_output)
 
     return tier_results
 
@@ -209,6 +221,12 @@ def main() -> None:
         action="store_true",
         default=False,
         help="Launch the Textual TUI dashboard.",
+    )
+    parser.add_argument(
+        "--profile-memory",
+        action="store_true",
+        default=False,
+        help="Enable tracemalloc-based peak memory profiling per algo() call (adds overhead).",
     )
     parser.add_argument("--save-replay", action="store_true", default=False)
     parser.add_argument("--replay", type=Path, default=None)
@@ -286,6 +304,7 @@ def main() -> None:
                     replaydb=replaydb,
                     week_num=1,
                     recording=recording,
+                    profile_memory=args.profile_memory,
                 )
             )
         else:
@@ -296,6 +315,7 @@ def main() -> None:
                 replaydb=replaydb,
                 week_num=1,
                 recording=recording,
+                profile_memory=args.profile_memory,
             )
 
         if args.save_replay and replaydb:

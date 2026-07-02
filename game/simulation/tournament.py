@@ -24,6 +24,7 @@ def run_tournament(
     replaydb=None,
     week_num: int = 1,
     recording: bool = False,
+    profile_memory: bool = False,
 ) -> dict[str, dict[str, int]]:
     """Run a full tournament in-process. Returns {pool_key: {player: win_count}}.
 
@@ -38,11 +39,16 @@ def run_tournament(
         replaydb: Optional ReplayDB instance for seed recording/replay.
         week_num: Week number for seed indexing (default 1 for tournament).
         recording: If True and replaydb is set, record seeds; if False, replay seeds.
+        profile_memory: If True, also track tracemalloc peak-allocation bytes per
+            algo() call (adds overhead — off by default).
     """
     from game.components.leaderboard import get_tier_players
-    from game.components.series import format_results, run_series
+    from game.components.perf import PerfTracker
+    from game.components.series import format_perf, format_results, run_series
     from game.components.utils import apply_display_names, import_player_classes_from_dir
     from game.season.utils import _load_lb, _save_lb, current_quarter, form_pools
+
+    perf = PerfTracker(profile_memory=profile_memory)
 
     if players_dir is None:
         players_dir = str(_REPO_ROOT / "players")
@@ -111,6 +117,7 @@ def run_tournament(
             on_game_complete=dashboard.update if dashboard else None,
             record_seeds=record_seeds,
             replay_seeds=replay_seeds,
+            perf=perf,
         )
 
         if record_seeds is not None and replaydb is not None:
@@ -122,6 +129,10 @@ def run_tournament(
         display_wins = {display_map.get(k, k): v for k, v in result.wins.items()}
         print(format_results(display_wins, n_games))
         print(f"[done] {key}: {display_wins}")
+
+    perf_output = format_perf(perf, n_games)
+    if perf_output:
+        print(perf_output)
 
     # Assign placements
     _assign_placements(lb_path, pool_results)
@@ -181,6 +192,12 @@ def main() -> None:
         action="store_true",
         default=False,
         help="Launch the Textual TUI dashboard.",
+    )
+    parser.add_argument(
+        "--profile-memory",
+        action="store_true",
+        default=False,
+        help="Enable tracemalloc-based peak memory profiling per algo() call (adds overhead).",
     )
     parser.add_argument("--save-replay", action="store_true", default=False)
     parser.add_argument("--replay", type=Path, default=None)
@@ -256,6 +273,7 @@ def main() -> None:
                     replaydb=replaydb,
                     week_num=1,
                     recording=recording,
+                    profile_memory=args.profile_memory,
                 )
             )
         else:
@@ -265,6 +283,7 @@ def main() -> None:
                 replaydb=replaydb,
                 week_num=1,
                 recording=recording,
+                profile_memory=args.profile_memory,
             )
 
         if args.save_replay and replaydb:

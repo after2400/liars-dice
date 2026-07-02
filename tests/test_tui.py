@@ -24,6 +24,8 @@ def test_resolve_player_names_display_name_passthrough():
     from game.tui import resolve_player_names
 
     lb_path = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
-    result = resolve_player_names(["Oracle"], lb_path, "players")
-    # "Oracle" is a display name, not a class name — returned as-is
-    assert "Oracle" in result
+    result = resolve_player_names(["The Oracle"], lb_path, "players")
+    # "The Oracle" is a display name, not a class name — returned as-is.
+    # (Using the class name "Oracle" here would test the resolution path
+    # instead, since players/oracle.py's class Oracle has that display name.)
+    assert "The Oracle" in result

@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v2.5.1 (2026-07-02)
+
+### Bug Fixes
+
+- **workflows**: Share one concurrency group across leaderboard writers
+  ([#170](https://github.com/after2400/liars-dice/pull/170),
+  [`15b3130`](https://github.com/after2400/liars-dice/commit/15b3130af09294af3d3a096ca7e140fab0a4534f))
+
+
 ## v2.5.0 (2026-07-01)
 
 ### Features

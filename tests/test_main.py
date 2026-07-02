@@ -1298,3 +1298,121 @@ def test_simulation_tournament_run_tournament(tmp_path):
         data = yaml.safe_load(f)
     tiers = {p["tier"] for p in data["players"].values()}
     assert tiers <= {"PRM", "CH", "L1", "DED", "inactive"}
+
+
+def test_perf_tracker_records_calls_for_each_player():
+    """game_orchestrator(perf=tracker) records one call per player per turn taken."""
+    from game.components.perf import PerfTracker
+
+    class Caller:
+        name = "Caller"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            return None  # always call liar — game ends in one round
+
+    class Bidder:
+        name = "Bidder"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    tracker = PerfTracker()
+    game_orchestrator([Bidder(), Caller()], bet_history=[], perf=tracker)
+
+    assert tracker.call_count("Bidder") >= 1
+    assert tracker.call_count("Caller") >= 1
+
+
+def test_perf_tracker_records_call_even_when_player_raises():
+    """A player that raises still gets its call timed (finally runs before re-raise)."""
+    from game.components.perf import PerfTracker
+
+    class Crasher:
+        name = "Crasher"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            raise RuntimeError("boom")
+
+    class AlwaysBid:
+        name = "AlwaysBid"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    tracker = PerfTracker()
+    game_orchestrator([Crasher(), AlwaysBid()], bet_history=[], perf=tracker)
+
+    assert tracker.call_count("Crasher") >= 1
+
+
+def test_game_orchestrator_runs_without_perf_tracker():
+    """perf=None (the default) must not change existing behaviour."""
+
+    class Caller:
+        name = "Caller"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            return None
+
+    class Bidder:
+        name = "Bidder"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    winner = game_orchestrator([Bidder(), Caller()], bet_history=[])
+    assert winner is not None
+
+
+def test_run_series_perf_tracker_accumulates_across_games():
+    """run_series(perf=tracker) records calls across all games, not just one."""
+    from game.components.perf import PerfTracker
+    from game.components.series import run_series
+
+    class Caller:
+        name = "Caller"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            return None
+
+    class Bidder:
+        name = "Bidder"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    tracker = PerfTracker()
+    result = run_series([Bidder(), Caller()], n_games=3, perf=tracker)
+
+    assert result.perf is tracker
+    assert tracker.call_count("Bidder") >= 3
+    assert tracker.call_count("Caller") >= 3
+
+
+def test_run_series_perf_defaults_to_none():
+    from game.components.series import run_series
+
+    class Caller:
+        name = "Caller"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            return None
+
+    class Bidder:
+        name = "Bidder"
+
+        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            if prior_bet is None:
+                return Bet(1, 2, self.name)
+            return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
+
+    result = run_series([Bidder(), Caller()], n_games=1)
+    assert result.perf is None

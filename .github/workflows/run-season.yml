@@ -11,7 +11,7 @@ on:
         default: false
 
 concurrency:
-  group: season-run
+  group: leaderboard-write
   cancel-in-progress: false
 
 permissions:

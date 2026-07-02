@@ -137,6 +137,32 @@ def test_standings_cursor_highlight_excludes_bar():
             )
 
 
+def test_standings_widget_name_column_widens_for_longest_name():
+    """A long player name must not push later rows' columns out of alignment."""
+    from game.tui.widgets import StandingsWidget
+
+    widget = StandingsWidget()
+
+    class _FakeStats:
+        games_played = {"Ripley": 500, "Liar², Pants on Fire": 500, "Cleo": 500}
+
+    widget._players = ["Ripley", "Liar², Pants on Fire", "Cleo"]
+    widget._wins = {"Ripley": 221, "Liar², Pants on Fire": 2, "Cleo": 0}
+    widget._stats = _FakeStats()
+    widget._game_num = 500
+    widget._n_games = 500
+
+    lines = [line for line in widget.render().plain.splitlines() if line.strip()]
+    data_lines = lines[1:]  # drop the title line
+
+    assert all(len(line) == len(data_lines[0]) for line in data_lines)
+    # every row's win-count column starts at the same offset
+    longest_name_len = len("Liar², Pants on Fire")
+    win_col_start = 2 + longest_name_len + 2
+    for line, wins in zip(data_lines, [221, 2, 0]):
+        assert line[win_col_start : win_col_start + 5].strip() == str(wins)
+
+
 def test_standings_widget_drill_in_no_players_is_noop():
     """action_drill_in with empty player list does not post a message."""
     from game.tui.widgets import StandingsWidget
@@ -220,6 +246,60 @@ def test_sim_total_panel_copy_calls_app_clipboard():
     text = mock_app.copy_to_clipboard.call_args[0][0]
     assert "Oracle" in text
     assert "500" in text
+
+
+# ── LogPanel ───────────────────────────────────────────────────────────────────
+
+
+def test_log_panel_can_focus():
+    from game.tui.widgets import LogPanel
+
+    assert LogPanel.can_focus is True
+
+
+def test_log_panel_has_copy_binding():
+    from game.tui.widgets import LogPanel
+
+    keys = {b[0] for b in LogPanel.BINDINGS}
+    assert "c" in keys, "missing 'c' (copy) binding"
+
+
+def test_log_panel_copy_calls_app_clipboard():
+    from unittest.mock import MagicMock, PropertyMock, patch
+
+    from game.tui.widgets import LogPanel
+
+    panel = LogPanel()
+    panel.write_line("[bold]── Week 1 ──[/bold]")
+    panel.write_line("game 50: Oracle leads (30 wins)")
+    mock_app = MagicMock()
+    with patch.object(type(panel), "app", new_callable=PropertyMock, return_value=mock_app):
+        panel.action_copy_to_clipboard()
+
+    mock_app.copy_to_clipboard.assert_called_once()
+    text = mock_app.copy_to_clipboard.call_args[0][0]
+    assert "Week 1" in text
+    assert "Oracle leads" in text
+    assert "[bold]" not in text  # markup stripped for the clipboard
+
+
+def test_log_panel_copy_does_not_wrap_wide_lines():
+    """Lines wider than the 120-column default (e.g. the perf table with
+    memory columns) must round-trip on one line, not get hard-wrapped."""
+    from unittest.mock import MagicMock, PropertyMock, patch
+
+    from game.tui.widgets import LogPanel
+
+    panel = LogPanel()
+    wide_line = "  ".join(f"col{i}" for i in range(30))  # comfortably over 120 chars
+    assert len(wide_line) > 120
+    panel.write_line(wide_line)
+    mock_app = MagicMock()
+    with patch.object(type(panel), "app", new_callable=PropertyMock, return_value=mock_app):
+        panel.action_copy_to_clipboard()
+
+    text = mock_app.copy_to_clipboard.call_args[0][0]
+    assert wide_line in text  # unbroken — not split across a hard-wrapped line
 
 
 # ── PlayerStatsPanel container ─────────────────────────────────────────────────

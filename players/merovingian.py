@@ -9,6 +9,7 @@ from game.components.bets import Bet
 
 class Merovingian:
     name = "The Merovingian"
+    avatar = "hdyiihba/The_Merovingian.png"
 
     def __init__(self) -> None:
         self._s1 = 0
