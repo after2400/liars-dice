@@ -38,6 +38,7 @@ def run_step(
     replaydb=None,
     week_num: int = 1,
     recording: bool = False,
+    profile_memory: bool = False,
 ) -> str:
     """Run one Monday step in-process. Returns captured stdout text for the report.
 
@@ -59,6 +60,7 @@ def run_step(
                 replaydb=replaydb,
                 week_num=week_num,
                 recording=recording,
+                profile_memory=profile_memory,
             )
         else:
             from game.simulation.season import run_season
@@ -71,6 +73,7 @@ def run_step(
                 replaydb=replaydb,
                 week_num=week_num,
                 recording=recording,
+                profile_memory=profile_memory,
             )
     output = buf.getvalue()
     print(output, end="")
@@ -288,6 +291,12 @@ def parse_args() -> argparse.Namespace:
         help="Launch the Textual TUI dashboard.",
     )
     parser.add_argument(
+        "--profile-memory",
+        action="store_true",
+        default=False,
+        help="Enable tracemalloc-based peak memory profiling per algo() call (adds overhead).",
+    )
+    parser.add_argument(
         "--save-replay",
         action="store_true",
         default=False,
@@ -432,6 +441,7 @@ def main() -> None:
                         replaydb=replaydb,
                         week_num=i + 1,
                         recording=recording,
+                        profile_memory=args.profile_memory,
                     )
                     elapsed = time.perf_counter() - t0
                     print(f"[simulate] done in {elapsed:.1f}s")
@@ -456,6 +466,7 @@ def main() -> None:
                     replaydb=replaydb,
                     week_num=i + 1,
                     recording=recording,
+                    profile_memory=args.profile_memory,
                 )
                 elapsed = time.perf_counter() - t0
                 print(f"[simulate] done in {elapsed:.1f}s")

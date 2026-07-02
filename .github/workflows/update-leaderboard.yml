@@ -7,7 +7,7 @@ on:
       - "players/*.py"
 
 concurrency:
-  group: leaderboard-update
+  group: leaderboard-write
   cancel-in-progress: false
 
 permissions:
