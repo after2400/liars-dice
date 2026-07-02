@@ -26,6 +26,7 @@ class DeepThought:
     """
 
     name = "Deep Thought"
+    avatar = "dfcgw5cr6/Deep_Thought.jpg"
 
     # Call liar whenever P(bet holds) drops below this. Empirically confirmed
     # optimal at 0.22 vs the PRM field; raising to 0.28+ costs 2-6pp — both
