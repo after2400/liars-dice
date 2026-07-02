@@ -29,6 +29,7 @@ class Oracle:
     """
 
     name = "The Oracle"
+    avatar = "dfcgw5cr6/The_Oracle.gif"
 
     EV_SAFE = 0.3
     EV_WIN_CALL = 0.7
