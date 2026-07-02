@@ -15,9 +15,8 @@ class Oracle:
     The Oracle doesn't predict the future — she just runs a complete EV scan
     across every possible bid, including wilds, before the round begins. You
     think you're making a choice. She's already computed the optimal one and
-    is halfway through a cookie. When The Merovingian sits next in rotation,
-    she adds extra incentive to corner him (TARGET_EV_WIN_BONUS), because
-    some prophecies you fulfill yourself.
+    is halfway through a cookie. She targets whoever leads the table each game
+    — not just one bot, but whoever currently has the most to lose.
 
     Key innovations over the field:
     - Full EV scan for opens including face=1 (wilds) — same range as Merovingian
@@ -25,7 +24,8 @@ class Oracle:
     - Exponential p_call decay calibrated per player from observed challenge history
     - Desperation-conditioned bluff rates catch cornered players going all-in
     - Opening-bid inference partitions unseen dice before committing to a bet
-    - Merovingian-specific EV boost when he is next in rotation
+    - Credibility ceiling discounts bids above each opponent's honest face range
+    - Dynamic targeting: EV bonus when the table leader sits next in rotation
     """
 
     name = "The Oracle"
@@ -46,8 +46,8 @@ class Oracle:
     CHALLENGE_SLOPE = 3.0  # exponential decay steepness for p_call
     MIN_P_CALL = 0.1
 
-    TARGET_NAME = "The Merovingian"
-    TARGET_EV_WIN_BONUS = 0.4  # extra EV reward for trapping Merovingian into a failed call
+    TARGET_EV_WIN_BONUS = 0.4  # extra EV when table leader sits next in rotation
+    CRED_WEIGHT = 2.0  # penalty steepness for bids above opponent's honest ceiling
 
     def __init__(self) -> None:
         self._bh_idx = 0
@@ -238,6 +238,7 @@ class Oracle:
             certain, uncertain = own, total - len(hand)
 
         p = 2 / 6 if (wilds and f != 1) else 1 / 6
+
         need = q - certain
         if need <= 0:
             return 1.0
@@ -325,6 +326,26 @@ class Oracle:
         idx = players.index(self.name)
         return players[(idx + 1) % len(players)]
 
+    def _identify_target(self, ctx: GameContext) -> str | None:
+        counts = ctx.stats.dice_counts if ctx.stats else {}
+        candidates = {p: c for p, c in counts.items() if c > 0}
+        if not candidates:
+            return None
+        leader = max(candidates, key=candidates.__getitem__)
+        if leader == self.name:
+            others = {p: c for p, c in candidates.items() if p != self.name}
+            return max(others, key=others.__getitem__) if others else None
+        return leader
+
+    def _credibility(self, bidder: str, face: int, qty: int, total: int, stats) -> float:
+        if stats is None:
+            return 1.0
+        ceiling = stats.mean_held_quantity_by_face.get(bidder, {}).get(face)
+        if ceiling is None or qty <= ceiling:
+            return 1.0
+        excess = qty - ceiling
+        return max(0.0, 1.0 - self.CRED_WEIGHT * (excess / max(total, 1)))
+
     def algo(self, ctx: GameContext) -> Bet | None:
         self._sync(ctx)
 
@@ -342,9 +363,8 @@ class Oracle:
         late_factor = max(0.0, 1.0 - avg_dice / self.LATE_GAME_AVG_DICE)
 
         next_p = self._next_player(ctx)
-        ev_win = self.EV_WIN_CALL + (
-            self.TARGET_EV_WIN_BONUS if next_p == self.TARGET_NAME else 0.0
-        )
+        target = self._identify_target(ctx)
+        ev_win = self.EV_WIN_CALL + (self.TARGET_EV_WIN_BONUS if next_p == target else 0.0)
 
         if prior_bet is None:
             # Full EV scan for opening including face=1
@@ -368,7 +388,12 @@ class Oracle:
             return best_bet
 
         ph_prior = self._prob_holds(prior_bet.face, prior_bet.quantity, hand, total, wilds, ob, br)
-        ev_liar = ph_prior * self.EV_LOSE_CALL + (1.0 - ph_prior) * self.EV_WIN_CALL
+        # Credibility ceiling adjusts EV-of-liar only; threshold uses raw ph_prior
+        # so the calibrated BASE_THRESHOLD isn't disrupted.
+        ph_cred = ph_prior * self._credibility(
+            prior_bet.player, prior_bet.face, prior_bet.quantity, total, stats
+        )
+        ev_liar = ph_cred * self.EV_LOSE_CALL + (1.0 - ph_cred) * self.EV_WIN_CALL
 
         bidder_dice = self._last_dice_for(ctx, prior_bet.player)
         threshold = self._effective_threshold(prior_bet, stats, bidder_dice)
