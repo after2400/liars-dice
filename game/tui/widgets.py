@@ -59,12 +59,20 @@ def _pct(num: int, den: int) -> str:
     return f"{num / den * 100:.1f}%" if den else "—"
 
 
-def _to_plain_text(renderable) -> str:
-    """Render any Rich renderable to a plain-text string with no ANSI escape codes."""
+def _to_plain_text(renderable, *, soft_wrap: bool = False) -> str:
+    """Render any Rich renderable to a plain-text string with no ANSI escape codes.
+
+    By default this wraps at 120 columns, same as the visible panels it's
+    normally used for. Pass soft_wrap=True to disable wrapping entirely —
+    needed for LogPanel's copy action, whose lines (e.g. the perf table)
+    can be much wider than 120 columns and must round-trip unbroken.
+    """
     import re
 
     buf = io.StringIO()
-    Console(file=buf, width=120, highlight=False, no_color=True).print(renderable)
+    Console(file=buf, width=120, highlight=False, no_color=True).print(
+        renderable, soft_wrap=soft_wrap
+    )
     return re.sub(r"\x1b\[[^m]*m", "", buf.getvalue())
 
 
@@ -524,16 +532,26 @@ class PlayerStatsPanel(Widget):
 class LogPanel(RichLog):
     """Scrollable log panel, always visible at the bottom of the screen."""
 
+    can_focus = True
+
+    BINDINGS = [
+        ("c", "copy_to_clipboard", "Copy"),
+    ]
+
     DEFAULT_CSS = """
     LogPanel {
         height: 10;
         border-top: solid $primary-darken-2;
+    }
+    LogPanel:focus {
+        border: solid $accent;
     }
     """
 
     def __init__(self) -> None:
         super().__init__(highlight=True, markup=True, wrap=True)
         self._verbose = False
+        self._lines: list[str] = []
 
     @property
     def verbose(self) -> bool:
@@ -542,7 +560,11 @@ class LogPanel(RichLog):
     def toggle_verbose(self) -> None:
         self._verbose = not self._verbose
         status = "on" if self._verbose else "off"
-        self.write(f"[dim]verbose mode {status}[/dim]")
+        self.write_line(f"[dim]verbose mode {status}[/dim]")
 
     def write_line(self, text: str) -> None:
+        self._lines.append(text)
         self.write(text)
+
+    def action_copy_to_clipboard(self) -> None:
+        self.app.copy_to_clipboard(_to_plain_text("\n".join(self._lines), soft_wrap=True))
