@@ -601,7 +601,9 @@ def test_run_season_rebalances_in_one_run(tmp_path, monkeypatch):
         "CH": {"Remy": 337, "Finn": 312, "Alice": 194, "Bruno": 153, "Cleo": 4},
         "PRM": {"Sloane": 240, "Eva": 235, "Zara": 217, "Diego": 202, "Remy": 106},
     }
-    monkeypatch.setattr(run_season_mod, "_run_tier", lambda tier, n, t, p: canned.get(tier, {}))
+    monkeypatch.setattr(
+        run_season_mod, "_run_tier", lambda tier, n, t, p: (canned.get(tier, {}), [])
+    )
 
     run_season_mod.run_season(
         n_games=1000,
@@ -619,6 +621,50 @@ def test_run_season_rebalances_in_one_run(tmp_path, monkeypatch):
     assert by_tier("PRM") == {"Diego", "Eva", "Sloane", "Zara"}
     assert by_tier("CH") == {"Alice", "Bruno", "Finn", "Remy"}  # Remy parachuted back
     assert by_tier("L1") == {"Pyro", "Topper", "Cleo"}  # Cleo bounced back
+
+
+def test_run_season_expels_offender_after_tier_chmod_restored(tmp_path, monkeypatch):
+    """A security-violation offender detected during a tier run must be
+    expelled only after run_season()'s chmod(0o444) lock on lb_path is
+    lifted. _run_tier/_run_players used to call expel_player internally,
+    from inside that chmod-protected window — which would raise
+    PermissionError the moment a real violation occurred in production."""
+    run_season_mod = _load_run_season("run_season_chmod_offender")
+    monkeypatch.setattr(run_season_mod, "_DRY_RUN", False)
+
+    fake_repo = tmp_path / "fake_repo"
+    (fake_repo / "players").mkdir(parents=True)
+    (fake_repo / "players" / "cheater.py").write_text(
+        "class Cheater:\n    name = 'Cheater'\n    def algo(self, ctx):\n        return None\n"
+    )
+    monkeypatch.setattr(run_season_mod, "_REPO_ROOT", fake_repo)
+
+    players = {
+        "Cheater": _player("Cheater", "PRM"),
+        "Honest": _player("Honest", "PRM"),
+    }
+    lb_path = fake_repo / "leaderboard.yaml"
+    lb_path.write_text(yaml.dump({"total_runs": 0, "last_updated": "x", "players": players}))
+
+    monkeypatch.setattr(
+        run_season_mod,
+        "_run_tier",
+        lambda tier, n, t, p: ({}, ["Cheater"] if tier == "PRM" else []),
+    )
+
+    run_season_mod.run_season(
+        n_games=10,
+        top_n=4,
+        lb_path=str(lb_path),
+        summary_file=str(tmp_path / "summary.md"),
+        readme_path=str(tmp_path / "README.md"),
+    )
+
+    result = yaml.safe_load(lb_path.read_text())["players"]
+    assert "Cheater" not in result, "Offender must be expelled from the leaderboard"
+    assert not (fake_repo / "players" / "cheater.py").exists(), (
+        "Offender's source file must be gone"
+    )
 
 
 def test_run_season_reads_issue_number_from_leaderboard(tmp_path, monkeypatch):
@@ -653,12 +699,11 @@ def test_dry_run_skips_post_season_summary(monkeypatch, capsys):
     assert "[dry-run]" in out
 
 
-def test_dry_run_skips_readme_update(monkeypatch, tmp_path, capsys):
-    monkeypatch.setenv("DRY_RUN", "1")
+def test_dry_run_skips_readme_update(tmp_path):
     rs = _load_run_season("run_season_dry_readme")
     readme = tmp_path / "README.md"
     readme.write_text("original content")
-    rs._update_readme(str(readme), str(tmp_path / "lb.yaml"))
+    rs._update_readme(str(readme), str(tmp_path / "lb.yaml"), dry_run=True)
     assert readme.read_text() == "original content", "dry-run must not write README"
 
 

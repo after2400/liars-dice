@@ -33,7 +33,11 @@ if _repo_root_str not in sys.path:
     sys.path.insert(0, _repo_root_str)
 
 from game.season.utils import (  # noqa: E402
+    _TIER_LABEL,
     _load_lb,
+    _quarter_leaderboard_table,  # noqa: F401
+    _standings_table,  # noqa: F401
+    _update_readme,
     expel_player,
     form_pools,
     run_game_with_retry,
@@ -48,12 +52,16 @@ def _get_tier_players(data: dict, tier: str) -> list[str]:
     return [name for name, p in data.get("players", {}).items() if p.get("tier") == tier]
 
 
-def _run_tier(tier: str, n_games: int, top_n: int, lb_path: str) -> dict[str, int]:
-    """Run python -m game for *tier* and return a wins dict {class_name: win_count}.
+def _run_tier(
+    tier: str, n_games: int, top_n: int, lb_path: str
+) -> tuple[dict[str, int], list[str]]:
+    """Run python -m game for *tier*.
 
-    Returns an empty dict if the game engine exits with a non-zero status
-    (after a retry-without-offender attempt, if a security violation
-    triggered it — see run_game_with_retry).
+    Returns (wins, offenders): wins is {} if unrecoverable (after a
+    retry-without-offender attempt, if a security violation triggered it —
+    see run_game_with_retry). The caller must expel each offender itself,
+    once lb_path is writable again — run_season() chmods it read-only for
+    the duration of each tier's game-running call.
     """
     env = {**os.environ, "LEADERBOARD_PATH": lb_path}
     base_cmd = [
@@ -67,14 +75,17 @@ def _run_tier(tier: str, n_games: int, top_n: int, lb_path: str) -> dict[str, in
         "--tier",
         tier,
     ]
-    wins, offenders = run_game_with_retry(base_cmd, env, _REPO_ROOT, warn_label=f" for tier {tier}")
-    for offender in offenders:
-        expel_player(lb_path, offender, _REPO_ROOT, _DRY_RUN)
-    return wins
+    return run_game_with_retry(base_cmd, env, _REPO_ROOT, warn_label=f" for tier {tier}")
 
 
-def _run_players(players: list[str], n_games: int, lb_path: str) -> dict[str, int]:
-    """Run n_games for a specific player list. Returns {name: win_count}."""
+def _run_players(
+    players: list[str], n_games: int, lb_path: str
+) -> tuple[dict[str, int], list[str]]:
+    """Run n_games for a specific player list.
+
+    Returns (wins, offenders) — see _run_tier docstring; the caller must
+    expel each offender itself once lb_path is writable again.
+    """
     env = {**os.environ, "LEADERBOARD_PATH": lb_path}
     base_cmd = [
         "uv",
@@ -88,10 +99,7 @@ def _run_players(players: list[str], n_games: int, lb_path: str) -> dict[str, in
         "--players",
         *players,
     ]
-    wins, offenders = run_game_with_retry(base_cmd, env, _REPO_ROOT)
-    for offender in offenders:
-        expel_player(lb_path, offender, _REPO_ROOT, _DRY_RUN)
-    return wins
+    return run_game_with_retry(base_cmd, env, _REPO_ROOT)
 
 
 def _scan_v1_players(lb_path: str) -> list[str]:
@@ -176,21 +184,26 @@ def run_season(
                 f"{n_pools} pools of ≤{_POOL_MAX}, {n_games} games each …"
             )
             wins: dict[str, int] = {}
+            offenders: list[str] = []
             try:
                 os.chmod(lb_path, 0o444)
                 for i, pool in enumerate(pools):
                     print(f"  [pool {i + 1}/{n_pools}]: {pool}")
-                    pool_wins = _run_players(pool, n_games, lb_path)
+                    pool_wins, pool_offenders = _run_players(pool, n_games, lb_path)
                     wins.update(pool_wins)
+                    offenders.extend(pool_offenders)
             finally:
                 os.chmod(lb_path, 0o644)
         else:
             print(f"[run] {tier}: {len(players_in_tier)} players, {n_games} games each …")
             try:
                 os.chmod(lb_path, 0o444)
-                wins = _run_tier(tier, n_games, top_n, lb_path)
+                wins, offenders = _run_tier(tier, n_games, top_n, lb_path)
             finally:
                 os.chmod(lb_path, 0o644)
+
+        for offender in offenders:
+            expel_player(lb_path, offender, _REPO_ROOT, _DRY_RUN)
 
         if not wins:
             print(f"[skip] {tier}: game engine returned no results.")
@@ -211,7 +224,7 @@ def run_season(
 
     _write_summary(summary_file, tier_results, skipped, n_games, lb_path, v1_players)
     print(f"[done] Season summary written to {summary_file}")
-    _update_readme(readme_path, lb_path, tier_results, n_games)
+    _update_readme(readme_path, lb_path, tier_results, n_games, dry_run=_DRY_RUN)
     print(
         "[done] README standings updated."
         if not _DRY_RUN
@@ -342,177 +355,6 @@ def _write_summary(
 def _tier_rank(tier: str) -> int:
     """Higher number = higher tier."""
     return {"inactive": 0, "L1": 1, "CH": 2, "PRM": 3}.get(tier, -1)
-
-
-_README_START = "<!-- prettier-ignore-start -->"
-_README_END = "<!-- prettier-ignore-end -->"
-
-_TIER_LABEL = {"PRM": "Premier", "CH": "Championship", "L1": "Level 1", "inactive": "Inactive"}
-
-
-def _standings_table(
-    tier_players: list[tuple[str, dict]],
-    tier: str,
-    display_names: dict[str, str],
-    tier_results: dict[str, dict[str, int]] | None = None,
-    n_games: int = 0,
-) -> list[str]:
-    from game.components.leaderboard import avatar_img_tag
-
-    _RANK = {"inactive": 0, "L1": 1, "CH": 2, "PRM": 3}
-    tier_rank = _RANK.get(tier, -1)
-
-    def _is_relegated(name: str) -> bool:
-        if not tier_results:
-            return False
-        return any(
-            _RANK.get(t, -1) > tier_rank and name in results for t, results in tier_results.items()
-        )
-
-    def _sort_key(item: tuple[str, dict]) -> tuple:
-        name, p = item
-        if tier_results and n_games:
-            if _is_relegated(name):
-                return (0, 0.0)
-            if name in tier_results.get(tier, {}):
-                return (1, -(tier_results[tier][name] / n_games * 100))
-            return (2, 0.0)
-        return (1, -p.get("tier_stats", {}).get(tier, {}).get("win_pct", 0.0))
-
-    def _season_pct(name: str, p: dict) -> str:
-        if tier_results and n_games:
-            if _is_relegated(name):
-                return "Relegated"
-            if name in tier_results.get(tier, {}):
-                return str(round(tier_results[tier][name] / n_games * 100, 1))
-            return "—"
-        return str(p.get("tier_stats", {}).get(tier, {}).get("win_pct", 0.0))
-
-    sorted_players = sorted(tier_players, key=_sort_key)
-
-    lines = [
-        f"| Player | Season W% | Wins in {tier} | Win % Total | Total Wins | Games |",
-        "|--------|-----------|----------------|-------------|------------|-------|",
-    ]
-    for name, p in sorted_players:
-        display = f"{avatar_img_tag(name, p)} {display_names.get(name, name)}"
-        ts = p.get("tier_stats", {}).get(tier, {})
-        all_stats = p.get("tier_stats", {}).values()
-        total_wins = sum(t.get("wins", 0) for t in all_stats)
-        total_games = sum(t.get("games", 0) for t in p.get("tier_stats", {}).values())
-        total_win_pct = round(total_wins / total_games * 100, 1) if total_games else 0.0
-        lines.append(
-            f"| {display} | {_season_pct(name, p)} | {ts.get('wins', 0)} | {total_win_pct} | {total_wins} | {total_games} |"
-        )
-    return lines
-
-
-def _quarter_leaderboard_table(
-    players: dict[str, dict], display_names: dict[str, str]
-) -> list[str]:
-    """Unified quarter view — one row per player, win% columns for each tier.
-
-    Sort order: QTD PRM W% desc → CH W% desc → L1 W% desc.
-    """
-    from game.components.leaderboard import avatar_img_tag
-
-    TIERS = ("PRM", "CH", "L1")
-
-    def _sort_key(item: tuple[str, dict]) -> tuple:
-        ts = item[1].get("tier_stats", {})
-        return tuple(-ts.get(t, {}).get("win_pct", 0.0) for t in TIERS)
-
-    sorted_players = sorted(players.items(), key=_sort_key)
-
-    lines = [
-        "| Player | Tier | PRM W% | CH W% | L1 W% | Total W% | Games |",
-        "|--------|------|--------|-------|-------|----------|-------|",
-    ]
-    for name, p in sorted_players:
-        display = f"{avatar_img_tag(name, p)} {display_names.get(name, name)}"
-        tier_label = _TIER_LABEL.get(p.get("tier", ""), p.get("tier", ""))
-        ts = p.get("tier_stats", {})
-
-        prm_pct = str(ts["PRM"].get("win_pct", 0.0)) if "PRM" in ts else "—"
-        ch_pct = str(ts["CH"].get("win_pct", 0.0)) if "CH" in ts else "—"
-        l1_pct = str(ts["L1"].get("win_pct", 0.0)) if "L1" in ts else "—"
-
-        total_wins = sum(t.get("wins", 0) for t in ts.values())
-        total_games = sum(t.get("games", 0) for t in ts.values())
-        total_pct = round(total_wins / total_games * 100, 1) if total_games else 0.0
-
-        lines.append(
-            f"| {display} | {tier_label} | {prm_pct} | {ch_pct} | {l1_pct} | {total_pct} | {total_games} |"
-        )
-    return lines
-
-
-def _update_readme(
-    readme_path: str,
-    lb_path: str,
-    tier_results: dict[str, dict[str, int]] | None = None,
-    n_games: int = 0,
-) -> None:
-    """Replace the <!-- leaderboard-start/end --> section in README.md with current standings."""
-    if _DRY_RUN:
-        return
-    if not os.path.exists(readme_path):
-        return
-
-    from game.components.leaderboard import build_display_names
-
-    data = _load_lb(lb_path)
-    players = data.get("players", {})
-    display_names = build_display_names(players)
-
-    def _sorted_players(tier: str) -> list[tuple[str, dict]]:
-        pts = [(n, p) for n, p in players.items() if p.get("tier") == tier]
-        pts.sort(key=lambda x: -x[1].get("tier_stats", {}).get(tier, {}).get("win_pct", 0.0))
-        return pts
-
-    lines: list[str] = [_README_START, "<!-- leaderboard-start -->"]
-
-    for tier in ("PRM", "CH", "L1"):
-        label = _TIER_LABEL[tier]
-        tier_players = _sorted_players(tier)
-        lines.append(f"### {label}")
-        if tier_players:
-            lines.extend(_standings_table(tier_players, tier, display_names, tier_results, n_games))
-        else:
-            lines.append(f"*No players currently in {label}.*")
-        lines.append("")
-
-    inactive_players = _sorted_players("inactive")
-    if inactive_players:
-        lines.append("<details>")
-        lines.append(f"<summary>Inactive ({len(inactive_players)} players)</summary>")
-        lines.append("")
-        lines.extend(
-            _standings_table(inactive_players, "inactive", display_names, tier_results, n_games)
-        )
-        lines.append("")
-        lines.append("</details>")
-        lines.append("")
-
-    lines.append("### Quarter Leaderboard")
-    lines.append("")
-    lines.extend(_quarter_leaderboard_table(players, display_names))
-    lines.append("")
-
-    lines.extend(["<!-- leaderboard-end -->", _README_END])
-    block = "\n".join(lines)
-
-    with open(readme_path) as f:
-        content = f.read()
-
-    start_idx = content.find(_README_START)
-    end_idx = content.find(_README_END)
-    if start_idx == -1 or end_idx == -1:
-        return
-
-    updated = content[:start_idx] + block + content[end_idx + len(_README_END) :]
-    with open(readme_path, "w") as f:
-        f.write(updated)
 
 
 def _post_season_summary(issue_number: int, summary_file: str) -> None:

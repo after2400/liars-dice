@@ -34,6 +34,7 @@ from game.season.utils import (  # noqa: E402
     _load_lb,
     _save_lb,
     _today,  # noqa: F401
+    _update_readme,
     current_quarter,
     expel_player,
     form_pools,
@@ -311,6 +312,7 @@ def main() -> None:
     n_games = int(os.environ.get("N_GAMES", "1000"))
     lb_path = os.environ.get("LEADERBOARD_PATH", "leaderboard.yaml")
     summary_file = os.environ.get("SUMMARY_FILE", "season_summary.md")
+    readme_path = os.environ.get("README_PATH", str(_REPO_ROOT / "README.md"))
 
     quarter = current_quarter()
     print(f"[reset_season] quarter={quarter} n_games={n_games} lb={lb_path}")
@@ -321,6 +323,12 @@ def main() -> None:
     _write_tournament_summary(summary_file, lb_path, quarter)
     print(open(summary_file).read())
     create_season_issue(lb_path, quarter=quarter, summary_file=summary_file)
+    _update_readme(readme_path, lb_path, dry_run=_DRY_RUN)
+    print(
+        "[done] README standings updated."
+        if not _DRY_RUN
+        else "[dry-run] would update README standings."
+    )
     print("[done] Quarterly reset complete.")
 
 
