@@ -129,7 +129,11 @@ jobs:
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add leaderboard.yaml README.md
+          # players/ is included so an expelled offender's deleted source file
+          # (see _expel_player in run_season.py) actually gets committed —
+          # otherwise it reappears as an "unregistered challenger" on every
+          # subsequent PRM/CH run once it drops out of leaderboard.yaml.
+          git add leaderboard.yaml README.md players/
           if ! git diff --cached --quiet; then
             git commit -m "ci: update leaderboard [skip ci]"
             if [ -z "${DRY_RUN:-}" ]; then
