@@ -233,32 +233,3 @@ players:
     tier_since: '2026-07-06T06:06:57Z'
     times_inactive: 0
     tier_stats: {}
-tournament_state:
-  quarter: 2026-Q3
-  pool_results:
-    pool_0: {}
-    pool_1:
-      Hal: 254
-      Eva: 138
-      Pyro: 2
-      Bruno: 81
-      HonestAbe: 150
-      Columbo: 160
-      DeepThought: 215
-    pool_2:
-      PeterGriffin: 158
-      Ripley: 326
-      Cleo: 1
-      Sloane: 120
-      Topper: 1
-      PeterBeter: 142
-      EvilStewie: 252
-    pool_3:
-      Oracle: 279
-      CalCulated: 109
-      Merovingian: 341
-      Zara: 134
-      Remy: 54
-      Meg: 26
-      Finn: 57
-  issue_created: true
