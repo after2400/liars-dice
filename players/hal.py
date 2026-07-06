@@ -55,7 +55,7 @@ class Hal:
     name = "HAL 9000"
     avatar = "rzifhdkf/HAL_9000.png"
 
-    # EV weights
+    # EV weights — tuned empirically
     EV_SAFE = 0.3
     EV_WIN_CALL = 0.7
     EV_LOSE_CALL = -1.0
