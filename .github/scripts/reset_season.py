@@ -37,6 +37,7 @@ from game.season.utils import (  # noqa: E402
     _save_lb,
     _today,  # noqa: F401
     current_quarter,
+    expel_player,
     form_pools,
     is_tournament_monday,  # noqa: F401
 )
@@ -64,8 +65,15 @@ def zero_stats(lb_path: str, quarter: str) -> None:
     print(f"[done] zero_stats: all tier_stats cleared for {quarter}")
 
 
-def _run_pool(pool: list[str], n_games: int, lb_path: str) -> dict[str, int]:
-    """Run n_games games for the given pool. Returns {class_name: win_count}."""
+def _run_pool(pool: list[str], n_games: int, lb_path: str) -> tuple[dict[str, int], str | None]:
+    """Run n_games games for the given pool.
+
+    Returns (wins, offender): wins is {class_name: win_count} (empty on any
+    failure); offender is the class name of a detected security-violation
+    offender, or None. The caller is responsible for actually expelling the
+    offender — lb_path is chmod'd read-only for the duration of run_pools()'s
+    loop, so expulsion can't happen from in here.
+    """
     with tempfile.NamedTemporaryFile(suffix=".json", prefix="pool_results_", delete=False) as tmp:
         results_file = tmp.name
     try:
@@ -87,11 +95,17 @@ def _run_pool(pool: list[str], n_games: int, lb_path: str) -> dict[str, int]:
         proc = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(_REPO_ROOT))
         print(proc.stdout, end="")
         if proc.returncode != 0:
+            if proc.returncode == 127:
+                for line in proc.stderr.splitlines():
+                    if "SECURITY_VIOLATION:" in line:
+                        offender = line.split(":", 1)[1]
+                        print(f"[CRITICAL] Security violation by {offender}!", file=sys.stderr)
+                        return {}, offender
             print(f"[warn] pool game engine exited {proc.returncode}", file=sys.stderr)
             print(proc.stderr, end="", file=sys.stderr)
-            return {}
+            return {}, None
         with open(results_file) as f:
-            return json.load(f)
+            return json.load(f), None
     finally:
         try:
             os.unlink(results_file)
@@ -135,12 +149,15 @@ def run_pools(lb_path: str, n_games: int) -> None:
     pools = form_pools(seeded, n_pools)
 
     pool_results: dict[str, dict[str, int]] = {}
+    offenders: list[str] = []
     try:
         os.chmod(lb_path, 0o444)
         for i, pool in enumerate(pools):
             key = f"pool_{i}"
             print(f"[run] {key}: {pool}")
-            wins = _run_pool(pool, n_games, lb_path)
+            wins, offender = _run_pool(pool, n_games, lb_path)
+            if offender:
+                offenders.append(offender)
             pool_results[key] = wins
             print(f"[done] {key}: {wins}")
     finally:
@@ -150,6 +167,12 @@ def run_pools(lb_path: str, n_games: int) -> None:
     data["tournament_state"] = state
     _save_lb(data, lb_path)
     print(f"[done] run_pools: {n_pools} pool(s) complete")
+
+    # Expelling after the main save (rather than inside the loop, while
+    # lb_path is still read-only) avoids a stale in-memory `data` clobbering
+    # expel_player's own load/modify/save round-trip.
+    for offender in offenders:
+        expel_player(lb_path, offender, _REPO_ROOT, _DRY_RUN)
 
 
 def assign_placements(lb_path: str, n_games: int) -> None:
@@ -205,25 +228,16 @@ def _gh_create_issue(title: str, repo: str) -> int:
         print(f"[dry-run] would create issue: {title!r} in {repo}")
         return 0
     result = subprocess.run(
-        [
-            "gh",
-            "issue",
-            "create",
-            "--repo",
-            repo,
-            "--title",
-            title,
-            "--body",
-            "",
-            "--json",
-            "number",
-        ],
+        ["gh", "issue", "create", "--repo", repo, "--title", title, "--body", ""],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
         raise RuntimeError(f"gh issue create failed: {result.stderr}")
-    return json.loads(result.stdout)["number"]
+    # `gh issue create` has no --json support; on success it prints the new
+    # issue's URL (e.g. https://github.com/owner/repo/issues/123) to stdout.
+    url = result.stdout.strip()
+    return int(url.rsplit("/", 1)[-1])
 
 
 def _gh_post_comment(issue_number: int, body_file: str, repo: str) -> None:

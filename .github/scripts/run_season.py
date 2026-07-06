@@ -34,56 +34,10 @@ _repo_root_str = str(_REPO_ROOT)
 if _repo_root_str not in sys.path:
     sys.path.insert(0, _repo_root_str)
 
-from game.season.utils import _load_lb, form_pools  # noqa: E402
+from game.season.utils import _load_lb, expel_player, form_pools  # noqa: E402
 
 _DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
 _POOL_MAX = 9  # maximum players per L1 pool; split when L1 exceeds this
-
-
-def _expel_player(lb_path: str, class_name: str):
-    """Permanently remove a player from the league and delete their files.
-
-    Refuses to touch anything unless this is a real, non-dry-run invocation
-    against the repo's live leaderboard.yaml:
-
-    - Tests always pass an isolated tmp/copy path, which never resolves to
-      _REPO_ROOT/leaderboard.yaml, so the path check alone stops them.
-    - Local `just simulate-*` commands set DRY_RUN=1 but do NOT override
-      LEADERBOARD_PATH — they intentionally mutate the real leaderboard.yaml
-      in place (see CLAUDE.md), so the path check alone would NOT stop them.
-      DRY_RUN is checked explicitly so a local simulation that catches a
-      cheater doesn't delete the real players/*.py source file (`just clean`
-      restores leaderboard.yaml, but not a deleted player file).
-    """
-    from game.season.utils import _load_lb, _save_lb
-
-    if _DRY_RUN:
-        print(
-            f"[SECURITY] {class_name} triggered a security violation, but DRY_RUN "
-            "is set — skipping expulsion (local simulation).",
-            file=sys.stderr,
-        )
-        return
-
-    real_lb_path = (_REPO_ROOT / "leaderboard.yaml").resolve()
-    if Path(lb_path).resolve() != real_lb_path:
-        print(
-            f"[SECURITY] {class_name} triggered a security violation, but {lb_path} "
-            "is not the live leaderboard — skipping expulsion (test isolation).",
-            file=sys.stderr,
-        )
-        return
-
-    data = _load_lb(lb_path)
-    if class_name in data.get("players", {}):
-        del data["players"][class_name]
-        _save_lb(data, lb_path)
-        print(f"[SECURITY] Expelled {class_name} from league.")
-
-    player_file = _REPO_ROOT / "players" / f"{class_name.lower()}.py"
-    if player_file.exists():
-        player_file.unlink()
-        print(f"[SECURITY] Deleted {player_file}")
 
 
 def _get_tier_players(data: dict, tier: str) -> list[str]:
@@ -130,7 +84,7 @@ def _run_tier(tier: str, n_games: int, top_n: int, lb_path: str) -> dict[str, in
                     if "SECURITY_VIOLATION:" in line:
                         offender = line.split(":", 1)[1]
                         print(f"[CRITICAL] Security violation by {offender}!", file=sys.stderr)
-                        _expel_player(lb_path, offender)
+                        expel_player(lb_path, offender, _REPO_ROOT, _DRY_RUN)
             else:
                 print(
                     f"[warn] game engine exited {proc.returncode} for tier {tier}", file=sys.stderr
@@ -176,7 +130,7 @@ def _run_players(players: list[str], n_games: int, lb_path: str) -> dict[str, in
                     if "SECURITY_VIOLATION:" in line:
                         offender = line.split(":", 1)[1]
                         print(f"[CRITICAL] Security violation by {offender}!", file=sys.stderr)
-                        _expel_player(lb_path, offender)
+                        expel_player(lb_path, offender, _REPO_ROOT, _DRY_RUN)
             else:
                 print(f"[warn] game engine exited {proc.returncode}", file=sys.stderr)
                 print(proc.stderr, end="", file=sys.stderr)

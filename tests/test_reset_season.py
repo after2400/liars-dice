@@ -183,7 +183,9 @@ def test_run_pools_stores_results(tmp_path, monkeypatch):
 
     canned = {"Alice": 450, "Bruno": 300, "Cleo": 250}
     monkeypatch.setattr(
-        mod, "_run_pool", lambda pool, n_games, lb_path: {p: canned[p] for p in pool if p in canned}
+        mod,
+        "_run_pool",
+        lambda pool, n_games, lb_path: ({p: canned[p] for p in pool if p in canned}, None),
     )
 
     lb = _make_lb(
@@ -206,7 +208,7 @@ def test_run_pools_is_idempotent(tmp_path, monkeypatch):
     """run_pools() skips if pool_results already present."""
     mod = _load()
     called = []
-    monkeypatch.setattr(mod, "_run_pool", lambda *a, **kw: called.append(1) or {})
+    monkeypatch.setattr(mod, "_run_pool", lambda *a, **kw: called.append(1) or ({}, None))
 
     lb = _make_lb(
         {"Alice": _player("PRM"), "Bruno": _player("CH")},
@@ -220,6 +222,42 @@ def test_run_pools_is_idempotent(tmp_path, monkeypatch):
 
     mod.run_pools(path, n_games=10)
     assert len(called) == 0  # _run_pool was never called
+
+
+def test_run_pools_expels_security_violation_offender(tmp_path, monkeypatch):
+    """A pool that detects a security violation (offender returned by
+    _run_pool) must have that player expelled once the leaderboard is
+    writable again — not silently discarded like an ordinary crash."""
+    mod = _load()
+    monkeypatch.setattr(mod, "_DRY_RUN", False)
+
+    fake_repo = tmp_path / "fake_repo"
+    (fake_repo / "players").mkdir(parents=True)
+    (fake_repo / "players" / "cheater.py").write_text("class Cheater:\n    name = 'Cheater'\n")
+    monkeypatch.setattr(mod, "_REPO_ROOT", fake_repo)
+
+    def fake_run_pool(pool, n_games, lb_path):
+        if "Cheater" in pool:
+            return {}, "Cheater"
+        return {p: 1 for p in pool}, None
+
+    monkeypatch.setattr(mod, "_run_pool", fake_run_pool)
+
+    lb = _make_lb(
+        {"Cheater": _player("PRM"), "Honest": _player("PRM")},
+        tournament_state={"quarter": "2026-Q3"},
+    )
+    path = fake_repo / "leaderboard.yaml"
+    path.write_text(yaml.dump(lb))
+
+    mod.run_pools(str(path), n_games=10)
+
+    result = yaml.safe_load(path.read_text())
+    assert "Cheater" not in result["players"], "Offender must be removed from the leaderboard"
+    assert "Honest" in result["players"]
+    assert not (fake_repo / "players" / "cheater.py").exists(), (
+        "Offender's source file must be gone"
+    )
 
 
 def test_assign_placements_fills_tiers_top_down(tmp_path):
@@ -385,6 +423,38 @@ def test_dry_run_skips_gh_create_issue(monkeypatch, tmp_path, capsys):
     assert result == 0
     out = capsys.readouterr().out
     assert "[dry-run]" in out
+
+
+def test_gh_create_issue_parses_number_from_url(monkeypatch):
+    """gh issue create has no --json support; it prints the issue URL to
+    stdout on success, and the issue number must be parsed from that."""
+    monkeypatch.delenv("DRY_RUN", raising=False)
+    mod = _load()
+
+    class FakeResult:
+        returncode = 0
+        stdout = "https://github.com/after2400/liars-dice/issues/187\n"
+        stderr = ""
+
+    monkeypatch.setattr(mod.subprocess, "run", lambda *a, **kw: FakeResult())
+    assert mod._gh_create_issue("Test Issue", "after2400/liars-dice") == 187
+
+
+def test_gh_create_issue_raises_on_failure(monkeypatch):
+    monkeypatch.delenv("DRY_RUN", raising=False)
+    mod = _load()
+
+    class FakeResult:
+        returncode = 1
+        stdout = ""
+        stderr = "some gh error"
+
+    monkeypatch.setattr(mod.subprocess, "run", lambda *a, **kw: FakeResult())
+    try:
+        mod._gh_create_issue("Test Issue", "after2400/liars-dice")
+        assert False, "expected RuntimeError"
+    except RuntimeError as e:
+        assert "some gh error" in str(e)
 
 
 def test_dry_run_skips_gh_post_comment(monkeypatch, tmp_path, capsys):

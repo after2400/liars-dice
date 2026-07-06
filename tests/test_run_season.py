@@ -3,7 +3,7 @@
 These tests run the script as a subprocess (since it orchestrates subprocess calls
 to `python -m game`) using real player files from players/ (except agent_smith,
 which deliberately sabotages every game it's in — see tests/test_security.py and
-tests/test_run_season.py::test_expel_player_* for its dedicated coverage).
+tests/test_season_utils.py::test_expel_player_* for its dedicated coverage).
 """
 
 import os
@@ -662,72 +662,5 @@ def test_dry_run_skips_readme_update(monkeypatch, tmp_path, capsys):
     assert readme.read_text() == "original content", "dry-run must not write README"
 
 
-# ---------------------------------------------------------------------------
-# _expel_player: automated expulsion must never touch real files unless it's
-# operating on the actual live leaderboard.
-# ---------------------------------------------------------------------------
-
-
-def test_expel_player_skips_non_live_leaderboard(tmp_path, monkeypatch):
-    """A tmp/test leaderboard path must never trigger real file deletion."""
-    rs = _load_run_season("run_season_expel_isolated")
-    monkeypatch.setattr(rs, "_DRY_RUN", False)
-    fake_repo = tmp_path / "fake_repo"
-    (fake_repo / "players").mkdir(parents=True)
-    player_file = fake_repo / "players" / "cheater.py"
-    player_file.write_text("class Cheater:\n    name = 'Cheater'\n")
-    monkeypatch.setattr(rs, "_REPO_ROOT", fake_repo)
-
-    isolated_lb = tmp_path / "isolated_lb.yaml"
-    isolated_lb.write_text("players:\n  Cheater:\n    tier: L1\n")
-
-    rs._expel_player(str(isolated_lb), "Cheater")
-
-    assert player_file.exists(), "Player file must not be deleted for a non-live leaderboard"
-    data = yaml.safe_load(isolated_lb.read_text())
-    assert "Cheater" in data["players"], "Leaderboard must not be mutated for a non-live path"
-
-
-def test_expel_player_skips_when_dry_run(tmp_path, monkeypatch):
-    """Local `just simulate-*` commands set DRY_RUN=1 but use the real
-    leaderboard.yaml path — DRY_RUN must be checked independently of the
-    path, or a local simulation would delete a real players/*.py file."""
-    rs = _load_run_season("run_season_expel_dry_run")
-    monkeypatch.setattr(rs, "_DRY_RUN", True)
-    fake_repo = tmp_path / "fake_repo_dry"
-    (fake_repo / "players").mkdir(parents=True)
-    player_file = fake_repo / "players" / "cheater.py"
-    player_file.write_text("class Cheater:\n    name = 'Cheater'\n")
-    monkeypatch.setattr(rs, "_REPO_ROOT", fake_repo)
-
-    # Deliberately the *live* path (matches _REPO_ROOT) — DRY_RUN alone must stop it.
-    live_lb = fake_repo / "leaderboard.yaml"
-    live_lb.write_text("players:\n  Cheater:\n    tier: L1\n")
-
-    rs._expel_player(str(live_lb), "Cheater")
-
-    assert player_file.exists(), "Player file must not be deleted during a dry run"
-    data = yaml.safe_load(live_lb.read_text())
-    assert "Cheater" in data["players"], "Leaderboard must not be mutated during a dry run"
-
-
-def test_expel_player_removes_offender_from_live_leaderboard(tmp_path, monkeypatch):
-    """Against the real, live leaderboard path with DRY_RUN off, expulsion
-    deletes the offender only."""
-    rs = _load_run_season("run_season_expel_live")
-    monkeypatch.setattr(rs, "_DRY_RUN", False)
-    fake_repo = tmp_path / "fake_repo2"
-    (fake_repo / "players").mkdir(parents=True)
-    player_file = fake_repo / "players" / "cheater.py"
-    player_file.write_text("class Cheater:\n    name = 'Cheater'\n")
-    monkeypatch.setattr(rs, "_REPO_ROOT", fake_repo)
-
-    live_lb = fake_repo / "leaderboard.yaml"
-    live_lb.write_text("players:\n  Cheater:\n    tier: L1\n  Honest:\n    tier: L1\n")
-
-    rs._expel_player(str(live_lb), "Cheater")
-
-    assert not player_file.exists(), "Offender's player file should be deleted"
-    data = yaml.safe_load(live_lb.read_text())
-    assert "Cheater" not in data["players"]
-    assert "Honest" in data["players"]
+# Automated expulsion (expel_player) is shared with reset_season.py and
+# tested once, directly, in tests/test_season_utils.py.
