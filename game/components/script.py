@@ -8,34 +8,12 @@ import types
 from game.components.bets import Bet, bet_grader, bet_validator
 from game.components.context import GameContext, _ReadOnlySequence
 from game.components.exceptions import SecurityViolation
-from game.components.security import secure_environment
+from game.components.security import enforce, secure_environment
 from game.components.utils import FACES
 
 logger = logging.getLogger(__name__)
 
 _ENVIRONMENT_SECURED = False
-
-
-class PlayerProxy:
-    """Wraps a player instance to prevent modification of critical attributes like .algo."""
-
-    def __init__(self, player):
-        self._player = player
-        self.security_violation = False
-
-    def __getattr__(self, name):
-        return getattr(self._player, name)
-
-    def __setattr__(self, name, value):
-        if name == "algo":
-            self.security_violation = True
-            raise SecurityViolation(
-                f"Forbidden modification of .algo for player {self._player.name}"
-            )
-        super().__setattr__(name, value)
-
-    def __repr__(self):
-        return f"PlayerProxy({repr(self._player)})"
 
 
 def game_orchestrator(
@@ -48,15 +26,6 @@ def game_orchestrator(
     seed: int | None = None,
     perf=None,
 ):
-    global _ENVIRONMENT_SECURED
-    if not _ENVIRONMENT_SECURED:
-        secure_environment()
-        _ENVIRONMENT_SECURED = True
-
-    # Wrap players in proxies and snapshot their algo methods for heartbeat checks
-    proxied_players = [PlayerProxy(p) for p in players]
-    algo_snapshots = {p: p.algo for p in proxied_players}
-
     """Plays a complete game of Liar's Dice between N players.
 
     Each round, all active players roll their dice in secret. Players take
@@ -74,7 +43,15 @@ def game_orchestrator(
     Returns:
         The winning player object.
     """
-    players = proxied_players
+    global _ENVIRONMENT_SECURED
+    if not _ENVIRONMENT_SECURED:
+        secure_environment()
+        _ENVIRONMENT_SECURED = True
+
+    # Snapshot each player's bound .algo method so tampering with another
+    # player's algo (e.g. monkey-patching) can be detected after each turn.
+    algo_snapshots = {p: p.algo for p in players}
+
     _game_seed = seed if seed is not None else secrets.randbits(64)
     rng = random.Random(_game_seed)
     random.seed(_game_seed)
@@ -155,47 +132,48 @@ def game_orchestrator(
             player = players[player_idx]
 
             try:
-                # Security Heartbeat: Check if any player was sabotaged or modified
-                for p in players:
-                    if p.algo != algo_snapshots[p] or getattr(p, "security_violation", False):
-                        prev_player_idx = (player_idx - 1) % n
-                        suspect = players[prev_player_idx]
-                        raise SecurityViolation(
-                            f"Security breach: {suspect.name} targeted {p.name}"
-                        )
-
                 safe_bet = (
                     Bet(current_bet.quantity, current_bet.face, current_bet.player)
                     if current_bet is not None
                     else None
                 )
 
-                if _is_v2[player]:
-                    ctx = GameContext(
-                        hand=list(hands[player_idx]),
-                        prior_bet=safe_bet,
-                        total_dice=total_dice,
-                        bet_history=bet_history_view,
-                        outcomes=outcomes_view,
-                        stats=stats,
-                        tier=tier,
-                        round_players=round_players_order,
-                    )
-                    if perf is not None:
-                        with perf.time_call(player.name):
+                with enforce():
+                    if _is_v2[player]:
+                        ctx = GameContext(
+                            hand=list(hands[player_idx]),
+                            prior_bet=safe_bet,
+                            total_dice=total_dice,
+                            bet_history=bet_history_view,
+                            outcomes=outcomes_view,
+                            stats=stats,
+                            tier=tier,
+                            round_players=round_players_order,
+                        )
+                        if perf is not None:
+                            with perf.time_call(player.name):
+                                action = player.algo(ctx)
+                        else:
                             action = player.algo(ctx)
                     else:
-                        action = player.algo(ctx)
-                else:
-                    kwargs: dict = {}
-                    if _wants_stats[player]:
-                        kwargs["stats"] = stats
-                    if _wants_tier[player]:
-                        kwargs["tier"] = tier
-                    if _wants_round_players[player]:
-                        kwargs["round_players"] = list(round_players_order)
-                    if perf is not None:
-                        with perf.time_call(player.name):
+                        kwargs: dict = {}
+                        if _wants_stats[player]:
+                            kwargs["stats"] = stats
+                        if _wants_tier[player]:
+                            kwargs["tier"] = tier
+                        if _wants_round_players[player]:
+                            kwargs["round_players"] = list(round_players_order)
+                        if perf is not None:
+                            with perf.time_call(player.name):
+                                action = player.algo(
+                                    list(hands[player_idx]),
+                                    safe_bet,
+                                    total_dice,
+                                    list(bet_history),
+                                    list(completed_outcomes),
+                                    **kwargs,
+                                )
+                        else:
                             action = player.algo(
                                 list(hands[player_idx]),
                                 safe_bet,
@@ -204,34 +182,21 @@ def game_orchestrator(
                                 list(completed_outcomes),
                                 **kwargs,
                             )
-                    else:
-                        action = player.algo(
-                            list(hands[player_idx]),
-                            safe_bet,
-                            total_dice,
-                            list(bet_history),
-                            list(completed_outcomes),
-                            **kwargs,
+                # Security heartbeat: only *this* player's code has run since the
+                # last check, so any snapshot mismatch — theirs or anyone else's
+                # — is unambiguously their doing.
+                for p in players:
+                    if p.algo != algo_snapshots[p]:
+                        raise SecurityViolation(
+                            f"{type(player).__name__} tampered with {type(p).__name__}'s algo",
+                            offender=type(player).__name__,
                         )
-                # Security Heartbeat: Post-turn check
-                if player.algo != algo_snapshots[player]:
-                    raise SecurityViolation(
-                        f"Integrity breach: .algo modified during turn for {player.name}"
-                    )
 
-            except (SecurityViolation, RuntimeError) as e:
-                if isinstance(e, SecurityViolation):
-                    logger.error(f"SECURITY VIOLATION by {player.name}: {e}")
-                    raise e
-                logger.error(
-                    "%s critical failure - penalised\n%s",
-                    player.name,
-                    str(e),
-                )
-                loser = player_idx
-                if stats is not None:
-                    stats.record_penalty(player.name)
-                break
+            except SecurityViolation as e:
+                if e.offender is None:
+                    e.offender = type(player).__name__
+                logger.error(f"SECURITY VIOLATION by {e.offender}: {e}")
+                raise
             except Exception:
                 logger.error(
                     "%s raised an exception - penalised\n%s",

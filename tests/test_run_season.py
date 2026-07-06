@@ -1,7 +1,9 @@
 """Integration tests for .github/scripts/run_season.py.
 
 These tests run the script as a subprocess (since it orchestrates subprocess calls
-to `python -m game`) using real player files from players/.
+to `python -m game`) using real player files from players/ (except agent_smith,
+which deliberately sabotages every game it's in — see tests/test_security.py and
+tests/test_run_season.py::test_expel_player_* for its dedicated coverage).
 """
 
 import os
@@ -41,6 +43,25 @@ def _make_leaderboard(players: dict) -> dict:
     }
 
 
+def _isolated_players_dir(tmp_path: Path) -> Path:
+    """Symlink the real players/ dir into tmp_path, excluding agent_smith.
+
+    agent_smith deliberately sabotages every game it's included in, so any
+    PRM/CH-tier run (which pulls in every unregistered real player as a
+    "challenger") would otherwise always crash unless the test is specifically
+    exercising the security-hardening response to it.
+    """
+    d = tmp_path / "_players"
+    d.mkdir(exist_ok=True)
+    for f in (REPO_ROOT / "players").glob("*.py"):
+        if f.stem == "agent_smith":
+            continue
+        link = d / f.name
+        if not link.exists():
+            link.symlink_to(f)
+    return d
+
+
 def _run_season(lb_path: Path, summary_path: Path, n_games: int = 5) -> subprocess.CompletedProcess:
     """Run run_season.py with the given leaderboard and summary paths."""
     readme_path = lb_path.parent / "README.md"
@@ -52,6 +73,7 @@ def _run_season(lb_path: Path, summary_path: Path, n_games: int = 5) -> subproce
         "README_PATH": str(readme_path),
         "N_GAMES": str(n_games),
         "TOP_N": "4",
+        "PLAYERS_DIR": str(_isolated_players_dir(lb_path.parent)),
     }
     result = subprocess.run(
         ["uv", "run", "python", str(SCRIPT)],
@@ -638,3 +660,48 @@ def test_dry_run_skips_readme_update(monkeypatch, tmp_path, capsys):
     readme.write_text("original content")
     rs._update_readme(str(readme), str(tmp_path / "lb.yaml"))
     assert readme.read_text() == "original content", "dry-run must not write README"
+
+
+# ---------------------------------------------------------------------------
+# _expel_player: automated expulsion must never touch real files unless it's
+# operating on the actual live leaderboard.
+# ---------------------------------------------------------------------------
+
+
+def test_expel_player_skips_non_live_leaderboard(tmp_path, monkeypatch):
+    """A tmp/test leaderboard path must never trigger real file deletion."""
+    rs = _load_run_season("run_season_expel_isolated")
+    fake_repo = tmp_path / "fake_repo"
+    (fake_repo / "players").mkdir(parents=True)
+    player_file = fake_repo / "players" / "cheater.py"
+    player_file.write_text("class Cheater:\n    name = 'Cheater'\n")
+    monkeypatch.setattr(rs, "_REPO_ROOT", fake_repo)
+
+    isolated_lb = tmp_path / "isolated_lb.yaml"
+    isolated_lb.write_text("players:\n  Cheater:\n    tier: L1\n")
+
+    rs._expel_player(str(isolated_lb), "Cheater")
+
+    assert player_file.exists(), "Player file must not be deleted for a non-live leaderboard"
+    data = yaml.safe_load(isolated_lb.read_text())
+    assert "Cheater" in data["players"], "Leaderboard must not be mutated for a non-live path"
+
+
+def test_expel_player_removes_offender_from_live_leaderboard(tmp_path, monkeypatch):
+    """Against the real, live leaderboard path, expulsion deletes the offender only."""
+    rs = _load_run_season("run_season_expel_live")
+    fake_repo = tmp_path / "fake_repo2"
+    (fake_repo / "players").mkdir(parents=True)
+    player_file = fake_repo / "players" / "cheater.py"
+    player_file.write_text("class Cheater:\n    name = 'Cheater'\n")
+    monkeypatch.setattr(rs, "_REPO_ROOT", fake_repo)
+
+    live_lb = fake_repo / "leaderboard.yaml"
+    live_lb.write_text("players:\n  Cheater:\n    tier: L1\n  Honest:\n    tier: L1\n")
+
+    rs._expel_player(str(live_lb), "Cheater")
+
+    assert not player_file.exists(), "Offender's player file should be deleted"
+    data = yaml.safe_load(live_lb.read_text())
+    assert "Cheater" not in data["players"]
+    assert "Honest" in data["players"]

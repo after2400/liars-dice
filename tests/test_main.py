@@ -11,6 +11,25 @@ from game.components.script import game_orchestrator
 REPO_ROOT = Path(__file__).parent.parent
 
 
+def _isolated_players_dir(tmp_path: Path) -> Path:
+    """Symlink the real players/ dir into tmp_path, excluding agent_smith.
+
+    agent_smith deliberately sabotages every game it's included in, so any
+    --tier PRM/CH test (which pulls in every unregistered real player as a
+    "challenger") would otherwise always crash unless it's specifically
+    testing the security-hardening response to it (see tests/test_security.py).
+    """
+    d = tmp_path / "_players"
+    d.mkdir(exist_ok=True)
+    for f in (REPO_ROOT / "players").glob("*.py"):
+        if f.stem == "agent_smith":
+            continue
+        link = d / f.name
+        if not link.exists():
+            link.symlink_to(f)
+    return d
+
+
 def run_game(args: list[str], leaderboard: dict, tmp_path: Path) -> dict:
     """Run `python -m game` with a temp leaderboard, return parsed results JSON."""
     lb_path = tmp_path / "leaderboard.yaml"
@@ -27,7 +46,11 @@ def run_game(args: list[str], leaderboard: dict, tmp_path: Path) -> dict:
         "--results-file",
         str(results_path),
     ]
-    env = {**os.environ, "LEADERBOARD_PATH": str(lb_path)}
+    env = {
+        **os.environ,
+        "LEADERBOARD_PATH": str(lb_path),
+        "PLAYERS_DIR": str(_isolated_players_dir(tmp_path)),
+    }
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, env=env)
     assert result.returncode == 0, result.stderr
 
@@ -181,7 +204,11 @@ def test_no_leaderboard_update_written(tmp_path):
     original_content = lb_path.read_text()
 
     results_path = tmp_path / "results.json"
-    env = {**os.environ, "LEADERBOARD_PATH": str(lb_path)}
+    env = {
+        **os.environ,
+        "LEADERBOARD_PATH": str(lb_path),
+        "PLAYERS_DIR": str(_isolated_players_dir(tmp_path)),
+    }
     subprocess.run(
         [
             "uv",

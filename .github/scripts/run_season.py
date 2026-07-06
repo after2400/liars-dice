@@ -41,11 +41,22 @@ _POOL_MAX = 9  # maximum players per L1 pool; split when L1 exceeds this
 
 
 def _expel_player(lb_path: str, class_name: str):
-    """Permanently remove a player from the league and delete their files."""
-    import os
-    from pathlib import Path
+    """Permanently remove a player from the league and delete their files.
 
-    from game.components.leaderboard import _load_lb, _save_lb
+    Refuses to touch anything unless *lb_path* is the repo's live leaderboard —
+    tests and local simulations always pass an isolated tmp/copy path, and must
+    never trigger real deletion of a tracked players/*.py source file.
+    """
+    from game.season.utils import _load_lb, _save_lb
+
+    real_lb_path = (_REPO_ROOT / "leaderboard.yaml").resolve()
+    if Path(lb_path).resolve() != real_lb_path:
+        print(
+            f"[SECURITY] {class_name} triggered a security violation, but {lb_path} "
+            "is not the live leaderboard — skipping expulsion (test/sim isolation).",
+            file=sys.stderr,
+        )
+        return
 
     data = _load_lb(lb_path)
     if class_name in data.get("players", {}):
@@ -53,10 +64,9 @@ def _expel_player(lb_path: str, class_name: str):
         _save_lb(data, lb_path)
         print(f"[SECURITY] Expelled {class_name} from league.")
 
-    # Delete the player file
-    player_file = Path(_REPO_ROOT) / "players" / f"{class_name.lower()}.py"
+    player_file = _REPO_ROOT / "players" / f"{class_name.lower()}.py"
     if player_file.exists():
-        os.unlink(player_file)
+        player_file.unlink()
         print(f"[SECURITY] Deleted {player_file}")
 
 

@@ -89,7 +89,8 @@ _lb_path = Path(os.environ.get("LEADERBOARD_PATH", str(project_root / "leaderboa
 _lb_data = yaml.safe_load(open(_lb_path)) if _lb_path.exists() else {}
 _lb_players = _lb_data.get("players", {})
 
-all_players = import_player_classes_from_dir(str(project_root / "players"))
+_players_dir = os.environ.get("PLAYERS_DIR", str(project_root / "players"))
+all_players = import_player_classes_from_dir(_players_dir)
 apply_display_names(all_players, _lb_players)
 
 if args.players:
@@ -130,12 +131,6 @@ try:
         with open(args.results_file, "w") as f:
             json.dump(result.wins, f)
 except SecurityViolation as e:
-    # Extract player name from the exception message if possible
-    # The message is "Integrity breach: .algo modified for <name>"
-    # or "Forbidden modification of .algo for player <name>"
-    import re
-
-    match = re.search(r"for (?:player )?([^ ]+)", str(e))
-    player_name = match.group(1) if match else "unknown"
-    print(f"SECURITY_VIOLATION:{player_name}", file=sys.stderr)
+    offender = e.offender or "unknown"
+    print(f"SECURITY_VIOLATION:{offender}", file=sys.stderr)
     sys.exit(127)
