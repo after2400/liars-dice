@@ -185,7 +185,7 @@ def test_run_pools_stores_results(tmp_path, monkeypatch):
     monkeypatch.setattr(
         mod,
         "_run_pool",
-        lambda pool, n_games, lb_path: ({p: canned[p] for p in pool if p in canned}, None),
+        lambda pool, n_games, lb_path: ({p: canned[p] for p in pool if p in canned}, []),
     )
 
     lb = _make_lb(
@@ -208,7 +208,7 @@ def test_run_pools_is_idempotent(tmp_path, monkeypatch):
     """run_pools() skips if pool_results already present."""
     mod = _load()
     called = []
-    monkeypatch.setattr(mod, "_run_pool", lambda *a, **kw: called.append(1) or ({}, None))
+    monkeypatch.setattr(mod, "_run_pool", lambda *a, **kw: called.append(1) or ({}, []))
 
     lb = _make_lb(
         {"Alice": _player("PRM"), "Bruno": _player("CH")},
@@ -238,8 +238,8 @@ def test_run_pools_expels_security_violation_offender(tmp_path, monkeypatch):
 
     def fake_run_pool(pool, n_games, lb_path):
         if "Cheater" in pool:
-            return {}, "Cheater"
-        return {p: 1 for p in pool}, None
+            return {}, ["Cheater"]
+        return {p: 1 for p in pool}, []
 
     monkeypatch.setattr(mod, "_run_pool", fake_run_pool)
 

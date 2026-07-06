@@ -14,12 +14,10 @@ promotions/relegations are in effect before the next tier above starts.
 """
 
 import inspect
-import json
 import math
 import os
 import subprocess
 import sys
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -34,7 +32,12 @@ _repo_root_str = str(_REPO_ROOT)
 if _repo_root_str not in sys.path:
     sys.path.insert(0, _repo_root_str)
 
-from game.season.utils import _load_lb, expel_player, form_pools  # noqa: E402
+from game.season.utils import (  # noqa: E402
+    _load_lb,
+    expel_player,
+    form_pools,
+    run_game_with_retry,
+)
 
 _DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
 _POOL_MAX = 9  # maximum players per L1 pool; split when L1 exceeds this
@@ -48,100 +51,47 @@ def _get_tier_players(data: dict, tier: str) -> list[str]:
 def _run_tier(tier: str, n_games: int, top_n: int, lb_path: str) -> dict[str, int]:
     """Run python -m game for *tier* and return a wins dict {class_name: win_count}.
 
-    Returns an empty dict if the game engine exits with a non-zero status.
+    Returns an empty dict if the game engine exits with a non-zero status
+    (after a retry-without-offender attempt, if a security violation
+    triggered it — see run_game_with_retry).
     """
-    with tempfile.NamedTemporaryFile(
-        suffix=".json", prefix=f"{tier}_results_", delete=False
-    ) as tmp:
-        results_file = tmp.name
-
-    try:
-        env = {**os.environ, "LEADERBOARD_PATH": lb_path}
-        cmd = [
-            "uv",
-            "run",
-            "python",
-            "-m",
-            "game",
-            str(n_games),
-            str(top_n),
-            "--tier",
-            tier,
-            "--results-file",
-            results_file,
-        ]
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            env=env,
-            cwd=str(_REPO_ROOT),
-        )
-        print(proc.stdout, end="")
-        if proc.returncode != 0:
-            if proc.returncode == 127:
-                for line in proc.stderr.splitlines():
-                    if "SECURITY_VIOLATION:" in line:
-                        offender = line.split(":", 1)[1]
-                        print(f"[CRITICAL] Security violation by {offender}!", file=sys.stderr)
-                        expel_player(lb_path, offender, _REPO_ROOT, _DRY_RUN)
-            else:
-                print(
-                    f"[warn] game engine exited {proc.returncode} for tier {tier}", file=sys.stderr
-                )
-                print(proc.stderr, end="", file=sys.stderr)
-            return {}
-
-        with open(results_file) as f:
-            wins: dict[str, int] = json.load(f)
-        return wins
-    finally:
-        try:
-            os.unlink(results_file)
-        except FileNotFoundError:
-            pass
+    env = {**os.environ, "LEADERBOARD_PATH": lb_path}
+    base_cmd = [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "game",
+        str(n_games),
+        str(top_n),
+        "--tier",
+        tier,
+    ]
+    wins, offenders = run_game_with_retry(base_cmd, env, _REPO_ROOT, warn_label=f" for tier {tier}")
+    for offender in offenders:
+        expel_player(lb_path, offender, _REPO_ROOT, _DRY_RUN)
+    return wins
 
 
 def _run_players(players: list[str], n_games: int, lb_path: str) -> dict[str, int]:
     """Run n_games for a specific player list. Returns {name: win_count}."""
-    with tempfile.NamedTemporaryFile(suffix=".json", prefix="pool_results_", delete=False) as tmp:
-        results_file = tmp.name
-    try:
-        env = {**os.environ, "LEADERBOARD_PATH": lb_path}
-        cmd = [
-            "uv",
-            "run",
-            "python",
-            "-m",
-            "game",
-            str(n_games),
-            str(len(players)),
-            "--no-game-results",
-            "--players",
-            *players,
-            "--results-file",
-            results_file,
-        ]
-        proc = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(_REPO_ROOT))
-        print(proc.stdout, end="")
-        if proc.returncode != 0:
-            if proc.returncode == 127:
-                for line in proc.stderr.splitlines():
-                    if "SECURITY_VIOLATION:" in line:
-                        offender = line.split(":", 1)[1]
-                        print(f"[CRITICAL] Security violation by {offender}!", file=sys.stderr)
-                        expel_player(lb_path, offender, _REPO_ROOT, _DRY_RUN)
-            else:
-                print(f"[warn] game engine exited {proc.returncode}", file=sys.stderr)
-                print(proc.stderr, end="", file=sys.stderr)
-            return {}
-        with open(results_file) as f:
-            return json.load(f)
-    finally:
-        try:
-            os.unlink(results_file)
-        except FileNotFoundError:
-            pass
+    env = {**os.environ, "LEADERBOARD_PATH": lb_path}
+    base_cmd = [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "game",
+        str(n_games),
+        str(len(players)),
+        "--no-game-results",
+        "--players",
+        *players,
+    ]
+    wins, offenders = run_game_with_retry(base_cmd, env, _REPO_ROOT)
+    for offender in offenders:
+        expel_player(lb_path, offender, _REPO_ROOT, _DRY_RUN)
+    return wins
 
 
 def _scan_v1_players(lb_path: str) -> list[str]:

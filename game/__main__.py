@@ -32,6 +32,12 @@ def _parse_args():
         default=None,
         help="Run exactly these player class names (overrides --tier)",
     )
+    p.add_argument(
+        "--exclude",
+        nargs="+",
+        default=None,
+        help="Exclude these player class names from the selected roster (--tier or --players)",
+    )
     p.add_argument("n_games", type=int, nargs="?", default=1)
     p.add_argument("top_n", type=int, nargs="?", default=4)
     return p.parse_args()
@@ -113,6 +119,10 @@ elif args.tier:
 else:
     # No tier filter: run everyone in the players/ directory
     players = all_players
+
+if args.exclude:
+    excluded = set(args.exclude)
+    players = [p for p in players if type(p).__name__ not in excluded]
 
 if len(players) < 2:
     print(f"[skip] Only {len(players)} player(s) in --tier {args.tier} — no game run.")

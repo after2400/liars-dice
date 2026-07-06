@@ -16,12 +16,10 @@ Environment variables:
   GH_REPO           GitHub repo in owner/repo format (required in CI)
 """
 
-import json
 import math
 import os
 import subprocess
 import sys
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -40,6 +38,7 @@ from game.season.utils import (  # noqa: E402
     expel_player,
     form_pools,
     is_tournament_monday,  # noqa: F401
+    run_game_with_retry,
 )
 
 _DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
@@ -65,52 +64,29 @@ def zero_stats(lb_path: str, quarter: str) -> None:
     print(f"[done] zero_stats: all tier_stats cleared for {quarter}")
 
 
-def _run_pool(pool: list[str], n_games: int, lb_path: str) -> tuple[dict[str, int], str | None]:
+def _run_pool(pool: list[str], n_games: int, lb_path: str) -> tuple[dict[str, int], list[str]]:
     """Run n_games games for the given pool.
 
-    Returns (wins, offender): wins is {class_name: win_count} (empty on any
-    failure); offender is the class name of a detected security-violation
-    offender, or None. The caller is responsible for actually expelling the
-    offender — lb_path is chmod'd read-only for the duration of run_pools()'s
-    loop, so expulsion can't happen from in here.
+    Returns (wins, offenders): wins is {class_name: win_count} (empty if
+    unrecoverable); offenders is every security-violation offender detected
+    (0, 1, or 2 — see run_game_with_retry). The caller is responsible for
+    actually expelling each offender — lb_path is chmod'd read-only for the
+    duration of run_pools()'s loop, so expulsion can't happen from in here.
     """
-    with tempfile.NamedTemporaryFile(suffix=".json", prefix="pool_results_", delete=False) as tmp:
-        results_file = tmp.name
-    try:
-        env = {**os.environ, "LEADERBOARD_PATH": lb_path}
-        cmd = [
-            "uv",
-            "run",
-            "python",
-            "-m",
-            "game",
-            str(n_games),
-            str(len(pool)),
-            "--no-game-results",
-            "--players",
-            *pool,
-            "--results-file",
-            results_file,
-        ]
-        proc = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(_REPO_ROOT))
-        print(proc.stdout, end="")
-        if proc.returncode != 0:
-            if proc.returncode == 127:
-                for line in proc.stderr.splitlines():
-                    if "SECURITY_VIOLATION:" in line:
-                        offender = line.split(":", 1)[1]
-                        print(f"[CRITICAL] Security violation by {offender}!", file=sys.stderr)
-                        return {}, offender
-            print(f"[warn] pool game engine exited {proc.returncode}", file=sys.stderr)
-            print(proc.stderr, end="", file=sys.stderr)
-            return {}, None
-        with open(results_file) as f:
-            return json.load(f), None
-    finally:
-        try:
-            os.unlink(results_file)
-        except FileNotFoundError:
-            pass
+    env = {**os.environ, "LEADERBOARD_PATH": lb_path}
+    base_cmd = [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "game",
+        str(n_games),
+        str(len(pool)),
+        "--no-game-results",
+        "--players",
+        *pool,
+    ]
+    return run_game_with_retry(base_cmd, env, _REPO_ROOT, warn_label=" for pool")
 
 
 def run_pools(lb_path: str, n_games: int) -> None:
@@ -155,9 +131,8 @@ def run_pools(lb_path: str, n_games: int) -> None:
         for i, pool in enumerate(pools):
             key = f"pool_{i}"
             print(f"[run] {key}: {pool}")
-            wins, offender = _run_pool(pool, n_games, lb_path)
-            if offender:
-                offenders.append(offender)
+            wins, pool_offenders = _run_pool(pool, n_games, lb_path)
+            offenders.extend(pool_offenders)
             pool_results[key] = wins
             print(f"[done] {key}: {wins}")
     finally:

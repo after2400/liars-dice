@@ -328,6 +328,49 @@ def test_players_flag_runs_exactly_named_players(tmp_path):
     assert sum(results.values()) == 5
 
 
+def test_exclude_flag_removes_named_players_from_selection(tmp_path):
+    """--exclude filters out named class names from whichever roster
+    --tier/--players selected — used to retry a tier/pool without a
+    security-violation offender."""
+    lb = {
+        "total_runs": 1,
+        "players": {
+            "Alice": {
+                "display_name": "Alice",
+                "github_username": "",
+                "tier": "inactive",
+                "date_added": "2026-01-01T00:00:00Z",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
+            "Bruno": {
+                "display_name": "Bruno",
+                "github_username": "",
+                "tier": "inactive",
+                "date_added": "2026-01-01T00:00:00Z",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
+            "Cleo": {
+                "display_name": "Cleo",
+                "github_username": "",
+                "tier": "inactive",
+                "date_added": "2026-01-01T00:00:00Z",
+                "tier_since": "2026-01-01T00:00:00Z",
+                "times_inactive": 0,
+                "tier_stats": {},
+            },
+        },
+    }
+    results = run_game(
+        ["5", "3", "--players", "Alice", "Bruno", "Cleo", "--exclude", "Cleo"], lb, tmp_path
+    )
+    assert set(results.keys()) == {"Alice", "Bruno"}
+    assert "Cleo" not in results
+
+
 def test_tier_passed_to_tier_arg_player(tmp_path):
     """A player declaring tier=None receives the tier string passed to run_series."""
     import textwrap

@@ -1,7 +1,10 @@
 """Shared utilities for season scripts."""
 
+import json
 import os
+import subprocess
 import sys
+import tempfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -102,6 +105,66 @@ def expel_player(lb_path: str, class_name: str, repo_root: Path, dry_run: bool =
     if player_file.exists():
         player_file.unlink()
         print(f"[SECURITY] Deleted {player_file}")
+
+
+def run_game_with_retry(
+    base_cmd: list[str],
+    env: dict,
+    cwd: Path,
+    warn_label: str = "",
+) -> tuple[dict[str, int], list[str]]:
+    """Run a `python -m game ...` subprocess, retrying once with
+    `--exclude <offender>` if a security violation is detected, so the
+    offender's innocent tier/pool-mates still get real games this run
+    instead of the whole batch being discarded.
+
+    *base_cmd* must be the full command WITHOUT `--results-file` or
+    `--exclude` — both are added here.
+
+    Returns (wins, offenders): wins is {} if the run is unrecoverable
+    (either an ordinary non-127 failure, or a second violation on the retry);
+    offenders is every security-violation offender detected (0, 1, or 2
+    entries — detection halts the game engine immediately on the first
+    violation per invocation, so at most one new offender can appear per
+    attempt). This function never touches the leaderboard — the caller is
+    responsible for actually expelling each offender via expel_player(),
+    once it's safe to do so (e.g. reset_season.py's run_pools() must wait
+    until lb_path is writable again).
+    """
+    offenders: list[str] = []
+    for _attempt in range(2):  # original attempt + one retry excluding the offender
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", prefix="game_results_", delete=False
+        ) as tmp:
+            results_file = tmp.name
+        try:
+            cmd = [*base_cmd, "--results-file", results_file]
+            if offenders:
+                cmd += ["--exclude", *offenders]
+            proc = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(cwd))
+            print(proc.stdout, end="")
+            if proc.returncode != 0:
+                offender = None
+                if proc.returncode == 127:
+                    for line in proc.stderr.splitlines():
+                        if "SECURITY_VIOLATION:" in line:
+                            offender = line.split(":", 1)[1]
+                            break
+                if offender:
+                    print(f"[CRITICAL] Security violation by {offender}!", file=sys.stderr)
+                    offenders.append(offender)
+                    continue
+                print(f"[warn] game engine exited {proc.returncode}{warn_label}", file=sys.stderr)
+                print(proc.stderr, end="", file=sys.stderr)
+                return {}, offenders
+            with open(results_file) as f:
+                return json.load(f), offenders
+        finally:
+            try:
+                os.unlink(results_file)
+            except FileNotFoundError:
+                pass
+    return {}, offenders
 
 
 def form_pools(players: list[str], n_pools: int) -> list[list[str]]:

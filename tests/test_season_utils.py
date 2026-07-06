@@ -1,6 +1,8 @@
 """Tests for game/season/utils.py shared utilities."""
 
+import json
 from datetime import date
+from pathlib import Path
 
 import yaml
 
@@ -9,6 +11,7 @@ from game.season.utils import (
     _save_lb,
     expel_player,
     next_tournament_monday,
+    run_game_with_retry,
 )
 
 # --- _load_lb ---
@@ -138,3 +141,96 @@ def test_expel_player_removes_offender_from_live_leaderboard(tmp_path):
     data = yaml.safe_load(live_lb.read_text())
     assert "Cheater" not in data["players"]
     assert "Honest" in data["players"]
+
+
+# --- run_game_with_retry ---
+#
+# Shared by run_season.py's _run_tier/_run_players and reset_season.py's
+# _run_pool. subprocess.run is faked to avoid actually spawning `python -m
+# game`; the fake writes to whatever --results-file path is in the command,
+# mirroring what the real subprocess would do.
+
+
+def _results_file_arg(cmd: list[str]) -> str:
+    return cmd[cmd.index("--results-file") + 1]
+
+
+def _exclude_arg(cmd: list[str]) -> list[str] | None:
+    if "--exclude" in cmd:
+        # --exclude is always appended last (after --results-file), so
+        # everything after it is the excluded class name list.
+        return cmd[cmd.index("--exclude") + 1 :]
+    return None
+
+
+class _FakeProc:
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def test_run_game_with_retry_success_no_violation(monkeypatch):
+    import game.season.utils as utils_mod
+
+    def fake_run(cmd, **kwargs):
+        Path(_results_file_arg(cmd)).write_text(json.dumps({"Alice": 5, "Bruno": 3}))
+        return _FakeProc(returncode=0)
+
+    monkeypatch.setattr(utils_mod.subprocess, "run", fake_run)
+    wins, offenders = run_game_with_retry(["uv", "run", "python", "-m", "game"], {}, Path("/tmp"))
+    assert wins == {"Alice": 5, "Bruno": 3}
+    assert offenders == []
+
+
+def test_run_game_with_retry_retries_excluding_offender(monkeypatch):
+    import game.season.utils as utils_mod
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if len(calls) == 1:
+            return _FakeProc(returncode=127, stderr="SECURITY_VIOLATION:Cheater\n")
+        assert _exclude_arg(cmd) == ["Cheater"], "retry must exclude the detected offender"
+        Path(_results_file_arg(cmd)).write_text(json.dumps({"Honest": 4}))
+        return _FakeProc(returncode=0)
+
+    monkeypatch.setattr(utils_mod.subprocess, "run", fake_run)
+    wins, offenders = run_game_with_retry(["uv", "run", "python", "-m", "game"], {}, Path("/tmp"))
+    assert wins == {"Honest": 4}
+    assert offenders == ["Cheater"]
+    assert len(calls) == 2
+
+
+def test_run_game_with_retry_gives_up_after_second_violation(monkeypatch):
+    import game.season.utils as utils_mod
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        offender = "Cheater" if len(calls) == 1 else "Cheater2"
+        return _FakeProc(returncode=127, stderr=f"SECURITY_VIOLATION:{offender}\n")
+
+    monkeypatch.setattr(utils_mod.subprocess, "run", fake_run)
+    wins, offenders = run_game_with_retry(["uv", "run", "python", "-m", "game"], {}, Path("/tmp"))
+    assert wins == {}
+    assert offenders == ["Cheater", "Cheater2"]
+    assert len(calls) == 2  # no third attempt
+
+
+def test_run_game_with_retry_ordinary_failure_no_retry(monkeypatch):
+    import game.season.utils as utils_mod
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        return _FakeProc(returncode=1, stderr="some ordinary crash\n")
+
+    monkeypatch.setattr(utils_mod.subprocess, "run", fake_run)
+    wins, offenders = run_game_with_retry(["uv", "run", "python", "-m", "game"], {}, Path("/tmp"))
+    assert wins == {}
+    assert offenders == []
+    assert len(calls) == 1  # ordinary failures are not retried
