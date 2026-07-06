@@ -1,4 +1,5 @@
-import sys
+import logging
+sys = logging.sys
 from game.components.bets import Bet
 from game.components.context import GameContext
 
