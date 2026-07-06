@@ -40,6 +40,26 @@ _DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
 _POOL_MAX = 9  # maximum players per L1 pool; split when L1 exceeds this
 
 
+def _expel_player(lb_path: str, class_name: str):
+    """Permanently remove a player from the league and delete their files."""
+    import os
+    from pathlib import Path
+
+    from game.components.leaderboard import _load_lb, _save_lb
+
+    data = _load_lb(lb_path)
+    if class_name in data.get("players", {}):
+        del data["players"][class_name]
+        _save_lb(data, lb_path)
+        print(f"[SECURITY] Expelled {class_name} from league.")
+
+    # Delete the player file
+    player_file = Path(_REPO_ROOT) / "players" / f"{class_name.lower()}.py"
+    if player_file.exists():
+        os.unlink(player_file)
+        print(f"[SECURITY] Deleted {player_file}")
+
+
 def _get_tier_players(data: dict, tier: str) -> list[str]:
     """Return class names whose current tier matches *tier*."""
     return [name for name, p in data.get("players", {}).items() if p.get("tier") == tier]
@@ -79,8 +99,17 @@ def _run_tier(tier: str, n_games: int, top_n: int, lb_path: str) -> dict[str, in
         )
         print(proc.stdout, end="")
         if proc.returncode != 0:
-            print(f"[warn] game engine exited {proc.returncode} for tier {tier}", file=sys.stderr)
-            print(proc.stderr, end="", file=sys.stderr)
+            if proc.returncode == 127:
+                for line in proc.stderr.splitlines():
+                    if "SECURITY_VIOLATION:" in line:
+                        offender = line.split(":", 1)[1]
+                        print(f"[CRITICAL] Security violation by {offender}!", file=sys.stderr)
+                        _expel_player(lb_path, offender)
+            else:
+                print(
+                    f"[warn] game engine exited {proc.returncode} for tier {tier}", file=sys.stderr
+                )
+                print(proc.stderr, end="", file=sys.stderr)
             return {}
 
         with open(results_file) as f:
@@ -116,8 +145,15 @@ def _run_players(players: list[str], n_games: int, lb_path: str) -> dict[str, in
         proc = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(_REPO_ROOT))
         print(proc.stdout, end="")
         if proc.returncode != 0:
-            print(f"[warn] game engine exited {proc.returncode}", file=sys.stderr)
-            print(proc.stderr, end="", file=sys.stderr)
+            if proc.returncode == 127:
+                for line in proc.stderr.splitlines():
+                    if "SECURITY_VIOLATION:" in line:
+                        offender = line.split(":", 1)[1]
+                        print(f"[CRITICAL] Security violation by {offender}!", file=sys.stderr)
+                        _expel_player(lb_path, offender)
+            else:
+                print(f"[warn] game engine exited {proc.returncode}", file=sys.stderr)
+                print(proc.stderr, end="", file=sys.stderr)
             return {}
         with open(results_file) as f:
             return json.load(f)

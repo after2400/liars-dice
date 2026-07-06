@@ -2,9 +2,12 @@ import argparse
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 
 import yaml
+
+from game.components.exceptions import SecurityViolation
 
 project_root = Path(__file__).parent.parent
 
@@ -117,11 +120,22 @@ if len(players) < 2:
 if not args.no_game_results:
     print(f"Playing: {[type(p).__name__ for p in players]}")
 
-result = run_series(players, N_GAMES, tier=args.tier)
-display_names = {type(p).__name__: p.name for p in players}
-display_wins = {display_names.get(k, k): v for k, v in result.wins.items()}
-print(format_results(display_wins, N_GAMES))
+try:
+    result = run_series(players, N_GAMES, tier=args.tier)
+    display_names = {type(p).__name__: p.name for p in players}
+    display_wins = {display_names.get(k, k): v for k, v in result.wins.items()}
+    print(format_results(display_wins, N_GAMES))
 
-if args.results_file:
-    with open(args.results_file, "w") as f:
-        json.dump(result.wins, f)
+    if args.results_file:
+        with open(args.results_file, "w") as f:
+            json.dump(result.wins, f)
+except SecurityViolation as e:
+    # Extract player name from the exception message if possible
+    # The message is "Integrity breach: .algo modified for <name>"
+    # or "Forbidden modification of .algo for player <name>"
+    import re
+
+    match = re.search(r"for (?:player )?([^ ]+)", str(e))
+    player_name = match.group(1) if match else "unknown"
+    print(f"SECURITY_VIOLATION:{player_name}", file=sys.stderr)
+    sys.exit(127)
