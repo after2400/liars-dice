@@ -133,16 +133,18 @@ def format_results(wins: dict[str, int], n_games: int) -> str:
 
 
 def format_perf(tracker: PerfTracker, n_games: int) -> str:
-    """Formats a PerfTracker's per-player timing (and optional memory) stats as a table.
+    """Formats a PerfTracker's per-player timing (and optional memory) stats as a markdown table.
 
-    Sorted slowest-first (by avg wall time) so outliers are easy to spot.
+    Sorted slowest-first (by avg wall time) so outliers are easy to spot. Emitted as
+    GFM table syntax (not a fixed-width chart) since plain-space column alignment
+    collapses when this text is rendered by a markdown viewer. Cells are still padded
+    for readability when read as raw, unrendered text.
     Returns "" if no calls were recorded.
     """
     players = tracker.tracked_players
     if not players:
         return ""
 
-    name_w = max(len(n) for n in players) + 2
     memory_on = tracker.profile_memory
 
     headers = [
@@ -156,21 +158,13 @@ def format_perf(tracker: PerfTracker, n_games: int) -> str:
         "AvgCPU(ms)",
         "MaxCPU(ms)",
     ]
-    widths = [name_w, 7, 12, 11, 12, 12, 12, 11, 11]
+    aligns = ["left"] + ["right"] * (len(headers) - 1)
     if memory_on:
         headers += ["AvgPeak(KB)", "MaxPeak(KB)"]
-        widths += [12, 12]
-
-    def _row(cols: list[str]) -> str:
-        parts = [cols[0].ljust(widths[0])]
-        parts += [c.rjust(w) for c, w in zip(cols[1:], widths[1:])]
-        return "  " + "  ".join(parts)
-
-    header = _row(headers)
-    divider = "  " + "-" * (len(header) - 2)
+        aligns += ["right", "right"]
 
     ordered = sorted(players, key=lambda n: -tracker.avg_wall_ms(n))
-    rows = []
+    data_rows = []
     for name in ordered:
         cols = [
             name,
@@ -185,12 +179,32 @@ def format_perf(tracker: PerfTracker, n_games: int) -> str:
         ]
         if memory_on:
             cols += [f"{tracker.avg_peak_kb(name):.1f}", f"{tracker.max_peak_kb(name):.1f}"]
-        rows.append(_row(cols))
+        data_rows.append(cols)
+
+    widths = [
+        max(len(headers[i]), *(len(row[i]) for row in data_rows)) for i in range(len(headers))
+    ]
+
+    def _pad(cell: str, width: int, align: str) -> str:
+        return cell.rjust(width) if align == "right" else cell.ljust(width)
+
+    def _row(cols: list[str]) -> str:
+        return "| " + " | ".join(_pad(c, w, a) for c, w, a in zip(cols, widths, aligns)) + " |"
+
+    header_row = _row(headers)
+    separator_row = (
+        "| "
+        + " | ".join(
+            ("-" * w if a == "left" else "-" * (w - 1) + ":") for w, a in zip(widths, aligns)
+        )
+        + " |"
+    )
+    rows = [_row(cols) for cols in data_rows]
 
     lines = [
         f"\n=== Player Performance — {n_games} games ===\n",
-        header,
-        divider,
+        header_row,
+        separator_row,
         *rows,
     ]
     return "\n".join(lines)
