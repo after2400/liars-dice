@@ -1,3 +1,4 @@
+import hashlib
 import inspect
 import logging
 import random
@@ -14,6 +15,21 @@ from game.components.utils import FACES
 logger = logging.getLogger(__name__)
 
 _ENVIRONMENT_SECURED = False
+
+
+def _derive_player_seed(game_seed: int) -> bytes:
+    """Seed value for the process-global `random` module, derived one-way from
+    the private dice seed.
+
+    Bots may import the whitelisted `random` module and read its global state
+    (`random.getstate()`). If that state matched the dice RNG's, a bot could
+    clone it and predict every player's rolls. Seeding the global module from a
+    one-way hash of `game_seed` — instead of `game_seed` itself — keeps global
+    randomness fully reproducible under replay (still a pure function of the
+    game seed) while making it useless for reconstructing the dice RNG, which
+    is a separate `random.Random(game_seed)` instance.
+    """
+    return hashlib.sha256(b"liars-dice/player-rng:" + str(game_seed).encode()).digest()
 
 
 def game_orchestrator(
@@ -54,7 +70,9 @@ def game_orchestrator(
 
     _game_seed = seed if seed is not None else secrets.randbits(64)
     rng = random.Random(_game_seed)
-    random.seed(_game_seed)
+    # Global module is seeded for reproducibility of bots that use bare
+    # `random.*`, but from a one-way derivation so it can't leak the dice RNG.
+    random.seed(_derive_player_seed(_game_seed))
     _sigs = {p: inspect.signature(p.algo).parameters for p in players}
     _wants_stats = {p: "stats" in _sigs[p] for p in players}
     _wants_tier = {p: "tier" in _sigs[p] for p in players}

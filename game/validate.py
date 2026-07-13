@@ -120,7 +120,13 @@ _ALLOWED_GAME_MODULES: frozenset[str] = frozenset(
 def _import_allowed(module: str) -> bool:
     if module.startswith("game"):
         return module in _ALLOWED_GAME_MODULES
-    return module.split(".")[0] in _ALLOWED_STDLIB
+    if module.split(".")[0] not in _ALLOWED_STDLIB:
+        return False
+    # Only top-level stdlib modules are importable. Dotted submodules can expose
+    # capabilities the top-level package doesn't (e.g. logging.handlers brings
+    # SocketHandler/HTTPHandler — outbound network); no whitelisted module needs
+    # one, so the whole dotted form is refused rather than enumerated.
+    return "." not in module
 
 
 # --- AST phase ---
@@ -142,6 +148,50 @@ _SAFE_TOPLEVEL = (
 # Builtins that allow arbitrary code execution or unsafe I/O — blocked everywhere
 # in the file so they can't be called inside algo() either.
 _BLOCKED_BUILTINS: frozenset[str] = frozenset({"exec", "eval", "__import__", "compile", "open"})
+
+# Attribute names that expose interpreter internals — blocked anywhere in the
+# file (as attribute access or as a call). Two escape classes:
+#   1. Call-frame / traceback / generator introspection: reaching the running
+#      orchestrator's frame lets a bot read `hands` (every player's dice). This
+#      needs no import — an exception's __traceback__ or a generator's gi_frame
+#      is enough — so the import whitelist cannot stop it; the attribute names
+#      must be. (See The Architect.)
+#   2. Pivots into a dangerous module re-exported by an allowed one: whitelisting
+#      `logging` otherwise hands a bot `logging.os` (env/secret read),
+#      `logging.sys`, `logging.socket`, etc.
+_BLOCKED_ATTRS: frozenset[str] = frozenset(
+    {
+        # frame / traceback / generator-coroutine frame introspection
+        "f_back",
+        "f_locals",
+        "f_globals",
+        "f_code",
+        "f_builtins",
+        "gi_frame",
+        "cr_frame",
+        "ag_frame",
+        "tb_frame",
+        "tb_next",
+        "__traceback__",
+        "_getframe",
+        # function / class internals that reach module globals or code objects
+        "__globals__",
+        "__code__",
+        "__closure__",
+        # pivots into re-exported dangerous stdlib modules (e.g. logging.os)
+        "os",
+        "sys",
+        "subprocess",
+        "socket",
+        "importlib",
+        "builtins",
+        "traceback",
+        "ctypes",
+        "marshal",
+        "runpy",
+        "pty",
+    }
+)
 
 _REQUIRED_ALGO_ARGS = ("self", "hand", "prior_bet", "total_dice", "bet_history", "outcomes")
 _ALLOWED_OPT_ARGS: frozenset[str] = frozenset({"stats", "tier", "round_players"})
@@ -224,6 +274,9 @@ def _ast_errors(source: str, stem: str) -> list[str]:
             )
             if name in _BLOCKED_BUILTINS:
                 errors.append(f"Line {node.lineno}: call to '{name}' is not allowed")
+        elif isinstance(node, ast.Attribute):
+            if node.attr in _BLOCKED_ATTRS:
+                errors.append(f"Line {node.lineno}: access to '{node.attr}' is not allowed")
 
     # Find the class whose name matches the filename stem (case-insensitive).
     class_node = next(

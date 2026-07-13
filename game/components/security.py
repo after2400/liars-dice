@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 # stack, so the hook only ever penalizes player code.
 _enforcing = False
 
+# sys.addaudithook cannot be undone and stacks a new hook on every call, so
+# installation must happen at most once per process no matter how many entry
+# points (game_orchestrator, player loading, ...) call secure_environment.
+_hook_installed = False
+
 
 @contextlib.contextmanager
 def enforce():
@@ -52,9 +57,14 @@ class SecurityManager:
 
     @classmethod
     def install_audit_hooks(cls):
-        """Installs the system audit hook to monitor forbidden events."""
+        """Installs the system audit hook to monitor forbidden events. Idempotent —
+        the hook is added to the process exactly once, however many times called."""
+        global _hook_installed
+        if _hook_installed:
+            return
         try:
             sys.addaudithook(cls._audit_handler)
+            _hook_installed = True
             logger.info("Security audit hooks installed successfully.")
         except Exception as e:
             logger.error(f"Failed to install audit hooks: {e}")

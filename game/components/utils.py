@@ -1,11 +1,19 @@
-import importlib
+import importlib.util
 import os
 import random as r
+
+from game.components.security import enforce, secure_environment
 
 FACES = list(range(1, 7))
 
 
 def import_player_classes_from_dir(directory):
+    # Importing and instantiating a player runs its untrusted module-level and
+    # __init__ code — the once-per-run window where a hostile bot would place
+    # file/network exfil. Install the audit hook (idempotent) and mark the whole
+    # load as player-controlled so forbidden syscalls are blocked here too, not
+    # only inside algo().
+    secure_environment()
     player_objects = []
     for filename in os.listdir(directory):
         if filename.endswith(".py"):
@@ -13,7 +21,8 @@ def import_player_classes_from_dir(directory):
             module_path = os.path.join(directory, filename)
             spec = importlib.util.spec_from_file_location(module_name, module_path)
             module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            with enforce():
+                spec.loader.exec_module(module)
             player_class = next(
                 (
                     getattr(module, name)
@@ -24,7 +33,8 @@ def import_player_classes_from_dir(directory):
                 None,
             )
             if player_class is not None:
-                player_objects.append(player_class())
+                with enforce():
+                    player_objects.append(player_class())
     return player_objects
 
 

@@ -85,6 +85,60 @@ def test_blocked_import_inside_method(tmp_path):
     assert "not allowed" in result.stdout.lower()
 
 
+def test_blocked_frame_introspection_via_traceback(tmp_path):
+    """A bot that walks the call stack via an exception traceback to reach the
+    orchestrator's locals (every player's dice) must be rejected — even though
+    it imports nothing. This is The Architect's information leak without `sys`."""
+    f = tmp_path / "peeker.py"
+    f.write_text(
+        "class Peeker:\n"
+        "    def algo(self, ctx):\n"
+        "        try:\n"
+        "            raise ValueError\n"
+        "        except ValueError as e:\n"
+        "            frame = e.__traceback__.tb_frame.f_back\n"
+        "            return frame.f_locals.get('hands') if frame else None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+    assert "not allowed" in result.stdout.lower()
+
+
+def test_blocked_module_pivot_through_logging(tmp_path):
+    """Whitelisting `logging` must not hand a bot `logging.os` (env/secret read)
+    — attribute reach into a re-exported dangerous module is rejected."""
+    f = tmp_path / "pivot.py"
+    f.write_text(
+        "import logging\n"
+        "class Pivot:\n"
+        "    def algo(self, ctx):\n"
+        "        return logging.os.environ.get('GH_TOKEN')\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+    assert "not allowed" in result.stdout.lower()
+
+
+def test_blocked_logging_submodule_import(tmp_path):
+    """`import logging.handlers` (SocketHandler/HTTPHandler — outbound network)
+    must be rejected; only top-level stdlib modules are importable."""
+    f = tmp_path / "nethandler.py"
+    f.write_text(
+        "import logging.handlers\n"
+        "class Nethandler:\n"
+        "    def __init__(self):\n"
+        "        self.h = logging.handlers.HTTPHandler('h', '/p')\n"
+        "    def algo(self, ctx):\n"
+        "        return None\n"
+    )
+    result = _run(f)
+    assert result.returncode == 1
+    assert "ERROR" in result.stdout
+    assert "not allowed" in result.stdout.lower()
+
+
 def test_init_timeout(tmp_path):
     """A player whose __init__ hangs exits 1 within the timeout."""
     f = tmp_path / "hangy.py"

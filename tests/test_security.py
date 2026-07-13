@@ -80,3 +80,51 @@ def test_honest_players_are_unaffected():
     """Sanity check: normal play never trips the security heartbeat."""
     winner = game_orchestrator([Honest(), Honest()], seed=42)
     assert winner is not None
+
+
+def test_global_random_state_does_not_reveal_dice_rng():
+    """The global `random` module (readable by any bot via the whitelisted
+    `random` import) must be seeded independently of the private dice RNG, so
+    that random.getstate() cannot reconstruct every player's dice.
+
+    Reproducibility for bots that use the global module is preserved: the
+    derived seed is still a pure function of the game seed (see the replay
+    determinism test in tests/test_replay_engine.py)."""
+    import random
+
+    from game.components.script import _derive_player_seed
+
+    game_seed = 0xC0FFEE
+
+    # Derivation is deterministic (replay-safe) ...
+    assert _derive_player_seed(game_seed) == _derive_player_seed(game_seed)
+
+    # ... but the global RNG state a bot can observe is NOT the dice RNG state.
+    dice_state = random.Random(game_seed).getstate()
+    player_state = random.Random(_derive_player_seed(game_seed)).getstate()
+    assert player_state != dice_state
+
+    # Concretely: cloning the observable global stream cannot predict the dice.
+    random.seed(_derive_player_seed(game_seed))
+    clone = random.Random()
+    clone.setstate(random.getstate())
+    dice_rng = random.Random(game_seed)
+    assert clone.choices(range(1, 7), k=10) != dice_rng.choices(range(1, 7), k=10)
+
+
+def test_forbidden_syscall_in_init_blocked_at_load(tmp_path):
+    """A bot whose __init__ shells out must be caught when players are loaded,
+    not only while algo() runs. The guarded window must cover instantiation —
+    the once-per-week construction step where a hostile bot would place exfil."""
+    from game.components.utils import import_player_classes_from_dir
+
+    (tmp_path / "shellinit.py").write_text(
+        "import os\n"
+        "class Shellinit:\n"
+        "    def __init__(self):\n"
+        "        os.system('true')\n"
+        "    def algo(self, ctx):\n"
+        "        return None\n"
+    )
+    with pytest.raises(SecurityViolation):
+        import_player_classes_from_dir(str(tmp_path))
