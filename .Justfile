@@ -31,24 +31,17 @@ lint:
     uv run ruff check .
     uv run ruff format --check .
 
-# Register a player locally (dry run — no GitHub API calls).
-# Usage: just register-player players/foo.py your-github-username
+# Register a bot into local leaderboard.yaml to simulate it — dry run, no validation. Usage: just register-player players/foo.py <user>
 [group('algorithms')]
 register-player file username:
     PLAYER_FILE={{file}} GITHUB_USERNAME={{username}} DRY_RUN=1 uv run python .github/scripts/register_player.py
 
-# Check a player file against the exact validator the registration CI runs.
-# Exits 0 if it would be accepted, or 1 listing why it would be rejected — run
-# this before opening a PR. No GitHub calls, no leaderboard changes.
-# Usage: just validate-player players/foo.py
+# Check whether a bot would pass registration CI, without registering it — read-only. Usage: just validate-player players/foo.py
 [group('algorithms')]
 validate-player file:
     uv run python -m game.validate {{file}}
 
-# Validate a player file and, only if it passes, register it locally (dry run).
-# One-step wrapper over validate-player + register-player; if validation fails,
-# registration never runs.
-# Usage: just add-player players/foo.py your-github-username
+# Validate a bot, then register it locally only if it passes — dry run. Usage: just add-player players/foo.py <user>
 [group('algorithms')]
 add-player file username: (validate-player file) (register-player file username)
 
