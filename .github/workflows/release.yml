@@ -21,7 +21,9 @@ jobs:
       - uses: astral-sh/setup-uv@v8.2.0
 
       - name: Install python-semantic-release
-        run: uv tool install python-semantic-release
+        # Pinned: the vendored .semrel changelog templates are validated against
+        # this version. Bump deliberately and re-verify the templates render.
+        run: uv tool install python-semantic-release==10.6.1
 
       - name: Bump version (no commit)
         run: semantic-release version --skip-build --no-commit --no-tag --no-changelog
