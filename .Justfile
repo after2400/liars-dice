@@ -37,6 +37,21 @@ lint:
 register-player file username:
     PLAYER_FILE={{file}} GITHUB_USERNAME={{username}} DRY_RUN=1 uv run python .github/scripts/register_player.py
 
+# Check a player file against the exact validator the registration CI runs.
+# Exits 0 if it would be accepted, or 1 listing why it would be rejected — run
+# this before opening a PR. No GitHub calls, no leaderboard changes.
+# Usage: just validate-player players/foo.py
+[group('algorithms')]
+validate-player file:
+    uv run python -m game.validate {{file}}
+
+# Validate a player file and, only if it passes, register it locally (dry run).
+# One-step wrapper over validate-player + register-player; if validation fails,
+# registration never runs.
+# Usage: just add-player players/foo.py your-github-username
+[group('algorithms')]
+add-player file username: (validate-player file) (register-player file username)
+
 # Simulate a season run (dry run). Optional date and extra args.
 # Usage: just simulate-season
 #        just simulate-season 2026-07-13
