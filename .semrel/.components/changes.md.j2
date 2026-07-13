@@ -65,20 +65,36 @@ EXAMPLE:
     "documentation": 9,
     "chores": 10,
 }
-%}{#  Hoist commits scoped 'security' (of any type) into one section, printed first
-#}{%  set security_commits = []
+%}{#  Hoist commits scoped 'security' (any type) into one section, printed first.
+      Every entry shares the 'security' scope, so the commit type is otherwise
+      invisible; tag each with its type and order by bump severity
+      (breaking > feat > fix/perf > other), then alphabetically within a rank.
+#}{%  set sec_items = []
 %}{%  for _t, _commits in commit_objects
 %}{%    for commit in _commits if commit.scope == "security"
-%}{%      set _ = security_commits.append(commit)
+%}{%      if commit.breaking_descriptions | length > 0
+%}{%        set _ = sec_items.append({"rank": 0, "label": "breaking", "commit": commit})
+%}{%      elif _t == "features"
+%}{%        set _ = sec_items.append({"rank": 1, "label": "feat", "commit": commit})
+%}{%      elif _t == "bug fixes"
+%}{%        set _ = sec_items.append({"rank": 2, "label": "fix", "commit": commit})
+%}{%      elif _t == "performance improvements"
+%}{%        set _ = sec_items.append({"rank": 3, "label": "perf", "commit": commit})
+%}{%      else
+%}{%        set _ = sec_items.append({"rank": 4, "label": _t, "commit": commit})
+%}{%      endif
 %}{%    endfor
 %}{%  endfor
 %}{#  PRINT SECURITY SECTION (header & commits)
-#}{%  if security_commits | length > 0
-%}{%    set sec_ns = namespace(commits=security_commits)
-%}{%    set _ = apply_alphabetical_ordering_by_descriptions(sec_ns)
+#}{%  if sec_items | length > 0
+%}{%    set sec_items = sec_items | sort(attribute='rank,commit.descriptions.0')
 %}{%    set sec_descriptions = []
-%}{%    for commit in sec_ns.commits
-%}{%      set description = "- %s" | format(format_commit_summary_line(commit))
+%}{%    for item in sec_items
+%}{%      set commit = item.commit
+%}{%      set line = format_commit_summary_line(commit) | replace(
+              "**security**:", "**security** · %s:" | format(item.label), 1
+            )
+%}{%      set description = "- %s" | format(line)
 %}{%      set description = description | autofit_text_width(max_line_width, hanging_indent)
 %}{%      set body = format_body_without_footers(commit) | trim
 %}{%      if body | length > 0
