@@ -5,6 +5,11 @@
 # Local player test sandbox — write tests here freely; never committed
 player_tests/*.py
 
+# Local-only player specs/plans and security design docs (never committed;
+# may describe still-open vulnerabilities pre-fix). Engine/CI docs live in
+# docs/specs and docs/plans, which ARE committed.
+docs/players/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
