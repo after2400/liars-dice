@@ -1,4 +1,27 @@
 {#
+  MACRO: sort list of tuples using order_dict -> first tuple element
+#}{% macro sort_tuples_by_order_dict(ns, order_dict) %}
+  {# Create a list to store the sorted result #}
+  {% set result = [] %}
+
+  {# Create a temporary list with sort values #}
+  {% set temp_list = [] %}
+  {% for tup in ns.commit_objects %}
+    {% set sort_value = order_dict.get(tup[0], 999999) %}
+    {% set _ = temp_list.append((sort_value, tup)) %}
+  {% endfor %}
+  {# Sort the temporary list by the sort value #}
+  {% set sorted_temp = temp_list|sort %}
+
+  {# Extract just the original tuples in the correct order #}
+  {% for _, tup in sorted_temp %}
+    {% set _ = result.append(tup) %}
+  {% endfor %}
+  {% set ns.commit_objects = result %}
+{% endmacro %}
+
+
+{#
   MACRO: format a inline link reference in Markdown
 #}{%  macro format_link(link, label)
 %}{{    "[%s](%s)" | format(label, link)
@@ -76,6 +99,32 @@
 #}{{      (commit.commit.message | string).split("\n", maxsplit=1)[0]
 }}{%    endif
 %}{%  endmacro
+%}
+
+
+{#
+  MACRO: join a commit's body paragraphs (everything after the summary line),
+  dropping trailing footer trailers (co-author / sign-off / generated-with)
+#}{%  macro format_body_without_footers(commit)
+%}{%    set ns = namespace(parts=[])
+%}{#
+#}{%    if commit.error is undefined
+%}{%      for paragraph in commit.descriptions[1:]
+%}{%        if not (
+              paragraph.startswith("🤖")
+              or paragraph.startswith("Co-Authored-By")
+              or paragraph.startswith("Signed-off-by")
+              or paragraph.startswith("Generated")
+            )
+%}{#
+#}{%          set _ = ns.parts.append(paragraph)
+%}{#
+#}{%        endif
+%}{%      endfor
+%}{%    endif
+%}{#
+#}{{    ns.parts | join("\n\n")
+}}{%  endmacro
 %}
 
 

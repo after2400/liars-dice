@@ -10,6 +10,7 @@ export default {
         "workflows", // .github/workflows/
         "engine", // game engine runtime components (game/components/)
         "game", // broader game package changes (game/)
+        "security", // security hardening/fixes (hoisted into the CHANGELOG Security section)
         // "players" scope removed — use `player:` type for all player additions/updates
         "leaderboard", // leaderboard schema and data
         "scripts", // .github/scripts/

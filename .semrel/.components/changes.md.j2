@@ -3,6 +3,8 @@
 %}{%  from 'macros.md.j2' import apply_alphabetical_ordering_by_release_notices
 %}{%  from 'macros.md.j2' import format_breaking_changes_description, format_commit_summary_line
 %}{%  from 'macros.md.j2' import format_release_notice
+%}{%  from 'macros.md.j2' import sort_tuples_by_order_dict
+%}{%  from 'macros.md.j2' import format_body_without_footers
 %}{#
 EXAMPLE:
 
@@ -37,25 +39,83 @@ EXAMPLE:
 
 #}{%  set max_line_width = max_line_width | default(100)
 %}{%  set hanging_indent = hanging_indent | default(2)
-%}{#
-#}{%  for type_, commits in commit_objects if type_ != "unknown"
+%}{%  set emojis = {
+    "breaking changes": "🚨 ",
+    "features": "✨ ",
+    "bug fixes": "🐞 ",
+    "performance improvements": "⚡️",
+    "testing": "✅ ",
+    "continuous integration": "🔁",
+    "build system": "📦 ",
+    "refactoring": "♻️ ",
+    "code style": "💄 ",
+    "documentation": "📖 ",
+    "chores": "🏗 ",
+}
+%}{%  set sort_order = {
+    "breaking changes": 0,
+    "features": 1,
+    "bug fixes": 2,
+    "performance improvements": 3,
+    "testing": 4,
+    "continuous integration": 5,
+    "build system": 6,
+    "refactoring": 7,
+    "code style": 8,
+    "documentation": 9,
+    "chores": 10,
+}
+%}{#  Hoist commits scoped 'security' (of any type) into one section, printed first
+#}{%  set security_commits = []
+%}{%  for _t, _commits in commit_objects
+%}{%    for commit in _commits if commit.scope == "security"
+%}{%      set _ = security_commits.append(commit)
+%}{%    endfor
+%}{%  endfor
+%}{#  PRINT SECURITY SECTION (header & commits)
+#}{%  if security_commits | length > 0
+%}{%    set sec_ns = namespace(commits=security_commits)
+%}{%    set _ = apply_alphabetical_ordering_by_descriptions(sec_ns)
+%}{%    set sec_descriptions = []
+%}{%    for commit in sec_ns.commits
+%}{%      set description = "- %s" | format(format_commit_summary_line(commit))
+%}{%      set description = description | autofit_text_width(max_line_width, hanging_indent)
+%}{%      set body = format_body_without_footers(commit) | trim
+%}{%      if body | length > 0
+%}{%        set description = "%s\n\n%s" | format(description, body)
+%}{%      endif
+%}{%      set _ = sec_descriptions.append(description)
+%}{%    endfor
+%}{{      "\n"
+}}{{      "### 🛡️ Security\n"
+}}{{      "\n"
+}}{{      "%s\n" | format(sec_descriptions | unique | join("\n\n"))
+}}{%  endif
+%}{#  Sort the remaining sections by type using sort_order, then render each
+#}{%  set sort_ns = namespace(commit_objects=commit_objects)
+%}{%  set _ = sort_tuples_by_order_dict(sort_ns, sort_order)
+%}{%  for type_, commits in sort_ns.commit_objects if type_ != "unknown"
 %}{#    PREPROCESS COMMITS (order by description & format description line)
 #}{%    set ns = namespace(commits=commits)
 %}{%    set _ = apply_alphabetical_ordering_by_descriptions(ns)
 %}{#
 #}{%    set commit_descriptions = []
 %}{#
-#}{%    for commit in ns.commits
-%}{#      # Add reference links to the commit summary line
+#}{%    for commit in ns.commits if commit.scope != "security"
+%}{#      # Reference links + any extra description lines (squash commit bodies)
 #}{%      set description = "- %s" | format(format_commit_summary_line(commit))
 %}{%      set description = description | autofit_text_width(max_line_width, hanging_indent)
+%}{%      set body = format_body_without_footers(commit) | trim
+%}{%      if body | length > 0
+%}{%        set description = "%s\n\n%s" | format(description, body)
+%}{%      endif
 %}{%      set _ = commit_descriptions.append(description)
 %}{%    endfor
 %}{#
    #    # PRINT SECTION (header & commits)
 #}{%    if commit_descriptions | length > 0
 %}{{      "\n"
-}}{{      "### %s\n" | format(type_ | title)
+}}{{      "### %s %s\n" | format(emojis.get(type_, "") | trim, type_ | title)
 }}{{      "\n"
 }}{{      "%s\n" | format(commit_descriptions | unique | join("\n\n"))
 }}{%    endif
