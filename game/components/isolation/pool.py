@@ -22,10 +22,15 @@ class _Worker:
         # inside a single turn timeout, so a second knob isn't needed here.
         self.timeout_s = timeout_s
         self.ready = False
+        # Bootstrap handshake payload: ("ready", name, avatar) as reported by
+        # worker_main, captured before the parent's authoritative display name
+        # overwrites the instance's .name. None until a successful handshake.
+        self.ready_info = None
         self._spawn()
 
     def _spawn(self):
         self.ready = False
+        self.ready_info = None
         self.parent_conn, child_conn = _CTX.Pipe()
         self.proc = _CTX.Process(target=worker_main, args=(child_conn, self.cfg), daemon=True)
         self.proc.start()
@@ -43,7 +48,7 @@ class _Worker:
             if not self.parent_conn.poll(self.timeout_s):
                 self._kill_proc()
                 return
-            self.parent_conn.recv()  # "ready"
+            self.ready_info = self.parent_conn.recv()  # ("ready", name, avatar)
         except (EOFError, OSError):
             self._kill_proc()
             return

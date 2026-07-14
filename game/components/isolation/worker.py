@@ -85,6 +85,14 @@ def worker_main(conn, cfg: WorkerConfig):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         player = getattr(module, cfg.player_class)()
+    # Capture the player's own (possibly dynamically-computed, e.g. set inside
+    # __init__) name/avatar BEFORE the parent's authoritative display name
+    # overwrites .name below. Reported back over the bootstrap handshake so a
+    # caller without access to the live instance (game/validate.py's isolated
+    # probe) can still validate these values at runtime as a fallback for the
+    # non-literal case Phase 1's AST check can't cover.
+    instantiated_name = getattr(player, "name", None)
+    instantiated_avatar = getattr(player, "avatar", None)
     player.name = cfg.name
 
     import inspect
@@ -108,7 +116,10 @@ def worker_main(conn, cfg: WorkerConfig):
 
         reader = ReadModelReader(cfg.readmodel_name)
 
-    conn.send("ready")
+    # Bootstrap-handshake payload: ("ready", name, avatar) rather than a bare
+    # "ready" string. Additive only — the per-turn send/recv_bytes protocol
+    # below is unchanged, and no test asserts on the literal old string.
+    conn.send(("ready", instantiated_name, instantiated_avatar))
     while True:
         turn = conn.recv()
         if turn is None:
