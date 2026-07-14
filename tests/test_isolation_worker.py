@@ -109,3 +109,106 @@ def test_worker_reads_real_bet_history_and_outcomes_via_shared_readmodel():
     finally:
         w.close()
         w.unlink()
+
+
+def test_worker_v2_bot_sees_real_stats_via_shared_readmodel():
+    """End-to-end: a v2 (algo(self, ctx)) player running in an isolated worker
+    sees a real GameStats snapshot the parent published via
+    ReadModelWriter.publish_stats, wired through WorkerConfig.readmodel_name ->
+    worker_main -> ReadModelReader.stats_view() -> _build_args (Task 7)."""
+    import os
+
+    from game.components.isolation.readmodel import ReadModelWriter
+    from game.components.stats import GameStats
+
+    w = ReadModelWriter(size_bytes=1 << 20)
+    try:
+        stats = GameStats()
+        stats.start_game(["Alice", "Bob", "Carol"])
+        w.publish_stats(stats)
+
+        cfg = WorkerConfig(
+            player_file=os.path.abspath("examples/reports_stats_view.py"),
+            player_class="ReportsStatsView",
+            name="s",
+            global_random_seed=b"\x00" * 32,
+            readmodel_name=w.name,
+        )
+        [res] = _run(cfg, [([1, 2, 3, 4, 5], None, 10, "L1", ["A", "B"], 0)])
+        from game.components.isolation import protocol as p
+
+        out = p.decode_result(res)
+        assert isinstance(out, Bet)
+        # ReportsStatsView encodes quantity=len(ctx.stats.dice_counts); start_game
+        # seeded 3 players.
+        assert out.quantity == 3
+    finally:
+        w.close()
+        w.unlink()
+
+
+def test_worker_v1_bot_with_stats_in_signature_sees_real_stats():
+    """A legacy (v1) bot that names `stats` in its algo() signature must also
+    receive the real published GameStats snapshot in an isolated worker (Task 7
+    Step 5: "v1 bots if stats is in their algo() signature")."""
+    import os
+
+    from game.components.isolation.readmodel import ReadModelWriter
+    from game.components.stats import GameStats
+
+    w = ReadModelWriter(size_bytes=1 << 20)
+    try:
+        stats = GameStats()
+        stats.start_game(["Alice", "Bob"])
+        w.publish_stats(stats)
+
+        cfg = WorkerConfig(
+            player_file=os.path.abspath("examples/reports_stats_view_v1.py"),
+            player_class="ReportsStatsViewV1",
+            name="s1",
+            global_random_seed=b"\x00" * 32,
+            readmodel_name=w.name,
+        )
+        [res] = _run(cfg, [([1, 2, 3, 4, 5], None, 10, "L1", ["A", "B"], 0)])
+        from game.components.isolation import protocol as p
+
+        out = p.decode_result(res)
+        assert isinstance(out, Bet)
+        assert out.quantity == 2
+    finally:
+        w.close()
+        w.unlink()
+
+
+def test_worker_v1_bot_without_stats_in_signature_gets_no_stats_kwarg():
+    """A v1 bot that does NOT name `stats` must not receive it at all (mirrors
+    script.py's _wants_stats gating) -- proven here by using a plain bot whose
+    algo() has no stats parameter; a stray stats kwarg would raise TypeError,
+    which the worker's per-turn exception handler would turn into WORKER_ERROR
+    instead of a decodable Bet."""
+    import os
+
+    from game.components.isolation.readmodel import ReadModelWriter
+    from game.components.stats import GameStats
+
+    w = ReadModelWriter(size_bytes=1 << 20)
+    try:
+        stats = GameStats()
+        stats.start_game(["Alice", "Bob"])
+        w.publish_stats(stats)
+
+        cfg = WorkerConfig(
+            player_file=os.path.abspath("examples/always_bid_two_fives.py"),
+            player_class="AlwaysBidTwoFives",
+            name="t",
+            global_random_seed=b"\x00" * 32,
+            readmodel_name=w.name,
+        )
+        [res] = _run(cfg, [([1, 2, 3, 4, 5], None, 10, "L1", ["A", "B"], 0)])
+        from game.components.isolation import protocol as p
+
+        out = p.decode_result(res)
+        assert isinstance(out, Bet)
+    finally:
+        w.close()
+        w.unlink()

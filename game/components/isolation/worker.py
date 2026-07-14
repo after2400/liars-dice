@@ -29,7 +29,7 @@ class WorkerConfig:
     readmodel_name: str | None = None
 
 
-def _build_args(player, turn, is_v2, reader=None):
+def _build_args(player, turn, is_v2, reader=None, wants_stats=False):
     from game.components.bets import Bet
 
     hand, prior_bet, total_dice, tier, round_players, log_len = turn
@@ -40,9 +40,11 @@ def _build_args(player, turn, is_v2, reader=None):
         if reader is not None:
             bet_history = reader.bet_history_view(log_len)
             outcomes = reader.outcomes_view()
+            stats = reader.stats_view()
         else:
             bet_history = _ReadOnlySequence([])
             outcomes = _ReadOnlySequence([])
+            stats = None
 
         return (
             GameContext(
@@ -51,12 +53,16 @@ def _build_args(player, turn, is_v2, reader=None):
                 total_dice=total_dice,
                 bet_history=bet_history,
                 outcomes=outcomes,
-                stats=None,
+                stats=stats,
                 tier=tier,
                 round_players=list(round_players),
             ),
-        )
-    return (list(hand), pb, total_dice, [], [])
+        ), {}
+
+    kwargs: dict = {}
+    if wants_stats:
+        kwargs["stats"] = reader.stats_view() if reader is not None else None
+    return (list(hand), pb, total_dice, [], []), kwargs
 
 
 def worker_main(conn, cfg: WorkerConfig):
@@ -90,6 +96,9 @@ def worker_main(conn, cfg: WorkerConfig):
         if nm != "self" and prm.kind in (prm.POSITIONAL_ONLY, prm.POSITIONAL_OR_KEYWORD)
     )
     is_v2 = positional == 1
+    # v2 bots always receive stats via GameContext.stats; v1 bots only if they
+    # opted in by naming a `stats` parameter (mirrors script.py's _wants_stats).
+    wants_stats = is_v2 or "stats" in sig
 
     # Open the read-model once, before the turn loop (not per-turn): mapping is a
     # one-time O(1) setup cost; each turn thereafter only does direct offset reads.
@@ -106,8 +115,8 @@ def worker_main(conn, cfg: WorkerConfig):
             break
         try:
             with enforce():
-                args = _build_args(player, turn, is_v2, reader)
-                action = player.algo(*args)
+                args, kwargs = _build_args(player, turn, is_v2, reader, wants_stats)
+                action = player.algo(*args, **kwargs)
             conn.send_bytes(protocol.encode_result(action))
         except Exception:
             conn.send_bytes(protocol.encode_result(protocol.WORKER_ERROR))

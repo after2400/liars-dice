@@ -65,6 +65,24 @@ depend on that invariant. If a future change makes turn dispatch concurrent
 across players *within the same game* (not just across games/pools), this
 invariant would break and `outcomes_view` would need an equivalent explicit
 bound — flagged here for whoever wires the parent side (Task 7).
+
+GameStats channel (Task 7): a separate double-buffered region, added
+alongside the bet/outcome regions in the same block. `publish_stats` pickles
+`GameStats.snapshot_state()` (a plain-dict deep-copy — see stats.py; the raw
+backing stores include `defaultdict(lambda: ...)` factories that are not
+picklable) and writes it into whichever of the two stats buffers is
+currently NOT the one readers are pointed at, then flips a single
+`stats_active` header field (0 or 1) to that buffer LAST — same
+write-payload-then-publish-visibility ordering as the bet/outcome regions.
+A reader captures `stats_active` once, reads that buffer's length and bytes,
+and never touches the other buffer, so it can never observe a torn write
+even if the parent starts a new publish (into the now-unreferenced buffer)
+while the read is in flight. This relies on the same synchronous
+one-turn-at-a-time dispatch invariant described above for `outcomes_view`
+(at most one publish happens between the moment a reader captures
+`stats_active` and the moment it finishes reading that buffer) — under
+concurrent-within-a-game dispatch this would need real generation counters
+or locking, not just two buffers.
 """
 
 from __future__ import annotations
@@ -77,10 +95,22 @@ from multiprocessing import shared_memory
 from types import MappingProxyType
 
 from game.components.bets import Bet
+from game.components.stats import GameStats
 
 _MAGIC = b"LDR1"
-_HEADER_FMT = "<4sIIII"  # magic, size_bytes, bet_count, outcome_count, outcome_write_pos
+# magic, size_bytes, bet_count, outcome_count, outcome_write_pos,
+# stats_active (0 or 1), stats_len0, stats_len1
+_HEADER_FMT = "<4sIIIIIII"
 _HEADER_SIZE = struct.calcsize(_HEADER_FMT)
+
+# Byte offsets of individual header fields (all little-endian uint32, after the
+# 4-byte magic) — used by the writer's targeted single-field publishes below.
+_OFF_BET_COUNT = 4 + 4
+_OFF_OUTCOME_COUNT = _OFF_BET_COUNT + 4
+_OFF_OUTCOME_WRITE_POS = _OFF_OUTCOME_COUNT + 4
+_OFF_STATS_ACTIVE = _OFF_OUTCOME_WRITE_POS + 4
+_OFF_STATS_LEN0 = _OFF_STATS_ACTIVE + 4
+_OFF_STATS_LEN1 = _OFF_STATS_LEN0 + 4
 
 _NAME_FIELD_SIZE = 128  # bytes; MAX_NAME_LEN (game/validate.py) is 25 chars, up to 4
 # bytes/char in UTF-8 worst case (~100 bytes) — 128 leaves headroom without being wasteful.
@@ -89,7 +119,9 @@ _BET_RECORD_SIZE = struct.calcsize(_BET_FMT)
 
 _BET_REGION_FRACTION = 0.5
 _OUTCOME_INDEX_FRACTION = 0.1
-# remainder of the block (after header + bet region + outcome index) is outcome data.
+_STATS_REGION_FRACTION = 0.2  # split evenly into two double-buffer halves
+# remainder of the block (after header + bet region + outcome index + stats
+# double-buffer) is outcome data.
 
 
 @dataclass(frozen=True)
@@ -100,6 +132,9 @@ class _Layout:
     outcome_index_offset: int
     outcome_data_offset: int
     outcome_data_capacity: int
+    stats_buffer_capacity: int
+    stats_buf0_offset: int
+    stats_buf1_offset: int
 
 
 def _compute_layout(size_bytes: int) -> _Layout:
@@ -117,7 +152,11 @@ def _compute_layout(size_bytes: int) -> _Layout:
     outcome_capacity = outcome_index_budget // 4
     outcome_index_bytes = outcome_capacity * 4
 
-    outcome_data_capacity = usable - bet_region_bytes - outcome_index_bytes
+    stats_region_budget = int(usable * _STATS_REGION_FRACTION)
+    stats_buffer_capacity = stats_region_budget // 2
+    stats_region_bytes = stats_buffer_capacity * 2  # trim to two equal halves
+
+    outcome_data_capacity = usable - bet_region_bytes - outcome_index_bytes - stats_region_bytes
 
     if bet_capacity < 1 or outcome_capacity < 1 or outcome_data_capacity < 64:
         raise ValueError(
@@ -129,6 +168,8 @@ def _compute_layout(size_bytes: int) -> _Layout:
     bet_region_offset = _HEADER_SIZE
     outcome_index_offset = bet_region_offset + bet_region_bytes
     outcome_data_offset = outcome_index_offset + outcome_index_bytes
+    stats_buf0_offset = outcome_data_offset + outcome_data_capacity
+    stats_buf1_offset = stats_buf0_offset + stats_buffer_capacity
     return _Layout(
         bet_capacity=bet_capacity,
         bet_region_offset=bet_region_offset,
@@ -136,6 +177,9 @@ def _compute_layout(size_bytes: int) -> _Layout:
         outcome_index_offset=outcome_index_offset,
         outcome_data_offset=outcome_data_offset,
         outcome_data_capacity=outcome_data_capacity,
+        stats_buffer_capacity=stats_buffer_capacity,
+        stats_buf0_offset=stats_buf0_offset,
+        stats_buf1_offset=stats_buf1_offset,
     )
 
 
@@ -165,25 +209,40 @@ class ReadModelWriter:
         self._shm = shared_memory.SharedMemory(create=True, size=size_bytes)
         # Pin the LOGICAL size_bytes into the header (not self._shm.size, which the
         # OS may round up to a page boundary) so the reader recomputes the exact
-        # same region layout from it.
-        struct.pack_into(_HEADER_FMT, self._shm.buf, 0, _MAGIC, size_bytes, 0, 0, 0)
+        # same region layout from it. stats_active/stats_len0/stats_len1 all start
+        # at 0 — no stats have been published yet; stats_view() treats
+        # length-0-on-buffer-0 as "nothing published, return an empty GameStats".
+        struct.pack_into(_HEADER_FMT, self._shm.buf, 0, _MAGIC, size_bytes, 0, 0, 0, 0, 0, 0)
         self.name = self._shm.name
 
     # -- header helpers (writer keeps its own buf handle; it's the sole writer) --
     def _read_counts(self):
-        _, _, bet_count, outcome_count, outcome_write_pos = struct.unpack_from(
-            _HEADER_FMT, self._shm.buf, 0
+        _, _, bet_count, outcome_count, outcome_write_pos, _active, _len0, _len1 = (
+            struct.unpack_from(_HEADER_FMT, self._shm.buf, 0)
         )
         return bet_count, outcome_count, outcome_write_pos
 
+    def _read_stats_header(self):
+        _, _, _bet_count, _outcome_count, _write_pos, active, len0, len1 = struct.unpack_from(
+            _HEADER_FMT, self._shm.buf, 0
+        )
+        return active, len0, len1
+
     def _publish_bet_count(self, count: int) -> None:
-        struct.pack_into("<I", self._shm.buf, 4 + 4, count)  # offset of bet_count field
+        struct.pack_into("<I", self._shm.buf, _OFF_BET_COUNT, count)
 
     def _publish_outcome_count(self, count: int) -> None:
-        struct.pack_into("<I", self._shm.buf, 4 + 4 + 4, count)  # offset of outcome_count field
+        struct.pack_into("<I", self._shm.buf, _OFF_OUTCOME_COUNT, count)
 
     def _publish_outcome_write_pos(self, pos: int) -> None:
-        struct.pack_into("<I", self._shm.buf, 4 + 4 + 4 + 4, pos)  # offset of write_pos field
+        struct.pack_into("<I", self._shm.buf, _OFF_OUTCOME_WRITE_POS, pos)
+
+    def _publish_stats_len(self, buffer_idx: int, length: int) -> None:
+        offset = _OFF_STATS_LEN0 if buffer_idx == 0 else _OFF_STATS_LEN1
+        struct.pack_into("<I", self._shm.buf, offset, length)
+
+    def _publish_stats_active(self, buffer_idx: int) -> None:
+        struct.pack_into("<I", self._shm.buf, _OFF_STATS_ACTIVE, buffer_idx)
 
     def append_bet(self, entry: dict) -> None:
         bet_count, _outcome_count, _write_pos = self._read_counts()
@@ -236,6 +295,30 @@ class ReadModelWriter:
 
         self._publish_outcome_write_pos(write_pos + needed)
         self._publish_outcome_count(outcome_count + 1)  # publish LAST
+
+    def publish_stats(self, stats: GameStats) -> None:
+        """Double-buffered publish of a `GameStats` snapshot.
+
+        Writes into whichever of the two stats buffers is currently NOT the
+        active one, then flips `stats_active` LAST — so a reader that already
+        captured the old active index keeps reading the untouched buffer, and
+        a reader that reads after this call sees the new snapshot in full.
+        Never torn under the one-publish-per-turn / synchronous-dispatch
+        invariant documented in the module docstring.
+        """
+        active, _len0, _len1 = self._read_stats_header()
+        target = 1 - active
+        blob = pickle.dumps(stats.snapshot_state(), protocol=pickle.HIGHEST_PROTOCOL)
+        capacity = self._layout.stats_buffer_capacity
+        if len(blob) > capacity:
+            raise BufferError(
+                f"ReadModelWriter: stats snapshot ({len(blob)} bytes) exceeds the "
+                f"{capacity}-byte stats double-buffer capacity — allocate a larger size_bytes"
+            )
+        offset = self._layout.stats_buf0_offset if target == 0 else self._layout.stats_buf1_offset
+        self._shm.buf[offset : offset + len(blob)] = blob
+        self._publish_stats_len(target, len(blob))
+        self._publish_stats_active(target)  # flip LAST — payload is already in place
 
     def close(self) -> None:
         self._shm.close()
@@ -335,8 +418,8 @@ class ReadModelReader:
         # Open once with the normal (writable-by-default) handle purely to read the
         # header and obtain the fd — we never read/write through self._shm.buf itself.
         self._shm = shared_memory.SharedMemory(name=name)
-        magic, size_bytes, _bet_count, _outcome_count, _write_pos = struct.unpack_from(
-            _HEADER_FMT, self._shm.buf, 0
+        magic, size_bytes, _bet_count, _outcome_count, _write_pos, _active, _len0, _len1 = (
+            struct.unpack_from(_HEADER_FMT, self._shm.buf, 0)
         )
         if magic != _MAGIC:
             raise ValueError(f"shared memory block {name!r} is not a valid read-model block")
@@ -356,7 +439,9 @@ class ReadModelReader:
         return struct.unpack_from(_HEADER_FMT, self._ro_mmap, 0)
 
     def bet_history_view(self, log_len: int) -> _BetHistoryView:
-        _magic, _size, bet_count, _outcome_count, _write_pos = self._read_header()
+        _magic, _size, bet_count, _outcome_count, _write_pos, _active, _len0, _len1 = (
+            self._read_header()
+        )
         n = bet_count if log_len is None else min(log_len, bet_count)
         return _BetHistoryView(self._ro_mmap, self._layout, n)
 
@@ -364,8 +449,29 @@ class ReadModelReader:
         # No log_len: safe under the synchronous turn-dispatch invariant documented
         # in the module docstring. Whatever is published here is already exactly
         # "history up to and not including this turn."
-        _magic, _size, _bet_count, outcome_count, _write_pos = self._read_header()
+        _magic, _size, _bet_count, outcome_count, _write_pos, _active, _len0, _len1 = (
+            self._read_header()
+        )
         return _OutcomesView(self._ro_mmap, self._layout, outcome_count)
+
+    def stats_view(self) -> GameStats:
+        """Reconstruct a `GameStats` from whichever stats buffer is currently
+        active. Reads `stats_active` once, then only that buffer's length and
+        bytes — see the module docstring's "GameStats channel" section for why
+        this can't observe a torn write under this design's invariants.
+        """
+        _magic, _size, _bet_count, _outcome_count, _write_pos, active, len0, len1 = (
+            self._read_header()
+        )
+        length = len0 if active == 0 else len1
+        if length == 0:
+            # Nothing published yet (worker started before the parent's first
+            # publish_stats call) — an empty GameStats mirrors GameContext's own
+            # "stats=None -> GameStats()" default.
+            return GameStats()
+        offset = self._layout.stats_buf0_offset if active == 0 else self._layout.stats_buf1_offset
+        blob = bytes(self._ro_mmap[offset : offset + length])
+        return GameStats.restore_state(pickle.loads(blob))
 
     def close(self) -> None:
         self._ro_mmap.close()
