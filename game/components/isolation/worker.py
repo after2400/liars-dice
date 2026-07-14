@@ -21,24 +21,36 @@ class WorkerConfig:
     player_class: str
     name: str  # final display name to reassign (parent sets this post-load)
     global_random_seed: bytes
+    # shared_memory block name for the read-only bet-history/outcomes read-model
+    # (game/components/isolation/readmodel.py). None means no read-model is
+    # available and the worker falls back to empty history/outcomes — keeps
+    # existing positional WorkerConfig(...) call sites (tests, older callers)
+    # working without every one of them needing an update for this task.
+    readmodel_name: str | None = None
 
 
-def _build_args(player, turn, is_v2):
+def _build_args(player, turn, is_v2, reader=None):
     from game.components.bets import Bet
 
-    hand, prior_bet, total_dice, tier, round_players, _log_len = turn
+    hand, prior_bet, total_dice, tier, round_players, log_len = turn
     pb = Bet(prior_bet[0], prior_bet[1], prior_bet[2]) if prior_bet is not None else None
-    # Read-model is empty until Task 6/7 wires the shared arena.
     if is_v2:
         from game.components.context import GameContext, _ReadOnlySequence
+
+        if reader is not None:
+            bet_history = reader.bet_history_view(log_len)
+            outcomes = reader.outcomes_view()
+        else:
+            bet_history = _ReadOnlySequence([])
+            outcomes = _ReadOnlySequence([])
 
         return (
             GameContext(
                 hand=list(hand),
                 prior_bet=pb,
                 total_dice=total_dice,
-                bet_history=_ReadOnlySequence([]),
-                outcomes=_ReadOnlySequence([]),
+                bet_history=bet_history,
+                outcomes=outcomes,
                 stats=None,
                 tier=tier,
                 round_players=list(round_players),
@@ -79,6 +91,14 @@ def worker_main(conn, cfg: WorkerConfig):
     )
     is_v2 = positional == 1
 
+    # Open the read-model once, before the turn loop (not per-turn): mapping is a
+    # one-time O(1) setup cost; each turn thereafter only does direct offset reads.
+    reader = None
+    if cfg.readmodel_name is not None:
+        from game.components.isolation.readmodel import ReadModelReader
+
+        reader = ReadModelReader(cfg.readmodel_name)
+
     conn.send("ready")
     while True:
         turn = conn.recv()
@@ -86,7 +106,7 @@ def worker_main(conn, cfg: WorkerConfig):
             break
         try:
             with enforce():
-                args = _build_args(player, turn, is_v2)
+                args = _build_args(player, turn, is_v2, reader)
                 action = player.algo(*args)
             conn.send_bytes(protocol.encode_result(action))
         except Exception:
