@@ -9,7 +9,11 @@ import types
 from game.components.bets import Bet, bet_grader, bet_validator
 from game.components.context import GameContext, _ReadOnlySequence
 from game.components.exceptions import SecurityViolation
+from game.components.isolation import protocol
+from game.components.isolation.pool import WorkerPool
+from game.components.isolation.readmodel import ReadModelWriter
 from game.components.security import enforce, secure_environment
+from game.components.stats import GameStats
 from game.components.utils import FACES
 
 logger = logging.getLogger(__name__)
@@ -41,6 +45,8 @@ def game_orchestrator(
     tier: str | None = None,
     seed: int | None = None,
     perf=None,
+    pool: WorkerPool | None = None,
+    writer: ReadModelWriter | None = None,
 ):
     """Plays a complete game of Liar's Dice between N players.
 
@@ -55,6 +61,15 @@ def game_orchestrator(
         game_id: Identifier for this game, stored on every bet_history and outcomes entry.
         bet_history: Shared list to append bids to. Created fresh if not provided.
         outcomes: Shared list to append round outcomes to. Created fresh if not provided.
+        pool: When provided, every turn is dispatched to an isolated worker via
+              `pool.call(...)` instead of calling `player.algo(...)` in-process.
+              Workers are looked up by player name (`pool.name_to_index`), not by
+              list position — `players` may be a reshuffled list across games in
+              a series, but a `WorkerPool`'s worker order is fixed at construction.
+        writer: When provided (alongside `pool`), every bet_history/outcomes
+                append is mirrored into shared memory, and GameStats is published,
+                immediately before each isolated call — giving workers the same
+                view the in-process path gets from the live lists.
 
     Returns:
         The winning player object.
@@ -67,6 +82,11 @@ def game_orchestrator(
     # Snapshot each player's bound .algo method so tampering with another
     # player's algo (e.g. monkey-patching) can be detected after each turn.
     algo_snapshots = {p: p.algo for p in players}
+
+    # Derived from the pool's own fixed construction order (never from `players`
+    # list position, which may already have been shuffled by prior games in a
+    # series by the time this function runs) — see the `pool` docstring above.
+    pool_index_by_name = pool.name_to_index if pool is not None else None
 
     _game_seed = seed if seed is not None else secrets.randbits(64)
     rng = random.Random(_game_seed)
@@ -157,7 +177,32 @@ def game_orchestrator(
                 )
 
                 with enforce():
-                    if _is_v2[player]:
+                    if pool is not None:
+                        prior_bet_tuple = (
+                            (safe_bet.quantity, safe_bet.face, safe_bet.player)
+                            if safe_bet is not None
+                            else None
+                        )
+                        turn = (
+                            list(hands[player_idx]),
+                            prior_bet_tuple,
+                            total_dice,
+                            tier,
+                            list(round_players_order),
+                            len(bet_history),
+                        )
+                        if writer is not None:
+                            writer.publish_stats(stats if stats is not None else GameStats())
+                        worker_idx = pool_index_by_name[player.name]
+                        # perf now records isolated round-trip wall time (worker
+                        # exec + IPC); the worker's own CPU time isn't captured
+                        # here yet (see plan Task 13).
+                        if perf is not None:
+                            with perf.time_call(player.name):
+                                action = pool.call(worker_idx, turn)
+                        else:
+                            action = pool.call(worker_idx, turn)
+                    elif _is_v2[player]:
                         ctx = GameContext(
                             hand=list(hands[player_idx]),
                             prior_bet=safe_bet,
@@ -202,7 +247,9 @@ def game_orchestrator(
                             )
                 # Security heartbeat: only *this* player's code has run since the
                 # last check, so any snapshot mismatch — theirs or anyone else's
-                # — is unambiguously their doing.
+                # — is unambiguously their doing. A harmless no-op on the
+                # isolated path (pool is not None): no untrusted code has run
+                # in-process during pool.call, so no snapshot can have changed.
                 for p in players:
                     if p.algo != algo_snapshots[p]:
                         raise SecurityViolation(
@@ -225,6 +272,25 @@ def game_orchestrator(
                 if stats is not None:
                     stats.record_penalty(player.name)
                 break
+
+            if pool is not None and action is protocol.WORKER_ERROR:
+                # Mirrors the except-Exception branch above exactly (same
+                # penalty, same control flow) — the failure just happened
+                # inside the worker process instead of raising here, so
+                # there's no local traceback to log.
+                logger.error(f"{player.name}'s isolated worker failed - penalised")
+                loser = player_idx
+                if stats is not None:
+                    stats.record_penalty(player.name)
+                break
+
+            if pool is not None:
+                if action is protocol.LIAR:
+                    action = None  # normalize sentinel -> "action is None means liar"
+                elif isinstance(action, Bet):
+                    # Wire protocol leaves .player unset; the parent (us) is the
+                    # source of truth for the acting player's identity.
+                    action.player = player.name
 
             if action is None:
                 # Player calls liar
@@ -265,6 +331,8 @@ def game_orchestrator(
                             }
                         )
                     )
+                    if writer is not None:
+                        writer.append_outcome(completed_outcomes[-1])
                     if stats is not None:
                         stats.update_outcome(completed_outcomes[-1])
                         stats.reset_round(round_num + 1)
@@ -296,6 +364,8 @@ def game_orchestrator(
                             }
                         )
                     )
+                    if writer is not None:
+                        writer.append_bet(bet_history[-1])
                     if stats is not None:
                         stats.update_bet(
                             bet_history[-1],

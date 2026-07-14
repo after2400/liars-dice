@@ -76,6 +76,13 @@ class WorkerPool:
     def __init__(self, configs: list[WorkerConfig], timeout_s: float):
         self.timeout_s = timeout_s
         self.workers = [_Worker(c, timeout_s) for c in configs]
+        # Stable name -> index mapping, fixed once at construction time from
+        # `configs` (never from a caller's mutable player list). Callers that
+        # reshuffle their own player list across games in a series (as
+        # game_orchestrator does) must key pool.call() by this mapping, not by
+        # a live list position, or a turn can get silently routed to the
+        # wrong player's worker.
+        self.name_to_index = {c.name: i for i, c in enumerate(configs)}
 
     def call(self, index: int, turn: tuple):
         w = self.workers[index]
