@@ -408,7 +408,7 @@ def test_tier_passed_to_tier_arg_player(tmp_path):
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
 
-    run_series(players + [AlwaysBid()], n_games=1, tier="CH")
+    run_series(players + [AlwaysBid()], n_games=1, tier="CH", isolated=False)
 
     spy_cls = players[0].__class__
     assert len(spy_cls.received_tiers) > 0, "Tierspy.algo was never called"
@@ -454,7 +454,7 @@ def test_tier_none_when_not_specified(tmp_path):
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
 
-    run_series(players + [AlwaysBid()], n_games=1)  # no tier kwarg
+    run_series(players + [AlwaysBid()], n_games=1, isolated=False)  # no tier kwarg
 
     spy_cls = players[0].__class__
     assert all(t is None for t in spy_cls.received_tiers), (
@@ -503,7 +503,7 @@ def test_stats_and_tier_independent(tmp_path):
     (player_dir / "__init__.py").write_text("")
 
     players = import_player_classes_from_dir(str(player_dir))
-    run_series(players, n_games=1, tier="PRM")
+    run_series(players, n_games=1, tier="PRM", isolated=False)
 
     tier_cls = next(p.__class__ for p in players if type(p).__name__ == "Tieronly")
     stats_cls = next(p.__class__ for p in players if type(p).__name__ == "Statsonly")
@@ -553,7 +553,7 @@ def test_stats_passed_to_six_arg_player(tmp_path):
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
 
-    run_series(players + [AlwaysBid()], n_games=1)
+    run_series(players + [AlwaysBid()], n_games=1, isolated=False)
 
     spy_cls = players[0].__class__
     assert len(spy_cls.received_stats) > 0, "Spy.algo was never called"
@@ -599,7 +599,7 @@ def test_round_players_passed_when_declared(tmp_path):
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
 
-    run_series(players + [AlwaysBid()], n_games=1)
+    run_series(players + [AlwaysBid()], n_games=1, isolated=False)
 
     spy_cls = players[0].__class__
     assert len(spy_cls.received) > 0, "RpSpy.algo was never called"
@@ -646,7 +646,7 @@ def test_round_players_first_element_is_opener(tmp_path):
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
 
-    run_series(players + [AlwaysBid()], n_games=5)
+    run_series(players + [AlwaysBid()], n_games=5, isolated=False)
 
     spy_cls = players[0].__class__
     assert len(spy_cls.opener_calls) > 0, "OpenerSpy was never the opener"
@@ -694,7 +694,7 @@ def test_v2_player_receives_game_context(tmp_path):
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
 
-    run_series(players + [AlwaysBid()], n_games=1)
+    run_series(players + [AlwaysBid()], n_games=1, isolated=False)
     spy_cls = players[0].__class__
     assert len(spy_cls.received) > 0, "V2Player.algo was never called"
     assert all(t == "GameContext" for t in spy_cls.received), (
@@ -744,7 +744,7 @@ def test_v2_ctx_has_all_fields(tmp_path):
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
 
-    run_series(players + [AlwaysBid()], n_games=1, tier="CH")
+    run_series(players + [AlwaysBid()], n_games=1, tier="CH", isolated=False)
     probe_cls = players[0].__class__
     assert len(probe_cls.snapshots) > 0
     for snap in probe_cls.snapshots:
@@ -795,7 +795,7 @@ def test_v1_and_v2_players_coexist(tmp_path):
     (player_dir / "__init__.py").write_text("")
     players = import_player_classes_from_dir(str(player_dir))
 
-    run_series(players, n_games=3)
+    run_series(players, n_games=3, isolated=False)
     v1_cls = next(p.__class__ for p in players if type(p).__name__ == "V1Player")
     v2_cls = next(p.__class__ for p in players if type(p).__name__ == "V2Player2")
     assert v1_cls.calls > 0, "V1Player was never called"
@@ -936,7 +936,7 @@ def test_bet_history_entries_are_read_only(tmp_path):
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
 
-    run_series(players + [AlwaysBid()], n_games=1)
+    run_series(players + [AlwaysBid()], n_games=1, isolated=False)
     probe_cls = players[0].__class__
     assert len(probe_cls.saw_readonly) > 0, "MutationProbe never saw a bet_history entry"
     assert all(probe_cls.saw_readonly), "bet_history entries were writable — expected TypeError"
@@ -980,7 +980,7 @@ def test_outcomes_hands_values_are_tuples(tmp_path):
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
 
-    run_series(players + [AlwaysBid()], n_games=2)
+    run_series(players + [AlwaysBid()], n_games=2, isolated=False)
     probe_cls = players[0].__class__
     assert len(probe_cls.hand_types) > 0, "HandsProbe never saw an outcome"
     assert all(t == "tuple" for t in probe_cls.hand_types), (
@@ -1156,7 +1156,7 @@ def test_run_series_returns_series_result():
         def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
             return None
 
-    result = run_series([AlwaysBid(), AlwaysCall()], n_games=3)
+    result = run_series([AlwaysBid(), AlwaysCall()], n_games=3, isolated=False)
     assert isinstance(result, SeriesResult)
     assert isinstance(result.wins, dict)
     assert sum(result.wins.values()) == 3
@@ -1186,7 +1186,9 @@ def test_run_series_capture_outcomes():
         def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
             return None
 
-    result = run_series([AlwaysBid(), AlwaysCall()], n_games=2, capture_outcomes=True)
+    result = run_series(
+        [AlwaysBid(), AlwaysCall()], n_games=2, capture_outcomes=True, isolated=False
+    )
     assert result.outcomes is not None
     assert len(result.outcomes) > 0
 
@@ -1219,7 +1221,7 @@ def test_on_game_complete_fires_each_game():
         def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
             return None
 
-    run_series([AlwaysBid(), AlwaysCall()], n_games=5, on_game_complete=callback)
+    run_series([AlwaysBid(), AlwaysCall()], n_games=5, on_game_complete=callback, isolated=False)
     assert len(calls) == 5
     assert calls[0][0] == 1
     assert calls[4][0] == 5
@@ -1259,7 +1261,7 @@ def test_penalty_count_on_exception(tmp_path):
             )
 
     players = import_player_classes_from_dir(str(player_dir))
-    result = run_series(players + [AlwaysBid()], n_games=3)
+    result = run_series(players + [AlwaysBid()], n_games=3, isolated=False)
     # Crasher crashes every round it plays (not just once per game), so count >= 3*1
     assert result.stats.penalty_count.get("Crasher", 0) >= 3
 
@@ -1460,7 +1462,7 @@ def test_run_series_perf_tracker_accumulates_across_games():
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
 
     tracker = PerfTracker()
-    result = run_series([Bidder(), Caller()], n_games=3, perf=tracker)
+    result = run_series([Bidder(), Caller()], n_games=3, perf=tracker, isolated=False)
 
     assert result.perf is tracker
     assert tracker.call_count("Bidder") >= 3
@@ -1484,5 +1486,5 @@ def test_run_series_perf_defaults_to_none():
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
 
-    result = run_series([Bidder(), Caller()], n_games=1)
+    result = run_series([Bidder(), Caller()], n_games=1, isolated=False)
     assert result.perf is None
