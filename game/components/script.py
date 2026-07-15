@@ -247,15 +247,18 @@ def game_orchestrator(
                             )
                 # Security heartbeat: only *this* player's code has run since the
                 # last check, so any snapshot mismatch — theirs or anyone else's
-                # — is unambiguously their doing. A harmless no-op on the
+                # — is unambiguously their doing. Skipped entirely on the
                 # isolated path (pool is not None): no untrusted code has run
-                # in-process during pool.call, so no snapshot can have changed.
-                for p in players:
-                    if p.algo != algo_snapshots[p]:
-                        raise SecurityViolation(
-                            f"{type(player).__name__} tampered with {type(p).__name__}'s algo",
-                            offender=type(player).__name__,
-                        )
+                # in-process during pool.call, so no snapshot could ever change
+                # there — checking would just be O(n_players) of wasted work
+                # every turn.
+                if pool is None:
+                    for p in players:
+                        if p.algo != algo_snapshots[p]:
+                            raise SecurityViolation(
+                                f"{type(player).__name__} tampered with {type(p).__name__}'s algo",
+                                offender=type(player).__name__,
+                            )
 
             except SecurityViolation as e:
                 if e.offender is None:
