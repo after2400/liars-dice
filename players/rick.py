@@ -2,6 +2,7 @@ import random
 from math import comb
 
 from game.components.bets import Bet
+from game.components.context import GameContext
 
 
 class Rick:
@@ -70,15 +71,12 @@ class Rick:
             comb(unseen, k) * (p**k) * ((1 - p) ** (unseen - k)) for k in range(need, unseen + 1)
         )
 
-    def algo(
-        self,
-        hand: list[int],
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-        tier: str | None = None,
-    ) -> Bet | None:
+    def algo(self, ctx: GameContext) -> Bet | None:
+        hand = ctx.hand
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
+        outcomes = ctx.outcomes
+
         self._ingest(outcomes)
 
         if prior_bet is None:
