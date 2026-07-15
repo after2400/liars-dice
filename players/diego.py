@@ -1,6 +1,7 @@
 from math import comb
 
 from game.components.bets import Bet
+from game.components.context import GameContext
 
 
 class Diego:
@@ -36,14 +37,10 @@ class Diego:
             comb(unseen, k) * (p**k) * ((1 - p) ** (unseen - k)) for k in range(need, unseen + 1)
         )
 
-    def algo(
-        self,
-        hand: list,
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-    ) -> Bet | None:
+    def algo(self, ctx: GameContext) -> Bet | None:
+        hand = ctx.hand
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
 
         if prior_bet is None:
             # Open on the face with the highest expected total count
