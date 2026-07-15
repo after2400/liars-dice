@@ -1,4 +1,5 @@
 from game.components.bets import Bet
+from game.components.context import GameContext
 
 
 class Bruno:
@@ -9,14 +10,10 @@ class Bruno:
 
     name = "Bruno"
 
-    def algo(
-        self,
-        hand: list,
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-    ) -> Bet | None:
+    def algo(self, ctx: GameContext) -> Bet | None:
+        hand = ctx.hand
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
         expected = total_dice / 3
 
         if prior_bet is None:
