@@ -356,7 +356,14 @@ class _BetHistoryView:
             }
         )
 
-    def __getitem__(self, idx: int) -> MappingProxyType:
+    def __getitem__(self, idx: int | slice) -> MappingProxyType | list[MappingProxyType]:
+        if isinstance(idx, slice):
+            # Note: unlike `_ReadOnlySequence` (game/components/context.py), whose
+            # slice path returns whatever plain list/dict `self._data[idx]` gives
+            # back (mutable, unwrapped), each entry here already comes out of
+            # `_entry_at` as an immutable MappingProxyType — stricter than the
+            # in-process quirk, not a parity regression, so no unwrapping needed.
+            return [self._entry_at(i) for i in range(*idx.indices(self._n))]
         if idx < 0:
             idx += self._n
         if not (0 <= idx < self._n):
@@ -396,7 +403,12 @@ class _OutcomesView:
             data["hands"] = MappingProxyType(data["hands"])
         return MappingProxyType(data)
 
-    def __getitem__(self, idx: int) -> MappingProxyType:
+    def __getitem__(self, idx: int | slice) -> MappingProxyType | list[MappingProxyType]:
+        if isinstance(idx, slice):
+            # See _BetHistoryView.__getitem__ for the in-process parity note:
+            # each entry returned here is already an immutable MappingProxyType,
+            # stricter than (not a regression from) `_ReadOnlySequence`'s slice path.
+            return [self._entry_at(i) for i in range(*idx.indices(self._n))]
         if idx < 0:
             idx += self._n
         if not (0 <= idx < self._n):
