@@ -1,6 +1,7 @@
 import random
 
 from game.components.bets import Bet
+from game.components.context import GameContext
 
 
 class Cleo:
@@ -22,14 +23,10 @@ class Cleo:
         expected_others = unseen * (2 / 6 if face != 1 else 1 / 6)
         return own + expected_others
 
-    def algo(
-        self,
-        hand: list,
-        prior_bet: Bet | None,
-        total_dice: int,
-        bet_history: list[dict],
-        outcomes: list[dict],
-    ) -> Bet | None:
+    def algo(self, ctx: GameContext) -> Bet | None:
+        hand = ctx.hand
+        prior_bet = ctx.prior_bet
+        total_dice = ctx.total_dice
         aggressive = random.random() < 0.5
 
         if prior_bet is None:
