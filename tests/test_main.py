@@ -30,6 +30,41 @@ def _isolated_players_dir(tmp_path: Path) -> Path:
     return d
 
 
+def _load_players_directly(directory) -> list:
+    """Construct real player instances directly via plain importlib, bypassing
+    the security loader (game.components.utils.import_player_classes_from_dir).
+
+    Task 15 (security/player-isolation) changed that loader to never
+    construct a real player class in the parent process: it returns a
+    synthetic "shell" object whose .algo() is a stub only usable for
+    inspect.signature() introspection, so a real bot's algo() only ever runs
+    inside an isolated worker. The tests below use tiny, trusted,
+    test-authored bot fixtures (not real bot code) to exercise
+    game_orchestrator's in-process (isolated=False) argument-passing logic
+    directly, asserting against class-level spy state a shell object can't
+    provide -- so bypassing the security loader here is intentional and
+    safe (there is no untrusted code or real secret at risk in this path).
+    """
+    import importlib.util
+
+    players = []
+    for filename in sorted(os.listdir(directory)):
+        if not filename.endswith(".py") or filename == "__init__.py":
+            continue
+        stem = filename[:-3]
+        path = os.path.join(directory, filename)
+        spec = importlib.util.spec_from_file_location(stem, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls = next(
+            getattr(module, name)
+            for name in dir(module)
+            if name.lower() == stem.lower() and isinstance(getattr(module, name), type)
+        )
+        players.append(cls())
+    return players
+
+
 def run_game(args: list[str], leaderboard: dict, tmp_path: Path) -> dict:
     """Run `python -m game` with a temp leaderboard, return parsed results JSON."""
     lb_path = tmp_path / "leaderboard.yaml"
@@ -376,7 +411,6 @@ def test_tier_passed_to_tier_arg_player(tmp_path):
     import textwrap
 
     from game.components.series import run_series
-    from game.components.utils import import_player_classes_from_dir
 
     player_src = textwrap.dedent("""
         from game.components.bets import Bet
@@ -396,7 +430,7 @@ def test_tier_passed_to_tier_arg_player(tmp_path):
     (player_dir / "tierspy.py").write_text(player_src)
     (player_dir / "__init__.py").write_text("")
 
-    players = import_player_classes_from_dir(str(player_dir))
+    players = _load_players_directly(player_dir)
 
     class AlwaysBid:
         name = "AlwaysBid"
@@ -422,7 +456,6 @@ def test_tier_none_when_not_specified(tmp_path):
     import textwrap
 
     from game.components.series import run_series
-    from game.components.utils import import_player_classes_from_dir
 
     player_src = textwrap.dedent("""
         from game.components.bets import Bet
@@ -442,7 +475,7 @@ def test_tier_none_when_not_specified(tmp_path):
     (player_dir / "tierspy2.py").write_text(player_src)
     (player_dir / "__init__.py").write_text("")
 
-    players = import_player_classes_from_dir(str(player_dir))
+    players = _load_players_directly(player_dir)
 
     class AlwaysBid:
         name = "AlwaysBid"
@@ -468,7 +501,6 @@ def test_stats_and_tier_independent(tmp_path):
 
     from game.components.series import run_series
     from game.components.stats import GameStats
-    from game.components.utils import import_player_classes_from_dir
 
     tier_only_src = textwrap.dedent("""
         from game.components.bets import Bet
@@ -502,7 +534,7 @@ def test_stats_and_tier_independent(tmp_path):
     (player_dir / "statsonly.py").write_text(stats_only_src)
     (player_dir / "__init__.py").write_text("")
 
-    players = import_player_classes_from_dir(str(player_dir))
+    players = _load_players_directly(player_dir)
     run_series(players, n_games=1, tier="PRM", isolated=False)
 
     tier_cls = next(p.__class__ for p in players if type(p).__name__ == "Tieronly")
@@ -520,7 +552,6 @@ def test_stats_passed_to_six_arg_player(tmp_path):
 
     from game.components.series import run_series
     from game.components.stats import GameStats
-    from game.components.utils import import_player_classes_from_dir
 
     player_src = textwrap.dedent("""
         from game.components.bets import Bet
@@ -540,7 +571,7 @@ def test_stats_passed_to_six_arg_player(tmp_path):
     (player_dir / "spy.py").write_text(player_src)
     (player_dir / "__init__.py").write_text("")
 
-    players = import_player_classes_from_dir(str(player_dir))
+    players = _load_players_directly(player_dir)
     assert len(players) == 1
 
     class AlwaysBid:
@@ -567,7 +598,6 @@ def test_round_players_passed_when_declared(tmp_path):
     import textwrap
 
     from game.components.series import run_series
-    from game.components.utils import import_player_classes_from_dir
 
     player_src = textwrap.dedent("""
         from game.components.bets import Bet
@@ -587,7 +617,7 @@ def test_round_players_passed_when_declared(tmp_path):
     (player_dir / "rpspy.py").write_text(player_src)
     (player_dir / "__init__.py").write_text("")
 
-    players = import_player_classes_from_dir(str(player_dir))
+    players = _load_players_directly(player_dir)
 
     class AlwaysBid:
         name = "AlwaysBid"
@@ -614,7 +644,6 @@ def test_round_players_first_element_is_opener(tmp_path):
     import textwrap
 
     from game.components.series import run_series
-    from game.components.utils import import_player_classes_from_dir
 
     player_src = textwrap.dedent("""
         from game.components.bets import Bet
@@ -634,7 +663,7 @@ def test_round_players_first_element_is_opener(tmp_path):
     (player_dir / "openerspy.py").write_text(player_src)
     (player_dir / "__init__.py").write_text("")
 
-    players = import_player_classes_from_dir(str(player_dir))
+    players = _load_players_directly(player_dir)
 
     class AlwaysBid:
         name = "AlwaysBid"
@@ -663,7 +692,6 @@ def test_v2_player_receives_game_context(tmp_path):
     import textwrap
 
     from game.components.series import run_series
-    from game.components.utils import import_player_classes_from_dir
 
     player_src = textwrap.dedent("""
         from game.components.bets import Bet
@@ -682,7 +710,7 @@ def test_v2_player_receives_game_context(tmp_path):
     player_dir.mkdir()
     (player_dir / "v2player.py").write_text(player_src)
     (player_dir / "__init__.py").write_text("")
-    players = import_player_classes_from_dir(str(player_dir))
+    players = _load_players_directly(player_dir)
 
     class AlwaysBid:
         name = "AlwaysBid"
@@ -707,7 +735,6 @@ def test_v2_ctx_has_all_fields(tmp_path):
     import textwrap
 
     from game.components.series import run_series
-    from game.components.utils import import_player_classes_from_dir
 
     player_src = textwrap.dedent("""
         from game.components.bets import Bet
@@ -732,7 +759,7 @@ def test_v2_ctx_has_all_fields(tmp_path):
     player_dir.mkdir()
     (player_dir / "fieldprobe.py").write_text(player_src)
     (player_dir / "__init__.py").write_text("")
-    players = import_player_classes_from_dir(str(player_dir))
+    players = _load_players_directly(player_dir)
 
     class AlwaysBid:
         name = "AlwaysBid"
@@ -760,7 +787,6 @@ def test_v1_and_v2_players_coexist(tmp_path):
     import textwrap
 
     from game.components.series import run_series
-    from game.components.utils import import_player_classes_from_dir
 
     v1_src = textwrap.dedent("""
         from game.components.bets import Bet
@@ -793,7 +819,7 @@ def test_v1_and_v2_players_coexist(tmp_path):
     (player_dir / "v1player.py").write_text(v1_src)
     (player_dir / "v2player2.py").write_text(v2_src)
     (player_dir / "__init__.py").write_text("")
-    players = import_player_classes_from_dir(str(player_dir))
+    players = _load_players_directly(player_dir)
 
     run_series(players, n_games=3, isolated=False)
     v1_cls = next(p.__class__ for p in players if type(p).__name__ == "V1Player")
@@ -899,7 +925,6 @@ def test_bet_history_entries_are_read_only(tmp_path):
     import textwrap
 
     from game.components.series import run_series
-    from game.components.utils import import_player_classes_from_dir
 
     player_src = textwrap.dedent("""
         from game.components.bets import Bet
@@ -924,7 +949,7 @@ def test_bet_history_entries_are_read_only(tmp_path):
     player_dir.mkdir()
     (player_dir / "mutationprobe.py").write_text(player_src)
     (player_dir / "__init__.py").write_text("")
-    players = import_player_classes_from_dir(str(player_dir))
+    players = _load_players_directly(player_dir)
 
     class AlwaysBid:
         name = "AlwaysBid"
@@ -947,7 +972,6 @@ def test_outcomes_hands_values_are_tuples(tmp_path):
     import textwrap
 
     from game.components.series import run_series
-    from game.components.utils import import_player_classes_from_dir
 
     player_src = textwrap.dedent("""
         from game.components.bets import Bet
@@ -968,7 +992,7 @@ def test_outcomes_hands_values_are_tuples(tmp_path):
     player_dir.mkdir()
     (player_dir / "handsprobe.py").write_text(player_src)
     (player_dir / "__init__.py").write_text("")
-    players = import_player_classes_from_dir(str(player_dir))
+    players = _load_players_directly(player_dir)
 
     class AlwaysBid:
         name = "AlwaysBid"
@@ -1233,7 +1257,6 @@ def test_penalty_count_on_exception(tmp_path):
     import textwrap
 
     from game.components.series import run_series
-    from game.components.utils import import_player_classes_from_dir
 
     player_src = textwrap.dedent("""
         from game.components.bets import Bet
@@ -1260,7 +1283,7 @@ def test_penalty_count_on_exception(tmp_path):
                 else Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
             )
 
-    players = import_player_classes_from_dir(str(player_dir))
+    players = _load_players_directly(player_dir)
     result = run_series(players + [AlwaysBid()], n_games=3, isolated=False)
     # Crasher crashes every round it plays (not just once per game), so count >= 3*1
     assert result.stats.penalty_count.get("Crasher", 0) >= 3

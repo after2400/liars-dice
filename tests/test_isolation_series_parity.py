@@ -18,10 +18,41 @@ an always-empty `ctx.bet_history` and diverge from the in-process run.
 import_player_classes_from_dir requires each player's filename stem to match
 its class name (case-insensitively), hence two tiny temp files rather than
 inline classes.
+
+Security note (Task 15): import_player_classes_from_dir now returns
+lightweight "shell" objects whose .algo() is a stub that only exists to
+satisfy inspect.signature() — the real class is never imported or
+instantiated in the parent process, precisely so a real bot's untrusted
+__init__/algo() can never run unscrubbed here. That means the loader's
+return value can no longer be used to actually PLAY a game in-process
+(isolated=False) — only the isolated leg (which reloads the real class
+inside a scrubbed worker, keyed off `_isolation_spec`) can. The in-process
+leg below therefore loads the real classes directly via plain importlib,
+bypassing the security loader entirely — legitimate here because these are
+trusted, test-authored fixture files, not arbitrary bot code, and this is a
+test of engine parity, not a production roster load.
 """
+
+import importlib.util
 
 from game.components.series import run_series
 from game.components.utils import import_player_classes_from_dir
+
+_BOT_CLASS_NAMES = {"historybota": "HistoryBotA", "historybotb": "HistoryBotB"}
+
+
+def _load_real_players_directly(tmp_path):
+    """Bypass the security loader and construct real player instances
+    directly, for the in-process comparison leg only (see module docstring)."""
+    players = []
+    for stem, class_name in _BOT_CLASS_NAMES.items():
+        path = tmp_path / f"{stem}.py"
+        spec = importlib.util.spec_from_file_location(stem, str(path))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        players.append(getattr(module, class_name)())
+    return players
+
 
 REPLAY_SEEDS = [101, 202, 303]
 
@@ -56,7 +87,7 @@ def _write_bots(tmp_path):
 def test_isolated_and_in_process_series_produce_identical_results(tmp_path):
     _write_bots(tmp_path)
 
-    in_process_players = import_player_classes_from_dir(str(tmp_path))
+    in_process_players = _load_real_players_directly(tmp_path)
     for p in in_process_players:
         p.name = type(p).__name__
     in_process_result = run_series(

@@ -147,10 +147,21 @@ def test_heartbeat_loop_is_skipped_on_isolated_path():
     assert winner is not None
 
 
-def test_forbidden_syscall_in_init_blocked_at_load(tmp_path):
+def test_forbidden_syscall_in_init_blocked_at_load(tmp_path, capsys):
     """A bot whose __init__ shells out must be caught when players are loaded,
     not only while algo() runs. The guarded window must cover instantiation —
-    the once-per-week construction step where a hostile bot would place exfil."""
+    the once-per-week construction step where a hostile bot would place exfil.
+
+    Task 15 moved that guarded window out of the parent process entirely: the
+    real class is now only ever imported/instantiated inside an isolated
+    metadata-probe worker, never in the parent. enforce() still trips on the
+    forbidden os.system call, but now it does so INSIDE that worker, which
+    crashes before completing its bootstrap handshake — the loader observes
+    this the same way it observes any other bootstrap failure (crash, hang,
+    missing class): a loud warning and a silent skip of that one player, not
+    a SecurityViolation raised out of the loader itself. The syscall is still
+    blocked; only how the block is observed by the caller has changed.
+    """
     from game.components.utils import import_player_classes_from_dir
 
     (tmp_path / "shellinit.py").write_text(
@@ -161,5 +172,6 @@ def test_forbidden_syscall_in_init_blocked_at_load(tmp_path):
         "    def algo(self, ctx):\n"
         "        return None\n"
     )
-    with pytest.raises(SecurityViolation):
-        import_player_classes_from_dir(str(tmp_path))
+    players = import_player_classes_from_dir(str(tmp_path))
+    assert players == []
+    assert "WARNING" in capsys.readouterr().out
