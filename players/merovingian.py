@@ -19,6 +19,8 @@ class Merovingian:
         self._s5 = []
         self._s6 = set()
         self._s7 = set()
+        self._s8 = None
+        self._s9 = []
 
     def algo(self, ctx) -> Optional[Bet]:
         self._u1(ctx)
@@ -54,6 +56,10 @@ class Merovingian:
         h = ctx.bet_history
         for e in h[self._s4 :]:
             k = (e["game"], e["round"])
+            if k != self._s8:
+                self._s8 = k
+                self._s9 = []
+            self._s9.append(e)
             if k not in self._s6:
                 self._s5.append(k)
                 self._s6.add(k)
@@ -116,11 +122,9 @@ class Merovingian:
         return min(1.0, t)
 
     def _o1(self, ctx) -> dict:
-        h = ctx.bet_history
-        if not h or ctx.prior_bet is None:
+        if not ctx.bet_history or ctx.prior_bet is None:
             return {}
-        cur_r, cur_g = h[-1]["round"], h[-1]["game"]
-        re = [e for e in h if e["game"] == cur_g and e["round"] == cur_r]
+        re = self._s9
         res = {}
         for i, e in enumerate(re):
             p = e["player"]
@@ -187,8 +191,4 @@ class Merovingian:
     def _w1(self, ctx) -> bool:
         if not ctx.bet_history:
             return True
-        cg, cr = ctx.bet_history[-1]["game"], ctx.bet_history[-1]["round"]
-        for e in ctx.bet_history:
-            if e["game"] == cg and e["round"] == cr:
-                return e["bet"].face != 1
-        return True
+        return self._s9[0]["bet"].face != 1
