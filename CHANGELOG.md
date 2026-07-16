@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v3.0.0 (2026-07-16)
+
+### ✨ Features
+
+- Remove v1 algo() interface (hard cutover to v2)
+  ([`635118f`](https://github.com/after2400/liars-dice/commit/635118fa8bf6ac162bb0cf480dd8dcca58798e00))
+
+game_orchestrator no longer inspects each player's algo() signature to decide how to call it — it always builds a GameContext and calls algo(ctx). game.validate now hard-rejects any non-(self, ctx) signature instead of warning and falling back to the v1 call path.
+
+Rebasing onto security/player-isolation (#201) surfaced a second, independent v1/v2 dispatch inside the isolated worker (game/components/isolation/worker.py's worker_main), plus a stub `.algo` in game/components/utils.py's roster loader whose signature was deliberately shaped to match whatever a real player declared. Without also simplifying those, a v1-signature bot registered locally without validation (game.validate is opt-in for local registration) would still run correctly through the isolated-worker path — the cutover wouldn't actually be hard everywhere. Both are now v2-only: worker.py always builds a GameContext, and the roster-loading stub is a fixed `algo(self, ctx)` shape.
+
+Updated CONTRIBUTING.md and the Player Guide to drop the v1 migration section, and removed/updated the tests and example fixtures that exercised the now-deleted v1 dispatch paths.
+
+Closes #106.
+
+### Breaking Changes
+
+- Player bots must define algo(self, ctx). The v1 positional-arg signature (hand, prior_bet,
+  total_dice, bet_history, outcomes, stats=None, tier=None, round_players=None) is no longer
+  accepted anywhere, on any execution path.
+
+
 ## v2.8.0 (2026-07-16)
 
 ### 🛡️ Security
