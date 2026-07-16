@@ -1,11 +1,36 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from math import comb, exp
 
 from game.components.bets import Bet
 from game.components.context import GameContext
 
 _DESPERATE = 2  # dice count at or below which a bid is "desperate"
+
+
+@lru_cache(maxsize=4096)
+def _sf_table(n: int, sixths: int) -> tuple[float, ...]:
+    """Suffix survival S[k] = P(X >= k) for X ~ Binomial(n, sixths/6).
+
+    Cached per (n, sixths) so every candidate bid in the EV scan costs O(1)
+    instead of an O(n) tail sum.
+    """
+    p = sixths / 6.0
+    pmf = [comb(n, k) * (p**k) * ((1 - p) ** (n - k)) for k in range(n + 1)]
+    sf = [0.0] * (n + 2)
+    for k in range(n, -1, -1):
+        sf[k] = sf[k + 1] + pmf[k]
+    return tuple(min(1.0, s) for s in sf)
+
+
+def _sf(n: int, sixths: int, k: int) -> float:
+    """P(X >= k) for X ~ Binomial(n, sixths/6)."""
+    if k <= 0:
+        return 1.0
+    if k > n or n <= 0:
+        return 0.0
+    return _sf_table(n, sixths)[k]
 
 
 class Oracle:
@@ -20,12 +45,23 @@ class Oracle:
 
     Key innovations over the field:
     - Full EV scan for opens including face=1 (wilds) — same range as Merovingian
-    - p_call is the MAX across ALL remaining players, not just the next seat
+    - p_call blends the immediate next seat (the only player who can actually
+      challenge this bid) with the MAX across all remaining players
     - Exponential p_call decay calibrated per player from observed challenge history
     - Desperation-conditioned bluff rates catch cornered players going all-in
     - Opening-bid inference partitions unseen dice before committing to a bet
     - Credibility ceiling discounts bids above each opponent's honest face range
     - Dynamic targeting: EV bonus when the table leader sits next in rotation
+    - Squeeze pricing split between opens (0.50) and raises (0.35) — bids that
+      leave the table no safe minimum raise corner opponents into bluffing or
+      bad calls, and the opening scan is where that pressure pays most
+    - Wild-state-correct challenge-threshold learning (no-wild rounds are scored
+      at 1/6, not 2/6)
+    - O(1) bid scoring via cached binomial survival tables
+
+    Stack-aware loss pricing, elimination pricing, next-seat p_call blending and
+    opening deception are implemented as knobs below but ship disabled — each
+    tested flat-to-negative against the live PRM field.
     """
 
     name = "The Oracle"
@@ -35,7 +71,11 @@ class Oracle:
     EV_WIN_CALL = 0.7
     EV_LOSE_CALL = -1.0
 
-    SIZING_WEIGHT = 0.15  # bonus for terminal bids hard to follow
+    # Squeeze pricing — the single biggest lever vs the current PRM field.
+    # Swept 0.15-0.80 in paired-seed trials: raises peak at 0.35 and opens at
+    # 0.50 (0.15 flat cost ~5pp overall win rate; higher than 0.50 declines).
+    SIZING_WEIGHT = 0.35  # bonus for terminal raises hard to follow
+    SIZING_WEIGHT_OPEN: float | None = 0.50  # opening-scan squeeze; None = SIZING_WEIGHT
     LATE_GAME_AVG_DICE = 3.0  # avg dice/player threshold for late-game bonus
     LATE_GAME_WEIGHT = 0.25  # late-game opening aggression multiplier
 
@@ -49,6 +89,25 @@ class Oracle:
 
     TARGET_EV_WIN_BONUS = 0.4  # extra EV when table leader sits next in rotation
     CRED_WEIGHT = 2.0  # penalty steepness for bids above opponent's honest ceiling
+
+    # --- Ultimate-mode knobs (0.0 disables each feature) ---
+
+    # Weight on the immediate next seat's calibrated challenge probability vs the
+    # max across all remaining players. Only the next seat can actually challenge
+    # this bid, but the max is a useful worst case for bids meant to stand.
+    P_CALL_NEXT_W = 0.0
+
+    # Scales EV_LOSE_CALL by how short-stacked we are: at 1 die a loss is
+    # elimination, at 5 dice it is a flesh wound.
+    STACK_LOSS_SCALE = 0.0
+
+    # Extra EV for winning a challenge against a one-die opponent — the win
+    # removes a whole player, not just a die.
+    ELIM_WIN_BONUS = 0.0
+
+    # Opening deception: EV bonus per die of support the rational-inverter
+    # opponents would NOT infer from this open (sandbagging their reads).
+    DECEPTION_WEIGHT = 0.0
 
     def __init__(self) -> None:
         self._bh_idx = 0
@@ -88,19 +147,24 @@ class Oracle:
             self._last_bid_dice[rk] = (e["player"], e["dice_count"])
         self._bh_idx = n
 
+        # Populate _no_wilds_rounds before scoring outcomes so historical
+        # challenge thresholds use the correct per-round wild state.
+        self._update_bluff_obs(ctx)
+
         m = len(oc)
         for j in range(self._oc_idx, m):
             o = oc[j]
+            rk = (o["game"], o["round"])
             fb = o.get("final_bet")
             challenger = o.get("challenger")
             hands = o.get("hands", {})
             if fb and challenger and hands:
                 total = sum(len(h) for h in hands.values())
-                pp = self._ph_pub(fb.face, fb.quantity, total, True)
+                wilds = rk not in self._no_wilds_rounds
+                pp = self._ph_pub(fb.face, fb.quantity, total, wilds)
                 self._ct_sum[challenger] = self._ct_sum.get(challenger, 0.0) + pp
                 self._ct_count[challenger] = self._ct_count.get(challenger, 0) + 1
 
-            rk = (o["game"], o["round"])
             last = self._last_bid_dice.get(rk)
             if last and last[0] == o.get("bidder"):
                 bidder, dice_count = last
@@ -111,8 +175,6 @@ class Oracle:
                 else:
                     counts[0] += 1
         self._oc_idx = m
-
-        self._update_bluff_obs(ctx)
 
     def _update_bluff_obs(self, ctx: GameContext) -> None:
         history = ctx.bet_history
@@ -207,12 +269,8 @@ class Oracle:
         return certain, d - certain
 
     def _ph_pub(self, f: int, q: int, total: int, wilds: bool) -> float:
-        p = 1 / 6 if (f == 1 or not wilds) else 2 / 6
-        if q <= 0:
-            return 1.0
-        if q > total:
-            return 0.0
-        return sum(comb(total, k) * (p**k) * ((1 - p) ** (total - k)) for k in range(q, total + 1))
+        sixths = 1 if (f == 1 or not wilds) else 2
+        return _sf(total, sixths, q)
 
     def _prob_holds(
         self,
@@ -238,17 +296,8 @@ class Oracle:
         else:
             certain, uncertain = own, total - len(hand)
 
-        p = 2 / 6 if (wilds and f != 1) else 1 / 6
-
-        need = q - certain
-        if need <= 0:
-            return 1.0
-        if need > uncertain:
-            return 0.0
-        return sum(
-            comb(uncertain, k) * (p**k) * ((1 - p) ** (uncertain - k))
-            for k in range(need, uncertain + 1)
-        )
+        sixths = 2 if (wilds and f != 1) else 1
+        return _sf(uncertain, sixths, q - certain)
 
     def _mrp(self, q: int, f: int, total: int, wilds: bool) -> float:
         """Probability that the next player can make a survivable minimum raise."""
@@ -258,32 +307,46 @@ class Oracle:
             opts.append(self._ph_pub(f + 1, q, total, wilds))
         return max(opts)
 
-    def _p_call_all(self, ctx: GameContext, ph_pub: float) -> float:
-        """Max p_call across all remaining players in rotation."""
+    def _pc_params(self, ctx: GameContext) -> list[tuple[float, float | None]]:
+        """Per-remaining-player (base_rate, learned_mean_threshold) in seat order.
+
+        Computed once per turn; _p_call re-evaluates only the cheap exponential
+        per candidate bid.
+        """
         players = ctx.round_players
         if not players or self.name not in players:
-            return 0.3
+            return []
         idx = players.index(self.name)
         remaining = [players[(idx + 1 + i) % len(players)] for i in range(len(players) - 1)]
-        if not remaining:
-            return 0.3
-
-        rates = []
+        params: list[tuple[float, float | None]] = []
+        cr = ctx.stats.challenge_rate if ctx.stats else {}
         for p in remaining:
-            base = max(0.1, ctx.stats.challenge_rate.get(p, 0.3) if ctx.stats else 0.3)
+            base = max(0.1, cr.get(p, 0.3))
             n = self._ct_count.get(p, 0)
-            if not n:
-                rates.append(
-                    max(self.MIN_P_CALL, min(1.0, min(base * 3, 1.0 - (1.0 - base) * ph_pub)))
-                )
-            else:
-                mt = self._ct_sum[p] / n
-                rates.append(
-                    max(
-                        self.MIN_P_CALL, min(1.0, base * exp(-self.CHALLENGE_SLOPE * (ph_pub - mt)))
-                    )
-                )
-        return max(rates)
+            mt = self._ct_sum[p] / n if n else None
+            params.append((base, mt))
+        return params
+
+    def _p_call_one(self, base: float, mt: float | None, ph_pub: float) -> float:
+        if mt is None:
+            return max(self.MIN_P_CALL, min(1.0, min(base * 3, 1.0 - (1.0 - base) * ph_pub)))
+        return max(self.MIN_P_CALL, min(1.0, base * exp(-self.CHALLENGE_SLOPE * (ph_pub - mt))))
+
+    def _p_call(self, pc_params: list[tuple[float, float | None]], ph_pub: float) -> float:
+        """Challenge probability for a bid with public hold-prob ph_pub.
+
+        Blends the immediate next seat (the only player who can actually challenge
+        this bid) with the max across all remaining players (worst case for bids
+        that must survive the whole rotation), weighted by P_CALL_NEXT_W.
+        """
+        if not pc_params:
+            return 0.3
+        rates = [self._p_call_one(base, mt, ph_pub) for base, mt in pc_params]
+        pc_max = max(rates)
+        w = self.P_CALL_NEXT_W
+        if w <= 0.0:
+            return pc_max
+        return w * rates[0] + (1.0 - w) * pc_max
 
     def _effective_threshold(self, prior_bet: Bet, stats, dice_count: int | None) -> float:
         """Call threshold blending desperation-conditioned + face-specific bluff rate + velocity."""
@@ -358,6 +421,7 @@ class Oracle:
 
         ob = self._round_opening_bids(ctx.bet_history)
         br = {p: self._opening_bluff_rate(p) for p in self._bluff_count}
+        pc_params = self._pc_params(ctx)
 
         n_players = len(ctx.round_players)
         avg_dice = total / n_players if n_players else total
@@ -365,25 +429,43 @@ class Oracle:
 
         next_p = self._next_player(ctx)
         target = self._identify_target(ctx)
+        dice_counts = stats.dice_counts if stats else {}
+
+        # Stack-aware loss: a die lost at 1 die is elimination, not a setback.
+        ev_lose = self.EV_LOSE_CALL * (1.0 + self.STACK_LOSS_SCALE * (1.0 - len(hand) / 5.0))
+        # Elimination pricing: a failed challenge from a one-die next seat removes them.
         ev_win = self.EV_WIN_CALL + (self.TARGET_EV_WIN_BONUS if next_p == target else 0.0)
+        if next_p is not None and dice_counts.get(next_p) == 1:
+            ev_win += self.ELIM_WIN_BONUS
 
         if prior_bet is None:
             # Full EV scan for opening including face=1
             best_ev, best_bet = float("-inf"), Bet(1, 2, self.name)
+            d_own = len(hand)
+            sizing_open = (
+                self.SIZING_WEIGHT if self.SIZING_WEIGHT_OPEN is None else self.SIZING_WEIGHT_OPEN
+            )
             for q in range(1, total + 1):
                 for f in range(1, 7):
                     w = wilds and f != 1
                     ph = self._prob_holds(f, q, hand, total, w, {}, br)
                     pp = self._ph_pub(f, q, total, w)
-                    pc = self._p_call_all(ctx, pp)
+                    pc = self._p_call(pc_params, pp)
                     sz = 1.0 - self._mrp(q, f, total, w)
                     ev = (
                         (1.0 - pc) * self.EV_SAFE
                         + pc * ph * ev_win
-                        + pc * (1.0 - ph) * self.EV_LOSE_CALL
+                        + pc * (1.0 - ph) * ev_lose
                         + late_factor * self.LATE_GAME_WEIGHT * q * ph
-                        + self.SIZING_WEIGHT * sz * ph
+                        + sizing_open * sz * ph
                     )
+                    if self.DECEPTION_WEIGHT > 0.0:
+                        # What a rational inverter reads from this open vs what we hold:
+                        # hidden support keeps opponents' inference engines underestimating us.
+                        p_inv = 1 / 6 if (f == 1 or not w) else 2 / 6
+                        own = hand.count(f) + (hand.count(1) if (w and f != 1) else 0)
+                        inferred = round(max(0.0, min(float(d_own), q - (total - d_own) * p_inv)))
+                        ev += self.DECEPTION_WEIGHT * max(0, own - inferred)
                     if ev > best_ev:
                         best_ev, best_bet = ev, Bet(q, f, self.name)
             return best_bet
@@ -394,7 +476,10 @@ class Oracle:
         ph_cred = ph_prior * self._credibility(
             prior_bet.player, prior_bet.face, prior_bet.quantity, total, stats
         )
-        ev_liar = ph_cred * self.EV_LOSE_CALL + (1.0 - ph_cred) * self.EV_WIN_CALL
+        ev_win_liar = self.EV_WIN_CALL
+        if dice_counts.get(prior_bet.player) == 1:
+            ev_win_liar += self.ELIM_WIN_BONUS
+        ev_liar = ph_cred * ev_lose + (1.0 - ph_cred) * ev_win_liar
 
         bidder_dice = self._last_dice_for(ctx, prior_bet.player)
         threshold = self._effective_threshold(prior_bet, stats, bidder_dice)
@@ -405,18 +490,18 @@ class Oracle:
         pq, pf = prior_bet.quantity, prior_bet.face
         best_ev, best_bet = float("-inf"), None
 
-        for q in range(1, total + 1):
+        for q in range(pq, total + 1):
             for f in allowed:
                 if not (q > pq or (q == pq and f > pf)):
                     continue
                 ph = self._prob_holds(f, q, hand, total, wilds, ob, br)
                 pp = self._ph_pub(f, q, total, wilds)
-                pc = self._p_call_all(ctx, pp)
+                pc = self._p_call(pc_params, pp)
                 sz = 1.0 - self._mrp(q, f, total, wilds)
                 ev = (
                     (1.0 - pc) * self.EV_SAFE
                     + pc * ph * ev_win
-                    + pc * (1.0 - ph) * self.EV_LOSE_CALL
+                    + pc * (1.0 - ph) * ev_lose
                     + self.SIZING_WEIGHT * sz * ph
                 )
                 if ev > best_ev:
