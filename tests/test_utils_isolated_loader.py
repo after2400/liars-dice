@@ -94,12 +94,21 @@ def test_shell_name_defaults_to_class_name_and_apply_display_names_works(tmp_pat
     assert player_obj.name == "Leaky"
 
 
-def test_shell_algo_signature_matches_real_v1_bot():
-    # players/rick.py: def algo(self, hand, prior_bet, total_dice,
-    # bet_history, outcomes, tier=None) -- 6 positional args including tier.
-    specs = import_player_specs_from_dir(str(REPO_ROOT / "players"))
-    rick_spec = next(s for s in specs if s.class_name == "Rick")
-    params = inspect.signature(rick_spec.player_obj.algo).parameters
+_V1_BOT_SRC = """
+class LegacyBot:
+    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, tier=None):
+        return None
+"""
+
+
+def test_shell_algo_signature_matches_v1_style_bot(tmp_path):
+    # No currently-registered player uses the v1 interface anymore (all migrated to v2 --
+    # see players/rick.py etc.), so this uses a throwaway fixture bot instead of a real
+    # player file to keep exercising the legacy-signature shell-building path.
+    (tmp_path / "legacybot.py").write_text(_V1_BOT_SRC)
+    specs = import_player_specs_from_dir(str(tmp_path))
+    spec = next(s for s in specs if s.class_name == "LegacyBot")
+    params = inspect.signature(spec.player_obj.algo).parameters
     assert list(params) == [
         "hand",
         "prior_bet",
