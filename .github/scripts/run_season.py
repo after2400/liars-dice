@@ -13,7 +13,6 @@ After each tier runs, apply_season_results() is called immediately so
 promotions/relegations are in effect before the next tier above starts.
 """
 
-import inspect
 import math
 import os
 import subprocess
@@ -102,46 +101,6 @@ def _run_players(
     return run_game_with_retry(base_cmd, env, _REPO_ROOT)
 
 
-def _scan_v1_players(lb_path: str) -> list[str]:
-    """Return display names of registered players still on the v1 algo() interface."""
-    import importlib.util
-
-    from game.components.leaderboard import build_display_names
-
-    data = _load_lb(lb_path)
-    players_data = data.get("players", {})
-    display_names = build_display_names(players_data)
-
-    players_dir = _REPO_ROOT / "players"
-    v1: list[str] = []
-
-    for class_name in players_data:
-        player_file = players_dir / f"{class_name.lower()}.py"
-        if not player_file.exists():
-            continue
-        spec = importlib.util.spec_from_file_location(class_name.lower(), player_file)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        cls = getattr(module, class_name, None)
-        if cls is None:
-            continue
-        params = inspect.signature(cls().algo).parameters
-        positional = sum(
-            1
-            for name, param in params.items()
-            if name != "self"
-            and param.kind
-            in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            )
-        )
-        if positional != 1:
-            v1.append(display_names.get(class_name, class_name))
-
-    return sorted(v1)
-
-
 def run_season(
     n_games: int,
     top_n: int,
@@ -151,10 +110,6 @@ def run_season(
 ) -> None:
     """Orchestrate a full bottom-up season run and write a markdown summary."""
     from game.components.leaderboard import apply_season_results, settle_relegations
-
-    v1_players = _scan_v1_players(lb_path)
-    if v1_players:
-        print(f"[warn] v1 algo() players ({len(v1_players)}): {', '.join(v1_players)}")
 
     tier_order = ["inactive", "L1", "CH", "PRM"]
     skipped: list[str] = []
@@ -222,7 +177,7 @@ def run_season(
         for m in relegations:
             print(f"  {m}")
 
-    _write_summary(summary_file, tier_results, skipped, n_games, lb_path, v1_players)
+    _write_summary(summary_file, tier_results, skipped, n_games, lb_path)
     print(f"[done] Season summary written to {summary_file}")
     _update_readme(readme_path, lb_path, tier_results, n_games, dry_run=_DRY_RUN)
     print(
@@ -240,7 +195,6 @@ def _write_summary(
     skipped: list[str],
     n_games: int,
     lb_path: str,
-    v1_players: list[str] | None = None,
 ) -> None:
     """Write a markdown season summary: final standings + collapsed per-tier game results."""
     from game.components.leaderboard import build_display_names
@@ -327,25 +281,6 @@ def _write_summary(
     if skipped:
         skipped_str = ", ".join(f"{t} (< 2 players)" for t in skipped)
         lines.append(f"*Skipped: {skipped_str}*")
-        lines.append("")
-
-    if v1_players:
-        lines.append("---")
-        lines.append("")
-        lines.append("## Migrate to v2 before 2026-10-05")
-        lines.append("")
-        lines.append(
-            "The following players are still using the deprecated `algo(self, hand, prior_bet, ...)` "
-            "interface and will be dropped from the league on the cutover date:"
-        )
-        lines.append("")
-        for name in v1_players:
-            lines.append(f"- {name}")
-        lines.append("")
-        lines.append(
-            "See the [Player Guide](https://github.com/after2400/liars-dice/wiki/Player-Guide) "
-            "for migration instructions."
-        )
         lines.append("")
 
     with open(summary_file, "w") as f:

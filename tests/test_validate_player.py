@@ -244,7 +244,14 @@ def test_all_real_players():
 
 
 def test_tier_none_crash_fails_validation(tmp_path):
-    """A player declaring tier that crashes when tier=None fails validation."""
+    """A player declaring tier that crashes when probed fails validation.
+
+    Phase 2's probe now runs inside an isolated worker (Task 11), so a crash
+    is only observable as the opaque WORKER_ERROR outcome -- the old
+    exception-message text (which happened to contain "tier") is no longer
+    available; see game/validate.py's _runtime_errors docstring for why this
+    is a deliberate, accepted trade-off.
+    """
     f = tmp_path / "tierbug.py"
     f.write_text(
         "class Tierbug:\n"
@@ -254,7 +261,7 @@ def test_tier_none_crash_fails_validation(tmp_path):
     result = _run(f)
     assert result.returncode == 1
     assert "ERROR" in result.stdout
-    assert "tier" in result.stdout.lower()
+    assert "crashed or timed out" in result.stdout.lower()
 
 
 def test_valid_player_with_tier_param(tmp_path):

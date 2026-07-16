@@ -340,3 +340,43 @@ class GameStats:
     def record_penalty(self, player_name: str) -> None:
         """Call when a player incurs a penalty (exception, invalid bid, liar-with-no-bet)."""
         self._penalty_count[player_name] += 1
+
+    # ── Cross-process snapshot (isolation read-model) ─────────────────────────
+
+    def snapshot_state(self) -> dict:
+        """Deep-convert every `_*` backing store to a plain (possibly nested) dict.
+
+        Needed because several backing stores are `defaultdict(lambda: defaultdict(...))`
+        — the lambda factory is not picklable, so this must run before the state can
+        cross a `multiprocessing` process boundary. `restore_state` is the inverse.
+        """
+
+        def _to_plain(v):
+            if isinstance(v, dict):  # covers defaultdict too (dict subclass)
+                return {k: _to_plain(vv) for k, vv in v.items()}
+            if isinstance(v, list):
+                return list(v)
+            return v
+
+        return {k: _to_plain(v) for k, v in self.__dict__.items()}
+
+    @classmethod
+    def restore_state(cls, state: dict) -> "GameStats":
+        """Reconstruct a `GameStats` from a `snapshot_state()` dict.
+
+        Backing stores come back as plain dicts, NOT re-wrapped in their original
+        `defaultdict` factories. This is safe: every `@property` on this class reads
+        its backing store via `dict(self._x)` / `{k: dict(v) ...}` — plain copies,
+        never relying on defaultdict auto-vivification. The defaultdict factories
+        only matter to the mutation methods (`start_game`/`update_bet`/
+        `update_outcome`/`reset_round`/`record_penalty`), which are engine-internal:
+        no player-facing call path (`GameContext`, the isolated-worker turn loop)
+        invokes them on a restored instance. If untrusted player code held a
+        reference and called one anyway, it would at most raise inside that
+        player's own turn (caught by the worker's per-turn exception handler)
+        against this process-local copy — it can never reach the parent's real
+        stats object or any other player's turn.
+        """
+        obj = cls.__new__(cls)
+        obj.__dict__.update(state)
+        return obj

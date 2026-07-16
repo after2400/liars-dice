@@ -112,10 +112,56 @@ def test_global_random_state_does_not_reveal_dice_rng():
     assert clone.choices(range(1, 7), k=10) != dice_rng.choices(range(1, 7), k=10)
 
 
-def test_forbidden_syscall_in_init_blocked_at_load(tmp_path):
+class _FakeIsolatedPool:
+    """Duck-types just enough of WorkerPool (name_to_index + call) to drive
+    game_orchestrator's isolated branch (pool is not None) without spawning
+    real subprocess workers.
+
+    `call` also directly tampers with the *other* player's bound `.algo` --
+    standing in for whatever cross-process tampering would be impossible in
+    a real isolated worker. This only exists to prove the heartbeat loop is
+    *skipped*, not merely harmless, once a pool is supplied: if the loop
+    still ran here it would see the mismatch and raise SecurityViolation.
+    """
+
+    def __init__(self, players):
+        self.name_to_index = {p.name: i for i, p in enumerate(players)}
+        self._players = players
+
+    def call(self, index, turn):
+        prior_bet = turn[1]
+        for i, p in enumerate(self._players):
+            if i != index:
+                p.algo = lambda *a, **k: None
+        return Bet(1, 2, None) if prior_bet is None else None
+
+
+def test_heartbeat_loop_is_skipped_on_isolated_path():
+    """Regression for Task 12: with a pool supplied, algo-tampering that
+    would trip the in-process heartbeat must NOT raise, because the loop is
+    now skipped entirely (not just a no-op) whenever `pool is not None`."""
+    a, b = Honest(), Honest()
+    a.name, b.name = "A", "B"
+    pool = _FakeIsolatedPool([a, b])
+    winner = game_orchestrator([a, b], seed=42, pool=pool)
+    assert winner is not None
+
+
+def test_forbidden_syscall_in_init_blocked_at_load(tmp_path, capsys):
     """A bot whose __init__ shells out must be caught when players are loaded,
     not only while algo() runs. The guarded window must cover instantiation —
-    the once-per-week construction step where a hostile bot would place exfil."""
+    the once-per-week construction step where a hostile bot would place exfil.
+
+    Task 15 moved that guarded window out of the parent process entirely: the
+    real class is now only ever imported/instantiated inside an isolated
+    metadata-probe worker, never in the parent. enforce() still trips on the
+    forbidden os.system call, but now it does so INSIDE that worker, which
+    crashes before completing its bootstrap handshake — the loader observes
+    this the same way it observes any other bootstrap failure (crash, hang,
+    missing class): a loud warning and a silent skip of that one player, not
+    a SecurityViolation raised out of the loader itself. The syscall is still
+    blocked; only how the block is observed by the caller has changed.
+    """
     from game.components.utils import import_player_classes_from_dir
 
     (tmp_path / "shellinit.py").write_text(
@@ -126,5 +172,6 @@ def test_forbidden_syscall_in_init_blocked_at_load(tmp_path):
         "    def algo(self, ctx):\n"
         "        return None\n"
     )
-    with pytest.raises(SecurityViolation):
-        import_player_classes_from_dir(str(tmp_path))
+    players = import_player_classes_from_dir(str(tmp_path))
+    assert players == []
+    assert "WARNING" in capsys.readouterr().out

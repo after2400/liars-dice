@@ -13,19 +13,28 @@ Exits 0 on success, 1 on any failure.
 """
 
 import ast
-import importlib.util
-import inspect
 import re
-import signal
 import sys
 from pathlib import Path
 
-_INSTANTIATION_TIMEOUT = 10  # seconds
+from game.components.isolation import protocol
+from game.components.isolation.pool import WorkerPool
+from game.components.isolation.worker import WorkerConfig
 
+# Wall-clock budget for the isolated instantiate-and-probe worker. Replaces
+# the old in-process SIGALRM-based _INSTANTIATION_TIMEOUT (10s) -- same
+# magnitude, but enforced by WorkerPool's real process kill() rather than a
+# signal handler, which can't interrupt a blocking native/C-level call.
+_PROBE_TIMEOUT_S = 10.0
 
-def _handle_alarm(signum, frame):
-    raise TimeoutError("instantiation timed out")
+# Empty-history probe turn: (hand, prior_bet, total_dice, tier, round_players,
+# log_len). Matches worker.py's _build_args turn-tuple shape. No shared
+# read-model is wired up -- worker.py already falls back to empty
+# bet_history/outcomes when WorkerConfig.readmodel_name is None.
+_PROBE_TURN = ([], None, 10, None, [], 0)
 
+# Fixed seed for the one-shot probe worker -- determinism doesn't matter here.
+_PROBE_SEED = b"\x00" * 32
 
 MAX_NAME_LEN = 25
 
@@ -318,82 +327,100 @@ def _ast_errors(source: str, stem: str) -> list[str]:
 # --- runtime phase (only reached after AST phase passes) ---
 
 
-def _runtime_errors(player_file: str, stem: str) -> list[str]:
-    spec = importlib.util.spec_from_file_location(stem, player_file)
-    if spec is None or spec.loader is None:
-        return [f"Could not create module spec for {player_file}"]
+def _find_class_and_algo_args(source: str, stem: str) -> tuple[str, list[str]] | None:
+    """Re-parse (pure syntax, no execution) to recover the exact-case class name
+    and algo()'s positional arg names.
 
-    module = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(module)
-    except Exception as exc:
-        return [f"Player file crashed on import: {type(exc).__name__}: {exc}"]
-
-    player_class = next(
-        (
-            getattr(module, name)
-            for name in dir(module)
-            if name.lower() == stem.lower() and isinstance(getattr(module, name), type)
-        ),
+    Phase 1 (_ast_errors) already confirmed a matching class with an algo
+    method exists before Phase 2 ever runs; this is a second, independent,
+    cheap parse rather than threading extra return state through
+    _ast_errors -- simpler to keep the two phases decoupled.
+    """
+    tree = ast.parse(source)
+    class_node = next(
+        (n for n in tree.body if isinstance(n, ast.ClassDef) and n.name.lower() == stem.lower()),
         None,
     )
-    if player_class is None:
-        return [f"No class named '{stem}' (case-insensitive) found after import"]
+    if class_node is None:
+        return None
+    algo_node = next(
+        (n for n in class_node.body if isinstance(n, ast.FunctionDef) and n.name == "algo"),
+        None,
+    )
+    if algo_node is None:
+        return None
+    return class_node.name, [a.arg for a in algo_node.args.args]
 
-    old_handler = signal.signal(signal.SIGALRM, _handle_alarm)
-    signal.alarm(_INSTANTIATION_TIMEOUT)
-    try:
-        instance = player_class()
-    except TimeoutError:
+
+def _warn_if_v1(stem: str, algo_args: list[str]) -> None:
+    """Print a deprecation warning for a v1 (non-`algo(self, ctx)`) signature.
+
+    Derived from the AST arg list (computed by _find_class_and_algo_args)
+    rather than a live instance's inspect.signature -- Phase 2 no longer has
+    a live instance in this process to inspect.
+    """
+    if algo_args == list(_V2_ALGO_ARGS):
+        return
+    positional = [a for a in algo_args if a != "self"]
+    print(
+        f"[WARNING] {stem} uses the deprecated v1 algo() interface "
+        f"(positional args: {', '.join(positional)}). "
+        f"Migrate to def algo(self, ctx) before 2026-10-05 or this player "
+        f"will be dropped from the league. "
+        f"See: https://github.com/after2400/liars-dice/wiki/Player-Guide"
+    )
+
+
+def _runtime_errors(
+    player_file: str, class_name: str, timeout_s: float = _PROBE_TIMEOUT_S
+) -> list[str]:
+    """Instantiate the candidate and run one probe algo() turn inside an
+    isolated worker process (WorkerPool/worker_main -- already scrubs env,
+    chdirs to an ephemeral dir, and applies enforce() before import).
+
+    This replaces the old in-process importlib.exec_module + player_class()
+    + SIGALRM-guarded instantiation: that ran untrusted __init__ code (and,
+    for tier-declaring bots, algo()) directly in the validator's own process,
+    the exact "unguarded __init__ window" this branch closes everywhere else.
+
+    A worker that crashes or hangs during import/instantiation/the probe call
+    dies before it can report back a structured reason -- the parent only
+    observes WORKER_ERROR (never-ready bootstrap, or a per-turn crash/
+    timeout), so the rejection message here is deliberately less specific
+    than the old differentiated messages ("crashed on import" vs "crashed
+    during instantiation" vs "timed out"). The real traceback still reaches
+    the CI log via the worker process's own inherited stderr.
+    """
+    cfg = WorkerConfig(
+        player_file=str(Path(player_file).resolve()),
+        player_class=class_name,
+        name=class_name,
+        global_random_seed=_PROBE_SEED,
+    )
+    with WorkerPool([cfg], timeout_s=timeout_s) as pool:
+        result = pool.call(0, _PROBE_TURN)
+        ready_info = pool.workers[0].ready_info
+
+    if result is protocol.WORKER_ERROR:
         return [
-            f"Player class timed out during instantiation (>{_INSTANTIATION_TIMEOUT}s)"
-            " — check __init__ for infinite loops or blocking calls"
+            "Player crashed or timed out during isolated instantiation or probe call"
+            " — see traceback above"
         ]
-    except Exception as exc:
-        return [f"Player class crashed during instantiation: {type(exc).__name__}: {exc}"]
-    finally:
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old_handler)
 
-    if not callable(getattr(instance, "algo", None)):
-        return ["Player class does not define an 'algo' method"]
-
-    _algo_params = inspect.signature(instance.algo).parameters
-    _positional = [
-        name
-        for name, p in _algo_params.items()
-        if name != "self"
-        and p.kind
-        in (
-            inspect.Parameter.POSITIONAL_ONLY,
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-        )
-    ]
-    if len(_positional) != 1:
-        print(
-            f"[WARNING] {stem} uses the deprecated v1 algo() interface "
-            f"(positional args: {', '.join(_positional)}). "
-            f"Migrate to def algo(self, ctx) before 2026-10-05 or this player "
-            f"will be dropped from the league. "
-            f"See: https://github.com/after2400/liars-dice/wiki/Player-Guide"
-        )
-
-    if "tier" in _algo_params:
-        try:
-            instance.algo([], None, 10, [], [], tier=None)
-        except Exception as exc:
-            return [f"algo() raised {type(exc).__name__} when called with tier=None: {exc}"]
-
-    # Display name validated via AST; runtime check covers dynamic names set
-    # outside of a plain class-level assignment.
-    display_name = getattr(player_class, "name", player_class.__name__)
-    name_error = validate_display_name(display_name)
+    # Display name/avatar validated via AST for the common literal case;
+    # this runtime check is the fallback for dynamically-computed values
+    # (e.g. set inside __init__). ready_info is ("ready", name, avatar) as
+    # reported by the worker before its bootstrap overwrites .name with the
+    # placeholder passed in via WorkerConfig.name above.
+    _, live_name, live_avatar = ready_info
+    if live_name is None:
+        live_name = class_name  # mirrors the old getattr(..., player_class.__name__) fallback
+    name_error = validate_display_name(live_name)
     if name_error:
         return [name_error]
 
-    avatar = getattr(player_class, "avatar", None)
-    if avatar is not None:
-        avatar_error = validate_avatar(avatar)
+    if live_avatar is not None:
+        avatar_error = validate_avatar(live_avatar)
         if avatar_error:
             return [avatar_error]
 
@@ -418,7 +445,16 @@ def validate(player_file: str) -> None:
             print(f"ERROR: {err}")
         sys.exit(1)
 
-    runtime_errs = _runtime_errors(str(path), stem)
+    class_and_args = _find_class_and_algo_args(source, stem)
+    if class_and_args is None:
+        # Unreachable in practice: Phase 1 already required a matching class
+        # with an algo method. Defensive only.
+        print(f"ERROR: No class named '{stem}' (case-insensitive) with an 'algo' method found")
+        sys.exit(1)
+    class_name, algo_args = class_and_args
+    _warn_if_v1(stem, algo_args)
+
+    runtime_errs = _runtime_errors(str(path), class_name)
     if runtime_errs:
         for err in runtime_errs:
             print(f"ERROR: {err}")

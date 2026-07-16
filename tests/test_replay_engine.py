@@ -53,7 +53,7 @@ def test_run_series_record_seeds_captures_one_per_game():
     from game.components.series import run_series
 
     seeds: list[int] = []
-    run_series(_two_players(), n_games=5, record_seeds=seeds)
+    run_series(_two_players(), n_games=5, record_seeds=seeds, isolated=False)
     assert len(seeds) == 5
     assert all(isinstance(s, int) for s in seeds)
 
@@ -64,10 +64,10 @@ def test_run_series_replay_seeds_deterministic():
     seeds: list[int] = []
 
     # Record seeds and wins from first run
-    result_a = run_series(_two_players(), n_games=10, record_seeds=seeds)
+    result_a = run_series(_two_players(), n_games=10, record_seeds=seeds, isolated=False)
 
     # Replay seeds with fresh player instances
-    result_b = run_series(_two_players(), n_games=10, replay_seeds=seeds)
+    result_b = run_series(_two_players(), n_games=10, replay_seeds=seeds, isolated=False)
 
     # Same seeds with identical player classes should produce identical wins
     assert result_a.wins == result_b.wins
@@ -96,7 +96,7 @@ def test_run_series_no_seed_args_unchanged():
     """Baseline: no seed args still runs without error."""
     from game.components.series import run_series
 
-    result = run_series(_two_players(), n_games=3)
+    result = run_series(_two_players(), n_games=3, isolated=False)
     assert sum(result.wins.values()) == 3
 
 
@@ -131,7 +131,7 @@ def test_run_series_replay_deterministic_with_global_random_player():
         return [_GRA("A"), _GRB("B")]
 
     seeds: list[int] = []
-    result_a = run_series(_players(), n_games=30, record_seeds=seeds)
-    result_b = run_series(_players(), n_games=30, replay_seeds=seeds)
+    result_a = run_series(_players(), n_games=30, record_seeds=seeds, isolated=False)
+    result_b = run_series(_players(), n_games=30, replay_seeds=seeds, isolated=False)
 
     assert result_a.wins == result_b.wins
