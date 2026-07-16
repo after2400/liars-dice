@@ -61,6 +61,13 @@ just register-player players/foo.py your-github-username
 
 This runs with `DRY_RUN=1`: it writes to `leaderboard.yaml` locally but makes no GitHub API calls. Use `just clean` afterward to restore it.
 
+**Note:** `register-player` skips the registration CI check (`game.validate`) entirely — useful for seeing how the engine handles a bot that wouldn't pass CI, but it means the bot runs for real with no gate in place. To check first:
+
+```bash
+just validate-player players/foo.py                   # read-only — would this pass CI?
+just add-player players/foo.py your-github-username    # validate, then register only if it passes
+```
+
 ### Simulating runs
 
 ```bash
