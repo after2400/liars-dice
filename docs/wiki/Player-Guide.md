@@ -177,6 +177,13 @@ just register-player players/fred.py your-github-username
 
 > **Naming rule:** the class inside the file must match the filename exactly — `fred.py` must define `class Fred`.
 
+`register-player` skips the CI validation check above — it registers unconditionally so you can test how the engine handles your bot even if it wouldn't pass CI. To validate and register in one step instead:
+
+```bash
+just validate-player players/fred.py                   # read-only — would this pass CI?
+just add-player players/fred.py your-github-username    # validate, then register only if it passes
+```
+
 **2. Simulate** — pick a scope:
 
 ```bash
