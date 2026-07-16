@@ -29,40 +29,32 @@ class WorkerConfig:
     readmodel_name: str | None = None
 
 
-def _build_args(player, turn, is_v2, reader=None, wants_stats=False):
+def _build_context(turn, reader=None):
     from game.components.bets import Bet
+    from game.components.context import GameContext, _ReadOnlySequence
 
     hand, prior_bet, total_dice, tier, round_players, log_len = turn
     pb = Bet(prior_bet[0], prior_bet[1], prior_bet[2]) if prior_bet is not None else None
-    if is_v2:
-        from game.components.context import GameContext, _ReadOnlySequence
 
-        if reader is not None:
-            bet_history = reader.bet_history_view(log_len)
-            outcomes = reader.outcomes_view()
-            stats = reader.stats_view()
-        else:
-            bet_history = _ReadOnlySequence([])
-            outcomes = _ReadOnlySequence([])
-            stats = None
+    if reader is not None:
+        bet_history = reader.bet_history_view(log_len)
+        outcomes = reader.outcomes_view()
+        stats = reader.stats_view()
+    else:
+        bet_history = _ReadOnlySequence([])
+        outcomes = _ReadOnlySequence([])
+        stats = None
 
-        return (
-            GameContext(
-                hand=list(hand),
-                prior_bet=pb,
-                total_dice=total_dice,
-                bet_history=bet_history,
-                outcomes=outcomes,
-                stats=stats,
-                tier=tier,
-                round_players=list(round_players),
-            ),
-        ), {}
-
-    kwargs: dict = {}
-    if wants_stats:
-        kwargs["stats"] = reader.stats_view() if reader is not None else None
-    return (list(hand), pb, total_dice, [], []), kwargs
+    return GameContext(
+        hand=list(hand),
+        prior_bet=pb,
+        total_dice=total_dice,
+        bet_history=bet_history,
+        outcomes=outcomes,
+        stats=stats,
+        tier=tier,
+        round_players=list(round_players),
+    )
 
 
 def worker_main(conn, cfg: WorkerConfig):
@@ -95,19 +87,6 @@ def worker_main(conn, cfg: WorkerConfig):
     instantiated_avatar = getattr(player, "avatar", None)
     player.name = cfg.name
 
-    import inspect
-
-    sig = inspect.signature(player.algo).parameters
-    positional = sum(
-        1
-        for nm, prm in sig.items()
-        if nm != "self" and prm.kind in (prm.POSITIONAL_ONLY, prm.POSITIONAL_OR_KEYWORD)
-    )
-    is_v2 = positional == 1
-    # v2 bots always receive stats via GameContext.stats; v1 bots only if they
-    # opted in by naming a `stats` parameter (mirrors script.py's _wants_stats).
-    wants_stats = is_v2 or "stats" in sig
-
     # Open the read-model once, before the turn loop (not per-turn): mapping is a
     # one-time O(1) setup cost; each turn thereafter only does direct offset reads.
     reader = None
@@ -126,8 +105,8 @@ def worker_main(conn, cfg: WorkerConfig):
             break
         try:
             with enforce():
-                args, kwargs = _build_args(player, turn, is_v2, reader, wants_stats)
-                action = player.algo(*args, **kwargs)
+                ctx = _build_context(turn, reader)
+                action = player.algo(ctx)
             conn.send_bytes(protocol.encode_result(action))
         except Exception:
             conn.send_bytes(protocol.encode_result(protocol.WORKER_ERROR))

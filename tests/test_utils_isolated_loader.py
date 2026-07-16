@@ -6,10 +6,10 @@ Before this task, the loader did `spec.loader.exec_module(module)` and
 audit hook -- never by env scrubbing. That meant a bot's untrusted __init__
 had a window, on every real season/tournament/quarter run, where the real
 GH_TOKEN/LEADERBOARD_PAT were still in os.environ. The fix: get the class
-name + algo() arg shape via pure AST parsing (no execution), get name/avatar
-via a one-shot isolated worker probe (the real class only ever runs inside a
-scrubbed subprocess), and return a lightweight synthetic "shell" instance to
-the parent -- the real class is never imported and never instantiated here.
+name via pure AST parsing (no execution), get name/avatar via a one-shot
+isolated worker probe (the real class only ever runs inside a scrubbed
+subprocess), and return a lightweight synthetic "shell" instance to the
+parent -- the real class is never imported and never instantiated here.
 """
 
 import inspect
@@ -92,31 +92,6 @@ def test_shell_name_defaults_to_class_name_and_apply_display_names_works(tmp_pat
     lb_players = {"LeakyBot": {"display_name": "Leaky", "github_username": "someone"}}
     apply_display_names([player_obj], lb_players)
     assert player_obj.name == "Leaky"
-
-
-_V1_BOT_SRC = """
-class LegacyBot:
-    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, tier=None):
-        return None
-"""
-
-
-def test_shell_algo_signature_matches_v1_style_bot(tmp_path):
-    # No currently-registered player uses the v1 interface anymore (all migrated to v2 --
-    # see players/rick.py etc.), so this uses a throwaway fixture bot instead of a real
-    # player file to keep exercising the legacy-signature shell-building path.
-    (tmp_path / "legacybot.py").write_text(_V1_BOT_SRC)
-    specs = import_player_specs_from_dir(str(tmp_path))
-    spec = next(s for s in specs if s.class_name == "LegacyBot")
-    params = inspect.signature(spec.player_obj.algo).parameters
-    assert list(params) == [
-        "hand",
-        "prior_bet",
-        "total_dice",
-        "bet_history",
-        "outcomes",
-        "tier",
-    ]
 
 
 def test_shell_algo_signature_matches_real_v2_bot():

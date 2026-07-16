@@ -2,8 +2,6 @@
 
 Everything you need to write a bot and compete in the league.
 
-> **Action required by 2026-10-05:** The v1 `algo()` interface (positional args) is deprecated. Migrate to the v2 `GameContext` interface before the Q4 2026 tournament Monday or your player will be dropped from the league. See [Migration Guide](#migrating-from-v1-to-v2) below.
-
 ---
 
 ## Submitting a Player
@@ -59,7 +57,7 @@ Your `avatar` attribute is everything after `.../image/upload/` — `cloud_name`
 
 ## Player API
 
-### `algo` inputs (v2)
+### `algo` inputs
 
 `algo(self, ctx)` receives a single `GameContext` object. All fields are always present — no opt-in needed.
 
@@ -107,7 +105,7 @@ bet.player    # str — name of the player who placed it
 {
     "game":        int,   # game number in the series
     "round":       int,   # round number
-    "hands":       dict,  # {player_name: [dice]} for all active players
+    "hands":       dict,  # {player_name: (dice,)} for all active players
     "final_bet":   Bet,   # the bid that was challenged
     "bidder":      str,   # who placed the final bet
     "challenger":  str,   # who called liar
@@ -116,34 +114,7 @@ bet.player    # str — name of the player who placed it
 }
 ```
 
----
-
-## Migrating from v1 to v2
-
-The v1 interface used positional arguments:
-
-```python
-# v1 — deprecated, removed 2026-10-05
-def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, stats=None, tier=None, round_players=None):
-    ...
-```
-
-The v2 interface uses a single `GameContext` object:
-
-```python
-# v2 — required after 2026-10-05
-def algo(self, ctx):
-    hand = ctx.hand
-    prior_bet = ctx.prior_bet
-    total_dice = ctx.total_dice
-    bet_history = ctx.bet_history
-    outcomes = ctx.outcomes
-    stats = ctx.stats          # always GameStats, never None
-    tier = ctx.tier
-    round_players = ctx.round_players
-```
-
-**One breaking change:** `outcome["hands"]["PlayerName"]` is now a `tuple` instead of a `list`. Indexing (`hands["Alice"][0]`) and iteration (`for d in hands["Alice"]`) work unchanged. `.sort()` and `.append()` will raise `AttributeError` — use `sorted(hands["Alice"])` instead.
+`outcome["hands"]["PlayerName"]` is a `tuple`, not a `list`. Indexing (`hands["Alice"][0]`) and iteration (`for d in hands["Alice"]`) work as expected. `.sort()` and `.append()` will raise `AttributeError` — use `sorted(hands["Alice"])` instead.
 
 ---
 

@@ -1,6 +1,131 @@
 # CHANGELOG
 
 
+## v2.8.0 (2026-07-16)
+
+### 🛡️ Security
+
+- **security** · feat: Add fixed-shape result wire protocol for isolated workers
+  ([`481b7f4`](https://github.com/after2400/liars-dice/commit/481b7f467eda0a376cb83b2bc96c81957af52f5a))
+
+Encodes per-turn results (Bet, liar call, or worker error) as struct-packed 5-byte messages over the control pipe. Decoding sets player field to None, allowing the parent process to fill in the known acting player identity.
+
+- **security** · feat: Add isolated player worker bootstrap and turn loop
+  ([`e18bec8`](https://github.com/after2400/liars-dice/commit/e18bec80a347db60c06425b75642687ebb10fae3))
+
+Adds worker.py, the multiprocessing child entry point that scrubs secrets, restricts cwd, seeds RNG, and loads/instantiates the player under enforce() before entering the recv/algo/send turn loop. Loads by absolute file path (not module name) since real players aren't importable by name in a fresh spawn interpreter. Read-model args (bet_history/outcomes/stats) are stubbed empty until the shared arena lands in a later task.
+
+- **security** · feat: Add read-only shared-memory read-model for isolated workers
+  ([`db88ea2`](https://github.com/after2400/liars-dice/commit/db88ea29ae929dfa9789890b235ddbc99f6f9936))
+
+Isolated player workers can now see the game's bet history and round outcomes without marshalling growing state across the process boundary each turn. A ReadModelWriter in the parent appends fixed-field bet records and length-prefixed pickled outcome blobs into a multiprocessing.shared_memory block; ReadModelReader in each worker maps that block through a re-opened read-only mmap (spike-confirmed: memoryview.toreadonly() alone doesn't stop writes through the underlying shm.buf handle, so it isn't a real boundary) and answers bet_history_view(log_len)/outcomes_view() with direct O(1) offset reads, no scan or copy of prior entries.
+
+WorkerConfig gains readmodel_name (default None) so existing positional construction call sites keep working untouched. worker.py opens the reader once at startup and wires it into GameContext per turn.
+
+- **security** · feat: Add worker environment scrubbing for player isolation
+  ([`088ae49`](https://github.com/after2400/liars-dice/commit/088ae49c77e04ef83f128c15c0c8add5b91ae1b2))
+
+- **security** · feat: Add WorkerPool with forced-kill timeout and respawn
+  ([`b772663`](https://github.com/after2400/liars-dice/commit/b772663dfd3e44b5bf8bf464ed1734cfcd5c507a))
+
+Spawns one worker process per player, calls with a wall-clock timeout, and kills+respawns on timeout or death so one bot can't wedge the pool.
+
+- **security** · feat: Deterministic per-worker RNG seed derivation
+  ([`0aba08e`](https://github.com/after2400/liars-dice/commit/0aba08ef53c047ef08f2b7b302472ac372def30a))
+
+- **security** · feat: Isolated executor path in game_orchestrator
+  ([`0d792b2`](https://github.com/after2400/liars-dice/commit/0d792b2f8f6a5dd2703bd18fd9f7ee468defa1b9))
+
+Wire WorkerPool + ReadModelWriter into game_orchestrator's turn loop: when pool is provided, each turn is dispatched to an isolated worker via pool.call() instead of calling player.algo() in-process, with bet_history/ outcomes/stats mirrored into shared memory beforehand. Worker index is looked up by player name via a stable pool.name_to_index mapping (added to WorkerPool), not by players-list position, since game_orchestrator shuffles that list in place and run_series reuses the same list object across every game in a series.
+
+- **security** · feat: Publish GameStats snapshot to isolated workers
+  ([`d564c89`](https://github.com/after2400/liars-dice/commit/d564c89b2b42717ce31a8c96b45d40f087cd511d))
+
+Extends the Task 6 shared-memory read-model with a double-buffered GameStats channel so isolated player workers get read-only per-turn stats without marshalling ~40 backing dicts on every turn.
+
+GameStats.snapshot_state()/restore_state() flatten the defaultdict backing stores to plain dicts (required for pickling across spawn, since the nested defaultdict lambda factories aren't picklable). ReadModelWriter.publish_stats() writes into the currently-inactive of two buffers and flips a single header field last, so a worker mid-read of the prior snapshot is never handed a torn write. worker.py wires stats_view() into v2 bots always and v1 bots when "stats" is in their algo() signature, mirroring script.py.
+
+- **security** · feat: Run_series drives players through isolated worker pool
+  ([`82560bb`](https://github.com/after2400/liars-dice/commit/82560bb98e14d8b64017df5e11de384145b57530))
+
+Task 10: run_series builds one WorkerPool + ReadModelWriter for the whole series (not per game), passes them to every game_orchestrator call, and tears them down in a finally block. Adds import_player_specs_from_dir (game/components/utils.py) which tags each loaded player instance with a PlayerSpec (abs file path + class name) so run_series can recover the info needed to build a WorkerConfig without changing any of the loader's existing 7 call sites; import_player_classes_from_dir is now a thin wrapper over it.
+
+Two owner-approved scope reductions from the task brief (2026-07-14):
+- isolated: bool = True kept as specified, but per-game worker reseeding is
+  NOT implemented — each worker's global random is seeded ONCE per series
+  instead of once per game, since re-seeding would require extending the
+  parent<->worker pipe protocol (worker.py/pool.py untouched). Only affects
+  bots reading the bare `random` module directly; dice/bet_history/outcomes/
+  stats keep Task 9's byte-for-byte in-process/isolated parity.
+
+ReadModelWriter sizing scales with both n_games and player count (fit from measured record counts/sizes against the real players/ directory at 4/12/27 players) after game/__main__.py's CLI tests (which pull in the whole unregistered roster, not just tier-capped pools) overflowed a games-only formula. Also fixes 23 pre-existing tests (test_main.py, test_replay_engine.py) that construct player stubs directly rather than through the loader — these now opt out via isolated=False, since two of them asserted on class-level counters mutated inside algo() that correctly no longer propagate once algo() runs in a subprocess.
+
+- **security** · feat: Validate.py gate runs candidate in an isolated probe worker
+  ([`9b533a4`](https://github.com/after2400/liars-dice/commit/9b533a4e272ef3e9a98feb5a9c75fd2b20119fd1))
+
+Phase 2 of the CI registration gate (game/validate.py, invoked from register_player.py) used to import the candidate module and instantiate its class in-process, in the validator's own Python process, guarded only by a 10s SIGALRM. That's the exact "unguarded __init__ window" the security/player-isolation branch closes everywhere else in the runtime path.
+
+_runtime_errors now spawns a single-worker WorkerPool and reuses worker_main (already scrubs env, chdirs to an ephemeral dir, applies enforce(), imports by file path, instantiates) to do instantiation, with WorkerPool's real process kill() replacing SIGALRM (which can't interrupt a blocking native/C-level call). It then runs one unconditional probe algo() call with an empty-history turn -- previously this only happened for bots that declared a `tier` parameter, so a bug in algo() for any other bot was never actually exercised during validation. This is a deliberate strengthening.
+
+class-name/v1-vs-v2 detection moves from live introspection to a second, independent AST parse (_find_class_and_algo_args) -- Phase 2 no longer has a module imported in this process to inspect.
+
+Deliberate, accepted UX regression: a worker that crashes/hangs during import, instantiation, or the probe call now surfaces only as an opaque "crashed or timed out" message, instead of the old differentiated import-vs-instantiation-vs-timeout text. The real traceback still reaches the CI log via the worker process's own inherited stderr. Updated test_tier_none_crash_fails_validation's assertion accordingly.
+
+Bootstrap-handshake extension (worker.py/pool.py): the "ready" message becomes ("ready", name, avatar) instead of a bare string, captured from the instance before its .name is overwritten by the caller-supplied placeholder. This lets validate.py's Phase 2 -- which no longer has a live instance to read .name/.avatar off of directly -- keep validating dynamically-computed values as a fallback for the non-literal case Phase 1's AST check can't cover, rather than silently dropping that check. Purely additive: the per-turn send/recv_bytes protocol is unchanged, and no existing test asserted on the literal "ready" string. tests/test_isolation_worker.py, tests/test_isolation_pool.py, and tests/test_isolation_confinement.py all still pass.
+
+- **security** · fix: Close child pipe end and bound worker ready handshake
+  ([`67703ab`](https://github.com/after2400/liars-dice/commit/67703ab35db2fb2cc66ae80c1c39e4d77b8fadc5))
+
+Prevents a pool hang when a bot crashes/hangs during bootstrap: closes the parent's child_conn copy for EOF detection, bounds the ready handshake with timeout_s, marks unready workers so call() degrades to WORKER_ERROR, and catches struct.error on malformed result frames.
+
+- **security** · fix: Remove unguarded parent-process exec of player classes in run_season.py
+  ([`0d6b8aa`](https://github.com/after2400/liars-dice/commit/0d6b8aafea1e6a71f0d3daedabc1022d0769987f))
+
+_scan_v1_players imported and instantiated every registered player's real class directly in this process to inspect its algo() signature, unguarded by enforce() or scrub_environment -- the same parent-process secret-exposure hole closed in game/components/utils.py, but in the actual daily production driver where GH_TOKEN is a real job-level env var. With the last v1-signature bots migrating to v2, this scan (and its "migrate to v2" summary banner) has no remaining purpose, so removing it closes the hole rather than patching it.
+
+- **security** · fix: Stop running untrusted __init__ unscrubbed in the parent loader
+  ([`e2eb020`](https://github.com/after2400/liars-dice/commit/e2eb0208b5973497098a1a2180685bd4419dc46b))
+
+import_player_specs_from_dir previously imported and instantiated every player's real class directly in the parent process, guarded only by enforce()'s syscall audit hook, never by env scrubbing. On every real season/tournament/quarter run this left the real GH_TOKEN/LEADERBOARD_PAT in os.environ, readable by a bot's untrusted module-level code and __init__, before any worker isolation ever kicked in.
+
+Mirrors validate.py's existing pattern (Task 11): get the class name and algo() arg shape via pure AST parsing (no execution), get name/avatar via a one-shot isolated worker bootstrap probe, and build a lightweight synthetic shell instance in the parent — the real class is never imported or instantiated outside the scrubbed worker.
+
+Same-process scrub-then-restore was considered and rejected: enforce() does not block thread creation, so a malicious __init__ could spawn a background thread that waits past the restore point and reads the secret later.
+
+Updates tests/test_main.py, tests/test_security.py, and tests/test_isolation_series_parity.py, whose in-process (isolated=False) legs relied on the loader returning real, executable player instances — now bypasses the loader via plain importlib for those trusted test fixtures, since that combination is no longer supported by design.
+
+- **security** · fix: Support slicing on isolated bet_history/outcomes views
+  ([`3cc662f`](https://github.com/after2400/liars-dice/commit/3cc662f4f09345cbb41e8092ecaa952dbf60448d))
+
+_BetHistoryView.__getitem__ and _OutcomesView.__getitem__ only handled int indices, raising TypeError on any slice. Four real PRM-tier bots (deepthought.py, ripley.py, evilstewie.py, merovingian.py) use the history[self._history_seen :] open-ended-slice idiom on ctx.bet_history, so under isolation they hit the engine's except-Exception penalty path on every turn -- confirmed as 0 wins across 1000 games in a real simulate-season run.
+
+Add an isinstance(idx, slice) branch to both methods, resolving via idx.indices(self._n) and returning a list of already-immutable _entry_at(i) entries -- stricter than, not a regression from, _ReadOnlySequence's unwrapped slice behavior in the in-process path.
+
+- **security** · testing: Confinement and forced-kill regression tests for isolation
+  ([`166bd25`](https://github.com/after2400/liars-dice/commit/166bd25fb261aff73d030d23d8601981b97f934f))
+
+- **security** · testing: Decouple v1-signature shell test from real player files
+  ([`e8595b7`](https://github.com/after2400/liars-dice/commit/e8595b744c2ad80e1c0f734b1fc1c321211f49da))
+
+rick.py (this test's real-bot example) migrated to the v2 interface, so the test now builds a throwaway v1-signature fixture bot instead of depending on which currently-registered player happens to still be v1 --
+none are, after the rick/alice/bruno/cleo/diego migrations.
+
+- **security** · refactoring: Skip algo-tampering heartbeat on the isolated execution path
+  ([`b6b94f7`](https://github.com/after2400/liars-dice/commit/b6b94f7ff24ebbdcffc2f072048c764d60faa95d))
+
+### 📖 Documentation
+
+- Document just validate-player/add-player recipes
+  ([`3f4440e`](https://github.com/after2400/liars-dice/commit/3f4440e14851d28e0b94497e0185abc4a2ead923))
+
+register-player skips the game.validate CI gate entirely; the validate-player and add-player recipes (added 2026-07-12) were never documented, so both CONTRIBUTING.md and the Player Guide only showed the ungated path.
+
+### 🏗 Chores
+
+- **config**: Gitignore docs/players/ for local-only player and security docs
+  ([`87237be`](https://github.com/after2400/liars-dice/commit/87237be0e1c3d346ac344c7739da098572b554db))
+
+
 ## v2.7.6 (2026-07-13)
 
 ### 🛡️ Security
