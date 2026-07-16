@@ -115,6 +115,11 @@ class EvilStewie:
         self._liar_call_estimates: dict[
             tuple[int, int], float
         ] = {}  # (game,round) -> p_holds when ES called liar
+        # Incremental per-game completed-round counts, for _log_context's debug label --
+        # watermark never resets (monotonic across the whole series); per-game counts
+        # are looked up in O(1) instead of rescanning all of ctx.outcomes every turn.
+        self._round_count_seen: int = 0
+        self._outcomes_per_game: dict[int, int] = defaultdict(int)
 
     def _wilds_active(self, ctx: GameContext) -> bool:
         """Wilds are off for the whole round once any bet on 1s has been placed.
@@ -507,7 +512,11 @@ class EvilStewie:
             game_id = ctx.bet_history[-1]["game"]
         else:
             game_id = 1
-        current_round = sum(1 for o in ctx.outcomes if o["game"] == game_id) + 1
+        outcomes = ctx.outcomes
+        for i in range(self._round_count_seen, len(outcomes)):
+            self._outcomes_per_game[outcomes[i]["game"]] += 1
+        self._round_count_seen = len(outcomes)
+        current_round = self._outcomes_per_game.get(game_id, 0) + 1
         return game_id, current_round
 
     def algo(self, ctx: GameContext) -> Bet | None:
