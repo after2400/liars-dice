@@ -202,8 +202,6 @@ _BLOCKED_ATTRS: frozenset[str] = frozenset(
     }
 )
 
-_REQUIRED_ALGO_ARGS = ("self", "hand", "prior_bet", "total_dice", "bet_history", "outcomes")
-_ALLOWED_OPT_ARGS: frozenset[str] = frozenset({"stats", "tier", "round_players"})
 _V2_ALGO_ARGS = ("self", "ctx")
 
 _CLASS_STR_ATTR_VALIDATORS = {
@@ -225,18 +223,10 @@ def _check_str_literal(attr_name: str, value_node: ast.expr, errors: list[str]) 
 
 def _check_algo_signature(node: ast.FunctionDef, errors: list[str]) -> None:
     args = [a.arg for a in node.args.args]
-    if args == list(_V2_ALGO_ARGS):
-        return
-    for i, expected in enumerate(_REQUIRED_ALGO_ARGS):
-        actual = args[i] if i < len(args) else "<missing>"
-        if actual != expected:
-            errors.append(f"algo() argument {i} must be '{expected}', got '{actual}'")
-    for name in args[len(_REQUIRED_ALGO_ARGS) :]:
-        if name not in _ALLOWED_OPT_ARGS:
-            errors.append(f"algo() has unexpected positional argument '{name}'")
-    for kw in node.args.kwonlyargs:
-        if kw.arg not in _ALLOWED_OPT_ARGS:
-            errors.append(f"algo() has unexpected keyword-only argument '{kw.arg}'")
+    if args != list(_V2_ALGO_ARGS):
+        errors.append(f"algo() must be defined as algo(self, ctx) — got algo({', '.join(args)})")
+    if node.args.kwonlyargs:
+        errors.append("algo() must not declare keyword-only arguments")
 
 
 def _ast_errors(source: str, stem: str) -> list[str]:
@@ -327,9 +317,8 @@ def _ast_errors(source: str, stem: str) -> list[str]:
 # --- runtime phase (only reached after AST phase passes) ---
 
 
-def _find_class_and_algo_args(source: str, stem: str) -> tuple[str, list[str]] | None:
-    """Re-parse (pure syntax, no execution) to recover the exact-case class name
-    and algo()'s positional arg names.
+def _find_class_name(source: str, stem: str) -> str | None:
+    """Re-parse (pure syntax, no execution) to recover the exact-case class name.
 
     Phase 1 (_ast_errors) already confirmed a matching class with an algo
     method exists before Phase 2 ever runs; this is a second, independent,
@@ -349,26 +338,7 @@ def _find_class_and_algo_args(source: str, stem: str) -> tuple[str, list[str]] |
     )
     if algo_node is None:
         return None
-    return class_node.name, [a.arg for a in algo_node.args.args]
-
-
-def _warn_if_v1(stem: str, algo_args: list[str]) -> None:
-    """Print a deprecation warning for a v1 (non-`algo(self, ctx)`) signature.
-
-    Derived from the AST arg list (computed by _find_class_and_algo_args)
-    rather than a live instance's inspect.signature -- Phase 2 no longer has
-    a live instance in this process to inspect.
-    """
-    if algo_args == list(_V2_ALGO_ARGS):
-        return
-    positional = [a for a in algo_args if a != "self"]
-    print(
-        f"[WARNING] {stem} uses the deprecated v1 algo() interface "
-        f"(positional args: {', '.join(positional)}). "
-        f"Migrate to def algo(self, ctx) before 2026-10-05 or this player "
-        f"will be dropped from the league. "
-        f"See: https://github.com/after2400/liars-dice/wiki/Player-Guide"
-    )
+    return class_node.name
 
 
 def _runtime_errors(
@@ -445,14 +415,12 @@ def validate(player_file: str) -> None:
             print(f"ERROR: {err}")
         sys.exit(1)
 
-    class_and_args = _find_class_and_algo_args(source, stem)
-    if class_and_args is None:
+    class_name = _find_class_name(source, stem)
+    if class_name is None:
         # Unreachable in practice: Phase 1 already required a matching class
         # with an algo method. Defensive only.
         print(f"ERROR: No class named '{stem}' (case-insensitive) with an 'algo' method found")
         sys.exit(1)
-    class_name, algo_args = class_and_args
-    _warn_if_v1(stem, algo_args)
 
     runtime_errs = _runtime_errors(str(path), class_name)
     if runtime_errs:

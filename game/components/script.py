@@ -1,5 +1,4 @@
 import hashlib
-import inspect
 import logging
 import random
 import secrets
@@ -57,7 +56,7 @@ def game_orchestrator(
 
     Args:
         players: List of player objects. Each must implement
-                 algo(hand, prior_bet, total_dice, bet_history, outcomes) -> Bet | None.
+                 algo(self, ctx: GameContext) -> Bet | None.
         game_id: Identifier for this game, stored on every bet_history and outcomes entry.
         bet_history: Shared list to append bids to. Created fresh if not provided.
         outcomes: Shared list to append round outcomes to. Created fresh if not provided.
@@ -93,24 +92,6 @@ def game_orchestrator(
     # Global module is seeded for reproducibility of bots that use bare
     # `random.*`, but from a one-way derivation so it can't leak the dice RNG.
     random.seed(_derive_player_seed(_game_seed))
-    _sigs = {p: inspect.signature(p.algo).parameters for p in players}
-    _wants_stats = {p: "stats" in _sigs[p] for p in players}
-    _wants_tier = {p: "tier" in _sigs[p] for p in players}
-    _wants_round_players = {p: "round_players" in _sigs[p] for p in players}
-
-    def _positional_count(params: dict) -> int:
-        return sum(
-            1
-            for name, p in params.items()
-            if name != "self"
-            and p.kind
-            in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            )
-        )
-
-    _is_v2 = {p: _positional_count(_sigs[p]) == 1 for p in players}
     logger.info("=== New Game ===")
     rng.shuffle(players)
     logger.info(f"Players: {', '.join(p.name for p in players)}")
@@ -202,7 +183,7 @@ def game_orchestrator(
                                 action = pool.call(worker_idx, turn)
                         else:
                             action = pool.call(worker_idx, turn)
-                    elif _is_v2[player]:
+                    else:
                         ctx = GameContext(
                             hand=list(hands[player_idx]),
                             prior_bet=safe_bet,
@@ -218,33 +199,6 @@ def game_orchestrator(
                                 action = player.algo(ctx)
                         else:
                             action = player.algo(ctx)
-                    else:
-                        kwargs: dict = {}
-                        if _wants_stats[player]:
-                            kwargs["stats"] = stats
-                        if _wants_tier[player]:
-                            kwargs["tier"] = tier
-                        if _wants_round_players[player]:
-                            kwargs["round_players"] = list(round_players_order)
-                        if perf is not None:
-                            with perf.time_call(player.name):
-                                action = player.algo(
-                                    list(hands[player_idx]),
-                                    safe_bet,
-                                    total_dice,
-                                    list(bet_history),
-                                    list(completed_outcomes),
-                                    **kwargs,
-                                )
-                        else:
-                            action = player.algo(
-                                list(hands[player_idx]),
-                                safe_bet,
-                                total_dice,
-                                list(bet_history),
-                                list(completed_outcomes),
-                                **kwargs,
-                            )
                 # Security heartbeat: only *this* player's code has run since the
                 # last check, so any snapshot mismatch — theirs or anyone else's
                 # — is unambiguously their doing. Skipped entirely on the

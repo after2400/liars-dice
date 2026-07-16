@@ -19,11 +19,7 @@ def _run(player_path: Path) -> subprocess.CompletedProcess:
 def test_valid_player(tmp_path):
     """A well-formed player file exits 0."""
     f = tmp_path / "fred.py"
-    f.write_text(
-        "class Fred:\n"
-        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
-        "        return None\n"
-    )
+    f.write_text("class Fred:\n    def algo(self, ctx):\n        return None\n")
     result = _run(f)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "OK" in result.stdout
@@ -147,7 +143,7 @@ def test_init_timeout(tmp_path):
         "    def __init__(self):\n"
         "        while True:\n"
         "            pass\n"
-        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "    def algo(self, ctx):\n"
         "        return None\n"
     )
     result = _run(f)
@@ -163,7 +159,7 @@ def test_init_crash(tmp_path):
         "class Badint:\n"
         "    def __init__(self):\n"
         "        raise ValueError('bad init')\n"
-        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "    def algo(self, ctx):\n"
         "        return None\n"
     )
     result = _run(f)
@@ -244,7 +240,7 @@ def test_all_real_players():
 
 
 def test_tier_none_crash_fails_validation(tmp_path):
-    """A player declaring tier that crashes when probed fails validation.
+    """A player reading ctx.tier that crashes when probed fails validation.
 
     Phase 2's probe now runs inside an isolated worker (Task 11), so a crash
     is only observable as the opaque WORKER_ERROR outcome -- the old
@@ -255,8 +251,8 @@ def test_tier_none_crash_fails_validation(tmp_path):
     f = tmp_path / "tierbug.py"
     f.write_text(
         "class Tierbug:\n"
-        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, tier=None):\n"
-        "        return tier.upper()  # AttributeError when tier is None\n"
+        "    def algo(self, ctx):\n"
+        "        return ctx.tier.upper()  # AttributeError when tier is None\n"
     )
     result = _run(f)
     assert result.returncode == 1
@@ -265,12 +261,12 @@ def test_tier_none_crash_fails_validation(tmp_path):
 
 
 def test_valid_player_with_tier_param(tmp_path):
-    """A player declaring tier=None that handles None correctly passes validation."""
+    """A v2 player that reads ctx.tier (possibly None) passes validation."""
     f = tmp_path / "tierok.py"
     f.write_text(
         "class Tierok:\n"
-        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, tier=None):\n"
-        "        multiplier = 0.85 if tier == 'CH' else 0.82\n"
+        "    def algo(self, ctx):\n"
+        "        multiplier = 0.85 if ctx.tier == 'CH' else 0.82\n"
         "        return None\n"
     )
     result = _run(f)
@@ -288,7 +284,7 @@ def test_valid_player_with_allowed_imports(tmp_path):
         "from game.components.bets import Bet\n"
         "\n"
         "class Legit:\n"
-        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "    def algo(self, ctx):\n"
         "        return None\n"
     )
     result = _run(f)
@@ -296,8 +292,8 @@ def test_valid_player_with_allowed_imports(tmp_path):
     assert "OK" in result.stdout
 
 
-def test_v1_player_emits_deprecation_warning(tmp_path):
-    """validate emits a deprecation warning for v1 algo() signatures."""
+def test_v1_player_is_rejected(tmp_path):
+    """The v1 positional-arg algo() interface is no longer accepted at all."""
     player_src = textwrap.dedent("""
         from game.components.bets import Bet
 
@@ -317,13 +313,8 @@ def test_v1_player_emits_deprecation_warning(tmp_path):
         text=True,
         cwd=REPO_ROOT,
     )
-    assert result.returncode == 0, f"validate failed: {result.stderr}"
-    assert "deprecated" in result.stdout.lower() or "deprecat" in result.stderr.lower(), (
-        f"Expected deprecation warning, got stdout={result.stdout!r} stderr={result.stderr!r}"
-    )
-    assert "2026-10-05" in result.stdout or "2026-10-05" in result.stderr, (
-        "Expected cutover date in deprecation warning"
-    )
+    assert result.returncode == 1
+    assert "algo(self, ctx)" in result.stdout
 
 
 def test_v2_player_no_deprecation_warning(tmp_path):
@@ -358,7 +349,7 @@ def test_avatar_valid_passes(tmp_path):
     f.write_text(
         "class Hasavatar:\n"
         "    avatar = 'hdyiihba/The_Merovingian_200x200_rqd12y.png'\n"
-        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "    def algo(self, ctx):\n"
         "        return None\n"
     )
     result = _run(f)
@@ -454,11 +445,7 @@ def test_avatar_missing_extension_fails(tmp_path):
 def test_avatar_absent_is_valid(tmp_path):
     """No avatar attribute at all is perfectly valid (optional)."""
     f = tmp_path / "noavatar.py"
-    f.write_text(
-        "class Noavatar:\n"
-        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
-        "        return None\n"
-    )
+    f.write_text("class Noavatar:\n    def algo(self, ctx):\n        return None\n")
     result = _run(f)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "OK" in result.stdout
@@ -484,7 +471,7 @@ def test_avatar_folder_nested_public_id_passes(tmp_path):
     f.write_text(
         "class Hasavatar:\n"
         "    avatar = 'hdyiihba/players/merovingian.png'\n"
-        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
+        "    def algo(self, ctx):\n"
         "        return None\n"
     )
     result = _run(f)

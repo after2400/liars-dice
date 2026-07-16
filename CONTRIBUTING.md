@@ -33,8 +33,6 @@ git push origin my-player-name
 
 Requires [`uv`](https://docs.astral.sh/uv/) and [`just`](https://just.systems/).
 
-> **Player API:** The v1 `algo()` positional-arg interface is deprecated. See the [Player Guide](https://github.com/after2400/liars-dice/wiki/Player-Guide#migrating-from-v1-to-v2) for migration instructions. Cutover: 2026-10-05.
-
 ```bash
 # one-time dev setup
 just develop

@@ -418,7 +418,13 @@ def test_tier_passed_to_tier_arg_player(tmp_path):
         class Tierspy:
             name = "Tierspy"
             received_tiers = []
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, tier=None):
+            def algo(self, ctx):
+                hand = ctx.hand
+                prior_bet = ctx.prior_bet
+                total_dice = ctx.total_dice
+                bet_history = ctx.bet_history
+                outcomes = ctx.outcomes
+                tier = ctx.tier
                 Tierspy.received_tiers.append(tier)
                 if prior_bet is None:
                     return Bet(1, 2, self.name)
@@ -435,7 +441,8 @@ def test_tier_passed_to_tier_arg_player(tmp_path):
     class AlwaysBid:
         name = "AlwaysBid"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             if prior_bet is None:
@@ -463,7 +470,13 @@ def test_tier_none_when_not_specified(tmp_path):
         class Tierspy2:
             name = "Tierspy2"
             received_tiers = []
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, tier=None):
+            def algo(self, ctx):
+                hand = ctx.hand
+                prior_bet = ctx.prior_bet
+                total_dice = ctx.total_dice
+                bet_history = ctx.bet_history
+                outcomes = ctx.outcomes
+                tier = ctx.tier
                 Tierspy2.received_tiers.append(tier)
                 if prior_bet is None:
                     return Bet(1, 2, self.name)
@@ -480,7 +493,8 @@ def test_tier_none_when_not_specified(tmp_path):
     class AlwaysBid:
         name = "AlwaysBid"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             if prior_bet is None:
@@ -490,6 +504,7 @@ def test_tier_none_when_not_specified(tmp_path):
     run_series(players + [AlwaysBid()], n_games=1, isolated=False)  # no tier kwarg
 
     spy_cls = players[0].__class__
+    assert len(spy_cls.received_tiers) > 0, "Tierspy2.algo was never called"
     assert all(t is None for t in spy_cls.received_tiers), (
         f"Expected None on every call, got: {spy_cls.received_tiers}"
     )
@@ -508,7 +523,13 @@ def test_stats_and_tier_independent(tmp_path):
         class Tieronly:
             name = "Tieronly"
             calls = []
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, tier=None):
+            def algo(self, ctx):
+                hand = ctx.hand
+                prior_bet = ctx.prior_bet
+                total_dice = ctx.total_dice
+                bet_history = ctx.bet_history
+                outcomes = ctx.outcomes
+                tier = ctx.tier
                 Tieronly.calls.append({"tier": tier})
                 if prior_bet is None:
                     return Bet(1, 2, self.name)
@@ -521,7 +542,13 @@ def test_stats_and_tier_independent(tmp_path):
         class Statsonly:
             name = "Statsonly"
             calls = []
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, stats=None):
+            def algo(self, ctx):
+                hand = ctx.hand
+                prior_bet = ctx.prior_bet
+                total_dice = ctx.total_dice
+                bet_history = ctx.bet_history
+                outcomes = ctx.outcomes
+                stats = ctx.stats
                 Statsonly.calls.append({"stats": stats})
                 if prior_bet is None:
                     return Bet(1, 2, self.name)
@@ -540,6 +567,8 @@ def test_stats_and_tier_independent(tmp_path):
     tier_cls = next(p.__class__ for p in players if type(p).__name__ == "Tieronly")
     stats_cls = next(p.__class__ for p in players if type(p).__name__ == "Statsonly")
 
+    assert len(tier_cls.calls) > 0, "Tieronly.algo was never called"
+    assert len(stats_cls.calls) > 0, "Statsonly.algo was never called"
     assert all(c["tier"] == "PRM" for c in tier_cls.calls), "Tieronly should receive tier='PRM'"
     assert all(isinstance(c["stats"], GameStats) for c in stats_cls.calls), (
         "Statsonly should receive a GameStats instance"
@@ -559,7 +588,13 @@ def test_stats_passed_to_six_arg_player(tmp_path):
         class Spy:
             name = "Spy"
             received_stats = []
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, stats=None):
+            def algo(self, ctx):
+                hand = ctx.hand
+                prior_bet = ctx.prior_bet
+                total_dice = ctx.total_dice
+                bet_history = ctx.bet_history
+                outcomes = ctx.outcomes
+                stats = ctx.stats
                 Spy.received_stats.append(stats)
                 if prior_bet is None:
                     return Bet(1, 2, self.name)
@@ -577,7 +612,8 @@ def test_stats_passed_to_six_arg_player(tmp_path):
     class AlwaysBid:
         name = "AlwaysBid"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             if prior_bet is None:
@@ -605,7 +641,13 @@ def test_round_players_passed_when_declared(tmp_path):
         class RpSpy:
             name = "RpSpy"
             received = []
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, round_players=None):
+            def algo(self, ctx):
+                hand = ctx.hand
+                prior_bet = ctx.prior_bet
+                total_dice = ctx.total_dice
+                bet_history = ctx.bet_history
+                outcomes = ctx.outcomes
+                round_players = ctx.round_players
                 RpSpy.received.append(round_players)
                 if prior_bet is None:
                     return Bet(1, 2, self.name)
@@ -622,7 +664,8 @@ def test_round_players_passed_when_declared(tmp_path):
     class AlwaysBid:
         name = "AlwaysBid"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             if prior_bet is None:
@@ -651,7 +694,13 @@ def test_round_players_first_element_is_opener(tmp_path):
         class OpenerSpy:
             name = "OpenerSpy"
             opener_calls = []  # (round_players[0], is_opener) pairs when I am called
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes, round_players=None):
+            def algo(self, ctx):
+                hand = ctx.hand
+                prior_bet = ctx.prior_bet
+                total_dice = ctx.total_dice
+                bet_history = ctx.bet_history
+                outcomes = ctx.outcomes
+                round_players = ctx.round_players
                 if prior_bet is None:
                     OpenerSpy.opener_calls.append(round_players)
                     return Bet(1, 2, self.name)
@@ -668,7 +717,8 @@ def test_round_players_first_element_is_opener(tmp_path):
     class AlwaysBid:
         name = "AlwaysBid"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             if prior_bet is None:
@@ -715,7 +765,8 @@ def test_v2_player_receives_game_context(tmp_path):
     class AlwaysBid:
         name = "AlwaysBid"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             if prior_bet is None:
@@ -764,7 +815,8 @@ def test_v2_ctx_has_all_fields(tmp_path):
     class AlwaysBid:
         name = "AlwaysBid"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             if prior_bet is None:
@@ -780,52 +832,6 @@ def test_v2_ctx_has_all_fields(tmp_path):
         assert snap["stats_type"] == "GameStats"
         assert snap["round_players_type"] == "list"
         assert snap["tier"] == "CH"
-
-
-def test_v1_and_v2_players_coexist(tmp_path):
-    """A v1 and v2 player in the same game both work correctly."""
-    import textwrap
-
-    from game.components.series import run_series
-
-    v1_src = textwrap.dedent("""
-        from game.components.bets import Bet
-
-        class V1Player:
-            name = "V1Player"
-            calls = 0
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
-                V1Player.calls += 1
-                if prior_bet is None:
-                    return Bet(1, 2, self.name)
-                return None
-    """)
-
-    v2_src = textwrap.dedent("""
-        from game.components.bets import Bet
-
-        class V2Player2:
-            name = "V2Player2"
-            calls = 0
-            def algo(self, ctx):
-                V2Player2.calls += 1
-                if ctx.prior_bet is None:
-                    return Bet(1, 2, self.name)
-                return None
-    """)
-
-    player_dir = tmp_path / "players"
-    player_dir.mkdir()
-    (player_dir / "v1player.py").write_text(v1_src)
-    (player_dir / "v2player2.py").write_text(v2_src)
-    (player_dir / "__init__.py").write_text("")
-    players = _load_players_directly(player_dir)
-
-    run_series(players, n_games=3, isolated=False)
-    v1_cls = next(p.__class__ for p in players if type(p).__name__ == "V1Player")
-    v2_cls = next(p.__class__ for p in players if type(p).__name__ == "V2Player2")
-    assert v1_cls.calls > 0, "V1Player was never called"
-    assert v2_cls.calls > 0, "V2Player2 was never called"
 
 
 _NOW = "2026-01-01T00:00:00Z"
@@ -895,7 +901,8 @@ class TestApplyDisplayNames:
         class Remy1:
             name = "Remy"
 
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            def algo(self, ctx):
+                prior_bet = ctx.prior_bet
                 if prior_bet is None:
                     return Bet(1, 2, self.name)
                 return None  # call liar
@@ -903,7 +910,8 @@ class TestApplyDisplayNames:
         class Remy2:
             name = "Remy"
 
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            def algo(self, ctx):
+                prior_bet = ctx.prior_bet
                 if prior_bet is None:
                     return Bet(1, 2, self.name)
                 return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
@@ -932,7 +940,12 @@ def test_bet_history_entries_are_read_only(tmp_path):
         class MutationProbe:
             name = "MutationProbe"
             saw_readonly = []
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            def algo(self, ctx):
+                hand = ctx.hand
+                prior_bet = ctx.prior_bet
+                total_dice = ctx.total_dice
+                bet_history = ctx.bet_history
+                outcomes = ctx.outcomes
                 if bet_history:
                     try:
                         bet_history[-1]["player"] = "hacked"
@@ -954,7 +967,8 @@ def test_bet_history_entries_are_read_only(tmp_path):
     class AlwaysBid:
         name = "AlwaysBid"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             if prior_bet is None:
@@ -979,7 +993,12 @@ def test_outcomes_hands_values_are_tuples(tmp_path):
         class HandsProbe:
             name = "HandsProbe"
             hand_types = []
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            def algo(self, ctx):
+                hand = ctx.hand
+                prior_bet = ctx.prior_bet
+                total_dice = ctx.total_dice
+                bet_history = ctx.bet_history
+                outcomes = ctx.outcomes
                 for outcome in outcomes:
                     for dice in outcome["hands"].values():
                         HandsProbe.hand_types.append(type(dice).__name__)
@@ -997,7 +1016,8 @@ def test_outcomes_hands_values_are_tuples(tmp_path):
     class AlwaysBid:
         name = "AlwaysBid"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             if prior_bet is None:
@@ -1019,13 +1039,14 @@ def test_bet_history_includes_dice_count():
     class Caller:
         name = "Caller"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
             return None  # always call liar — game ends in one round
 
     class Bidder:
         name = "Bidder"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             if prior_bet is None:
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
@@ -1165,7 +1186,8 @@ def test_run_series_returns_series_result():
     class AlwaysBid:
         name = "A"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             return (
@@ -1177,7 +1199,7 @@ def test_run_series_returns_series_result():
     class AlwaysCall:
         name = "B"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
             return None
 
     result = run_series([AlwaysBid(), AlwaysCall()], n_games=3, isolated=False)
@@ -1195,7 +1217,8 @@ def test_run_series_capture_outcomes():
     class AlwaysBid:
         name = "A"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             return (
@@ -1207,7 +1230,7 @@ def test_run_series_capture_outcomes():
     class AlwaysCall:
         name = "B"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
             return None
 
     result = run_series(
@@ -1230,7 +1253,8 @@ def test_on_game_complete_fires_each_game():
     class AlwaysBid:
         name = "A"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             return (
@@ -1242,7 +1266,7 @@ def test_on_game_complete_fires_each_game():
     class AlwaysCall:
         name = "B"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
             return None
 
     run_series([AlwaysBid(), AlwaysCall()], n_games=5, on_game_complete=callback, isolated=False)
@@ -1263,7 +1287,12 @@ def test_penalty_count_on_exception(tmp_path):
 
         class Crasher:
             name = "Crasher"
-            def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+            def algo(self, ctx):
+                hand = ctx.hand
+                prior_bet = ctx.prior_bet
+                total_dice = ctx.total_dice
+                bet_history = ctx.bet_history
+                outcomes = ctx.outcomes
                 raise RuntimeError("boom")
     """)
     player_dir = tmp_path / "players"
@@ -1274,7 +1303,8 @@ def test_penalty_count_on_exception(tmp_path):
     class AlwaysBid:
         name = "AlwaysBid"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             from game.components.bets import Bet
 
             return (
@@ -1334,7 +1364,12 @@ def test_simulation_season_run_season(tmp_path):
             from game.components.bets import Bet
             class {name}:
                 name = "{name}"
-                def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+                def algo(self, ctx):
+                    hand = ctx.hand
+                    prior_bet = ctx.prior_bet
+                    total_dice = ctx.total_dice
+                    bet_history = ctx.bet_history
+                    outcomes = ctx.outcomes
                     if prior_bet is None:
                         return Bet(1, 2, self.name)
                     return None
@@ -1376,7 +1411,12 @@ def test_simulation_tournament_run_tournament(tmp_path):
             from game.components.bets import Bet
             class {name}:
                 name = "{name}"
-                def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+                def algo(self, ctx):
+                    hand = ctx.hand
+                    prior_bet = ctx.prior_bet
+                    total_dice = ctx.total_dice
+                    bet_history = ctx.bet_history
+                    outcomes = ctx.outcomes
                     if prior_bet is None:
                         return Bet(1, 2, self.name)
                     return None
@@ -1402,13 +1442,14 @@ def test_perf_tracker_records_calls_for_each_player():
     class Caller:
         name = "Caller"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
             return None  # always call liar — game ends in one round
 
     class Bidder:
         name = "Bidder"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             if prior_bet is None:
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
@@ -1427,13 +1468,14 @@ def test_perf_tracker_records_call_even_when_player_raises():
     class Crasher:
         name = "Crasher"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
             raise RuntimeError("boom")
 
     class AlwaysBid:
         name = "AlwaysBid"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             if prior_bet is None:
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
@@ -1450,13 +1492,14 @@ def test_game_orchestrator_runs_without_perf_tracker():
     class Caller:
         name = "Caller"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
             return None
 
     class Bidder:
         name = "Bidder"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             if prior_bet is None:
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
@@ -1473,13 +1516,14 @@ def test_run_series_perf_tracker_accumulates_across_games():
     class Caller:
         name = "Caller"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
             return None
 
     class Bidder:
         name = "Bidder"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             if prior_bet is None:
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)
@@ -1498,13 +1542,14 @@ def test_run_series_perf_defaults_to_none():
     class Caller:
         name = "Caller"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
             return None
 
     class Bidder:
         name = "Bidder"
 
-        def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):
+        def algo(self, ctx):
+            prior_bet = ctx.prior_bet
             if prior_bet is None:
                 return Bet(1, 2, self.name)
             return Bet(prior_bet.quantity + 1, prior_bet.face, self.name)

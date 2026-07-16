@@ -1,5 +1,4 @@
 import ast
-import inspect
 import os
 import random as r
 from dataclasses import dataclass
@@ -40,13 +39,13 @@ class PlayerSpec:
     class_name: str
 
 
-def _parse_player_class(source: str, stem: str) -> tuple[str, list[str]] | None:
-    """Pure syntax parse (no execution): returns (class_name, algo_arg_names)
-    for the top-level class in `source` whose name matches `stem`
+def _parse_player_class(source: str, stem: str) -> str | None:
+    """Pure syntax parse (no execution): returns the exact-case class name for
+    the top-level class in `source` whose name matches `stem`
     case-insensitively, or None if no such class (or no `algo` method on it)
-    exists. `algo_arg_names` includes "self".
+    exists.
 
-    Deliberately duplicated from game/validate.py's `_find_class_and_algo_args`
+    Deliberately duplicated from game/validate.py's `_find_class_name`
     (same ~15 lines) rather than imported: validate.py is a CLI-level gate
     built on top of game.components.isolation, while this module is a lower
     layer that validate.py's own imports never reach back into — importing
@@ -68,31 +67,23 @@ def _parse_player_class(source: str, stem: str) -> tuple[str, list[str]] | None:
     )
     if algo_node is None:
         return None
-    return class_node.name, [a.arg for a in algo_node.args.args]
+    return class_node.name
 
 
-def _make_stub_algo(arg_names: list[str]):
-    """Build a stub `algo` function whose `inspect.signature` matches the real
-    bot's declared shape (from `_parse_player_class`'s AST-derived
-    `arg_names`, "self" included) without ever running the real player's code.
+def _make_stub_algo():
+    """Build a stub `algo(self, ctx)` that raises if ever called, without
+    running the real player's code.
 
-    `game/components/script.py`'s `game_orchestrator` unconditionally computes
-    `inspect.signature(p.algo).parameters` for every player at game start to
-    decide v1/v2 dispatch — this runs regardless of isolation, so a shell
-    player object with no usable `.algo` would crash every real game
-    immediately. The stub's actual body is never meant to run in the parent;
-    real games only ever call the real algo() inside the isolated worker
+    The stub's actual body is never meant to run in the parent; real games
+    only ever call the real algo() inside the isolated worker
     (game/components/isolation/worker.py), keyed off `_isolation_spec`.
     """
 
-    def _stub(self, *args, **kwargs):
+    def _stub(self, ctx):
         raise NotImplementedError(
             "shell player object — real algo() only runs inside the isolated worker"
         )
 
-    _stub.__signature__ = inspect.Signature(
-        [inspect.Parameter(a, inspect.Parameter.POSITIONAL_OR_KEYWORD) for a in arg_names]
-    )
     return _stub
 
 
@@ -133,14 +124,13 @@ def import_player_specs_from_dir(directory) -> list["PlayerSpec"]:
     # spawn a background thread that simply waits past the restore point and
     # reads the secret later.
     #
-    # Instead: get the class name + algo() arg shape via pure AST parsing (no
-    # execution), get name/avatar via a one-shot isolated worker probe (real
-    # import + __init__, but inside worker_main's scrubbed subprocess), and
-    # build a lightweight synthetic "shell" instance here in the parent that
-    # satisfies every real caller's actual usage (type(p).__name__ for
-    # tier/roster filtering, .name for display, and a stub .algo whose
-    # inspect.signature matches the real declared shape). The real class is
-    # never imported and never instantiated in this process.
+    # Instead: get the class name via pure AST parsing (no execution), get
+    # name/avatar via a one-shot isolated worker probe (real import + __init__,
+    # but inside worker_main's scrubbed subprocess), and build a lightweight
+    # synthetic "shell" instance here in the parent that satisfies every real
+    # caller's actual usage (type(p).__name__ for tier/roster filtering, .name
+    # for display, and a stub .algo that's never actually called). The real
+    # class is never imported and never instantiated in this process.
     secure_environment()
     specs: list[PlayerSpec] = []
     for filename in os.listdir(directory):
@@ -151,14 +141,13 @@ def import_player_specs_from_dir(directory) -> list["PlayerSpec"]:
         abs_file_path = os.path.abspath(module_path)
         source = Path(module_path).read_text()
 
-        parsed = _parse_player_class(source, stem)
-        if parsed is None:
+        class_name = _parse_player_class(source, stem)
+        if class_name is None:
             # No class matching the filename stem (case-insensitive) with an
             # algo method — preserves the old loader's silent skip for
             # in-development or intentionally-invalid files (e.g. the
             # untracked players/the_architect.py fixture).
             continue
-        class_name, algo_arg_names = parsed
 
         ready_info = _probe_player_metadata(abs_file_path, class_name)
         if ready_info is None:
@@ -175,7 +164,7 @@ def import_player_specs_from_dir(directory) -> list["PlayerSpec"]:
             )
             continue
 
-        shell_cls = type(class_name, (), {"algo": _make_stub_algo(algo_arg_names)})
+        shell_cls = type(class_name, (), {"algo": _make_stub_algo()})
         player_obj = shell_cls()
         live_name = ready_info[1]
         player_obj.name = live_name if live_name is not None else class_name

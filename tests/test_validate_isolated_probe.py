@@ -33,34 +33,23 @@ def test_benign_v2_bot_passes_isolated_probe(tmp_path):
     assert "OK" in result.stdout
 
 
-def test_benign_v1_bot_without_tier_now_gets_probed(tmp_path):
-    """Before Task 11, Phase 2 only called algo() for bots that declared a
-    `tier` parameter -- a bot without one was never actually probed. Task 11
-    makes the probe call unconditional. This bot has no tier param; passing
-    confirms the probe ran (with hand=[], prior_bet=None, total_dice=10,
-    bet_history=[], outcomes=[]) and didn't choke on the empty-history args."""
+def test_benign_v2_bot_ignoring_tier_gets_probed(tmp_path):
+    """The isolated probe call is unconditional for every bot, regardless of
+    whether it reads ctx.tier -- passing confirms the probe ran (with an
+    empty-history GameContext) and didn't choke on a bot that never touches
+    ctx.tier."""
     f = tmp_path / "untiered.py"
-    f.write_text(
-        "class Untiered:\n"
-        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
-        "        return None\n"
-    )
+    f.write_text("class Untiered:\n    def algo(self, ctx):\n        return None\n")
     result = _run(f)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "OK" in result.stdout
 
 
-def test_v1_bot_without_tier_that_crashes_in_algo_now_rejected(tmp_path):
-    """Demonstrates the deliberate strengthening: previously a bot without a
-    `tier` param never had algo() called during validation at all, so a bug
-    in algo() itself could slip through. Now the probe call is unconditional,
-    so this bot (whose algo() always raises) must be rejected."""
+def test_v2_bot_that_crashes_in_algo_is_rejected(tmp_path):
+    """The isolated probe actually calls algo() -- a bot whose algo() always
+    raises must be rejected, not just imported and instantiated."""
     f = tmp_path / "buggyalgo.py"
-    f.write_text(
-        "class Buggyalgo:\n"
-        "    def algo(self, hand, prior_bet, total_dice, bet_history, outcomes):\n"
-        "        raise ValueError('boom')\n"
-    )
+    f.write_text("class Buggyalgo:\n    def algo(self, ctx):\n        raise ValueError('boom')\n")
     result = _run(f)
     assert result.returncode == 1
     assert "ERROR" in result.stdout
