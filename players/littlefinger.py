@@ -92,8 +92,7 @@ class Littlefinger:
         avg_dice = total / n_players
         p_chaos = min(
             self.CHAOS_MAX,
-            (avg_dice - self.CHAOS_FADE_DICE)
-            / (self.CHAOS_FULL_DICE - self.CHAOS_FADE_DICE),
+            (avg_dice - self.CHAOS_FADE_DICE) / (self.CHAOS_FULL_DICE - self.CHAOS_FADE_DICE),
         )
         p_chaos = max(0.0, p_chaos)
 
@@ -336,9 +335,7 @@ class Littlefinger:
         ev_liar = float("-inf")
         if prior is not None:
             p_prior = self._p_holds(prior.quantity, prior.face, hand, total, wilds)
-            p_prior *= self._credibility(
-                ctx.stats, prior.player, prior.face, prior.quantity, total
-            )
+            p_prior *= self._credibility(ctx.stats, prior.player, prior.face, prior.quantity, total)
             ev_liar = p_prior * self.EV_LOSE_CALL + (1.0 - p_prior) * self.EV_WIN_CALL
 
         best_bet, best_ev = None, float("-inf")
