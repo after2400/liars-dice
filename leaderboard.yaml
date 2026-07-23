@@ -1,5 +1,5 @@
-total_runs: 150
-last_updated: '2026-07-22T11:11:48Z'
+total_runs: 153
+last_updated: '2026-07-23T11:18:08Z'
 current_season_issue: 189
 players:
   Alice:
@@ -11,9 +11,9 @@ players:
     times_inactive: 0
     tier_stats:
       L1:
-        wins: 1249
-        games: 10000
-        win_pct: 12.5
+        wins: 1361
+        games: 11000
+        win_pct: 12.4
   Bruno:
     display_name: Bruno
     github_username: zachaustin01
@@ -23,9 +23,9 @@ players:
     times_inactive: 0
     tier_stats:
       L1:
-        wins: 1447
-        games: 10000
-        win_pct: 14.5
+        wins: 1533
+        games: 11000
+        win_pct: 13.9
   Cleo:
     display_name: Cleo
     github_username: zachaustin01
@@ -35,9 +35,9 @@ players:
     times_inactive: 0
     tier_stats:
       L1:
-        wins: 252
-        games: 10000
-        win_pct: 2.5
+        wins: 261
+        games: 11000
+        win_pct: 2.4
   Diego:
     display_name: Diego
     github_username: zachaustin01
@@ -47,8 +47,8 @@ players:
     times_inactive: 0
     tier_stats:
       CH:
-        wins: 1016
-        games: 10000
+        wins: 1123
+        games: 11000
         win_pct: 10.2
   Finn:
     display_name: Finn
@@ -59,9 +59,9 @@ players:
     times_inactive: 0
     tier_stats:
       L1:
-        wins: 1829
-        games: 10000
-        win_pct: 18.3
+        wins: 1975
+        games: 11000
+        win_pct: 18.0
     avatar: hdyiihba/Finn_Carter.png
   Eva:
     display_name: Eva
@@ -76,9 +76,9 @@ players:
         games: 7000
         win_pct: 9.6
       L1:
-        wins: 917
-        games: 3000
-        win_pct: 30.6
+        wins: 1215
+        games: 4000
+        win_pct: 30.4
     avatar: hdyiihba/Eva_Longoria.png
   Sloane:
     display_name: Sloane
@@ -89,8 +89,8 @@ players:
     times_inactive: 0
     tier_stats:
       CH:
-        wins: 1138
-        games: 10000
+        wins: 1259
+        games: 11000
         win_pct: 11.4
     avatar: hdyiihba/Sloane_Avery.png
   Zara:
@@ -102,8 +102,8 @@ players:
     times_inactive: 0
     tier_stats:
       CH:
-        wins: 1001
-        games: 10000
+        wins: 1104
+        games: 11000
         win_pct: 10.0
     avatar: hdyiihba/Zara.png
   Remy:
@@ -115,8 +115,8 @@ players:
     times_inactive: 0
     tier_stats:
       L1:
-        wins: 2382
-        games: 10000
+        wins: 2623
+        games: 11000
         win_pct: 23.8
       CH:
         wins: 46
@@ -132,8 +132,8 @@ players:
     times_inactive: 0
     tier_stats:
       L1:
-        wins: 255
-        games: 10000
+        wins: 270
+        games: 11000
         win_pct: 2.5
     avatar: hdyiihba/Topper.png
   Pyro:
@@ -145,9 +145,9 @@ players:
     times_inactive: 0
     tier_stats:
       L1:
-        wins: 499
-        games: 10000
-        win_pct: 5.0
+        wins: 529
+        games: 11000
+        win_pct: 4.8
     avatar: hdyiihba/Liar_Liar.png
   Nuke:
     display_name: Nuke LaLoosh
@@ -158,9 +158,9 @@ players:
     times_inactive: 0
     tier_stats:
       L1:
-        wins: 3297
-        games: 10000
-        win_pct: 33.0
+        wins: 3574
+        games: 11000
+        win_pct: 32.5
       CH:
         wins: 487
         games: 6000
@@ -175,8 +175,8 @@ players:
     times_inactive: 0
     tier_stats:
       CH:
-        wins: 1170
-        games: 10000
+        wins: 1286
+        games: 11000
         win_pct: 11.7
       PRM:
         wins: 52
@@ -191,9 +191,9 @@ players:
     times_inactive: 0
     tier_stats:
       L1:
-        wins: 1773
-        games: 10000
-        win_pct: 17.7
+        wins: 1882
+        games: 11000
+        win_pct: 17.1
   HonestAbe:
     display_name: Honest Abe
     github_username: DNiev
@@ -207,26 +207,26 @@ players:
         games: 1000
         win_pct: 7.3
       L1:
-        wins: 2730
-        games: 9000
-        win_pct: 30.3
+        wins: 2970
+        games: 10000
+        win_pct: 29.7
     avatar: dfcgw5cr6/Honest_Abe.jpg
   CalCulated:
     display_name: Cal Culatid
     github_username: DNiev
     date_added: '2026-06-18T03:28:08Z'
-    tier: L1
-    tier_since: '2026-07-22T01:29:31Z'
+    tier: CH
+    tier_since: '2026-07-23T11:06:51Z'
     times_inactive: 0
     tier_stats:
       L1:
-        wins: 652
-        games: 2000
-        win_pct: 32.6
+        wins: 957
+        games: 3000
+        win_pct: 31.9
       CH:
-        wins: 928
-        games: 9000
-        win_pct: 10.3
+        wins: 1022
+        games: 10000
+        win_pct: 10.2
     avatar: dfcgw5cr6/Cal_Culatid.jpg
   PeterGriffin:
     display_name: Peter Griffin
@@ -237,9 +237,9 @@ players:
     times_inactive: 0
     tier_stats:
       CH:
-        wins: 1079
-        games: 9000
-        win_pct: 12.0
+        wins: 1187
+        games: 10000
+        win_pct: 11.9
       PRM:
         wins: 141
         games: 3000
@@ -257,9 +257,9 @@ players:
         games: 7000
         win_pct: 5.0
       CH:
-        wins: 689
-        games: 5000
-        win_pct: 13.8
+        wins: 813
+        games: 6000
+        win_pct: 13.6
   DeepThought:
     display_name: Deep Thought
     github_username: DNiev
@@ -273,9 +273,9 @@ players:
         games: 1000
         win_pct: 17.0
       PRM:
-        wins: 1049
-        games: 10000
-        win_pct: 10.5
+        wins: 1118
+        games: 11000
+        win_pct: 10.2
     avatar: dfcgw5cr6/Deep_Thought.jpg
   EvilStewie:
     display_name: EvilStewie
@@ -286,9 +286,9 @@ players:
     times_inactive: 0
     tier_stats:
       PRM:
-        wins: 1197
-        games: 10000
-        win_pct: 12.0
+        wins: 1290
+        games: 11000
+        win_pct: 11.7
   Meg:
     display_name: Meg Griffin
     github_username: after2400
@@ -298,16 +298,16 @@ players:
     times_inactive: 0
     tier_stats:
       L1:
-        wins: 1761
-        games: 10000
-        win_pct: 17.6
+        wins: 1893
+        games: 11000
+        win_pct: 17.2
     avatar: hdyiihba/Meg_Griffin.png
   Columbo:
     display_name: Columbo
     github_username: iappanaitis
     date_added: '2026-06-29T20:41:43Z'
-    tier: CH
-    tier_since: '2026-07-13T12:35:51Z'
+    tier: L1
+    tier_since: '2026-07-23T11:18:08Z'
     times_inactive: 0
     tier_stats:
       PRM:
@@ -315,9 +315,9 @@ players:
         games: 3000
         win_pct: 4.2
       CH:
-        wins: 920
-        games: 8000
-        win_pct: 11.5
+        wins: 1009
+        games: 9000
+        win_pct: 11.2
   Merovingian:
     display_name: The Merovingian
     github_username: after2400
@@ -327,9 +327,9 @@ players:
     times_inactive: 0
     tier_stats:
       PRM:
-        wins: 1383
-        games: 10000
-        win_pct: 13.8
+        wins: 1496
+        games: 11000
+        win_pct: 13.6
     avatar: hdyiihba/The_Merovingian.png
   Oracle:
     display_name: The Oracle
@@ -340,9 +340,9 @@ players:
     times_inactive: 0
     tier_stats:
       PRM:
-        wins: 1547
-        games: 10000
-        win_pct: 15.5
+        wins: 1663
+        games: 11000
+        win_pct: 15.1
     avatar: dfcgw5cr6/The_Oracle.gif
   Ripley:
     display_name: Ripley
@@ -353,21 +353,25 @@ players:
     times_inactive: 0
     tier_stats:
       PRM:
-        wins: 1539
-        games: 10000
-        win_pct: 15.4
+        wins: 1657
+        games: 11000
+        win_pct: 15.1
   Hal:
     display_name: HAL 9000
     github_username: fransposito
     date_added: '2026-07-01T23:05:55Z'
     tier: CH
-    tier_since: '2026-07-22T11:11:48Z'
+    tier_since: '2026-07-23T11:18:08Z'
     times_inactive: 0
     tier_stats:
       PRM:
-        wins: 1009
-        games: 10000
-        win_pct: 10.1
+        wins: 1077
+        games: 11000
+        win_pct: 9.8
+      CH:
+        wins: 138
+        games: 1000
+        win_pct: 13.8
     avatar: rzifhdkf/HAL_9000.png
   Shwimpevwild:
     display_name: Shwimp
@@ -378,9 +382,9 @@ players:
     times_inactive: 0
     tier_stats:
       PRM:
-        wins: 913
-        games: 10000
-        win_pct: 9.1
+        wins: 981
+        games: 11000
+        win_pct: 8.9
       CH:
         wins: 195
         games: 1000
@@ -402,9 +406,9 @@ players:
         games: 1000
         win_pct: 15.8
       PRM:
-        wins: 344
-        games: 4000
-        win_pct: 8.6
+        wins: 536
+        games: 5000
+        win_pct: 10.7
   Varys:
     display_name: Varys
     github_username: max-cole
@@ -422,9 +426,9 @@ players:
         games: 1000
         win_pct: 26.0
       PRM:
-        wins: 349
-        games: 2000
-        win_pct: 17.4
+        wins: 512
+        games: 3000
+        win_pct: 17.1
 tournament_state:
   quarter: 2026-Q3
   pool_results:
