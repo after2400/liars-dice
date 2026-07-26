@@ -22,9 +22,11 @@ class Merovingian:
         self._s8 = None
         self._s9 = []
         self._tbl_cache: dict[tuple[int, float], list[float]] = {}
+        self._face_inv_cache: dict[int, tuple] = {}
 
     def algo(self, ctx) -> Optional[Bet]:
         self._tbl_cache = {}
+        self._face_inv_cache = {}
         self._u1(ctx)
         h, b, td = ctx.hand, ctx.prior_bet, ctx.total_dice
         wa = self._w1(ctx)
@@ -85,15 +87,20 @@ class Merovingian:
         m_mat = mc.get(f, 0) + (mc.get(1, 0) if (wa and f != 1) else 0)
         p_hit = 2 / 6 if (wa and f != 1) else 1 / 6
         if ob:
-            cert, unc = m_mat, td - len(h) - sum(d for _, _, d in ob.values())
-            for p_id, (bf, bq, bd) in ob.items():
-                if bf != f:
-                    unc += bd
-                else:
-                    p_f = 1 / 6 if (f == 1 or not wa) else 2 / 6
-                    inf = round(max(0.0, min(float(bd), bq - (td - bd) * p_f)))
-                    cert += inf
-                    unc += bd - inf
+            inv = self._face_inv_cache.get(f)
+            if inv is None:
+                cert, unc = m_mat, td - len(h) - sum(d for _, _, d in ob.values())
+                for p_id, (bf, bq, bd) in ob.items():
+                    if bf != f:
+                        unc += bd
+                    else:
+                        p_f = 1 / 6 if (f == 1 or not wa) else 2 / 6
+                        inf = round(max(0.0, min(float(bd), bq - (td - bd) * p_f)))
+                        cert += inf
+                        unc += bd - inf
+                inv = (cert, unc)
+                self._face_inv_cache[f] = inv
+            cert, unc = inv
             s_n = max(0, q - cert)
             return 1.0 if s_n == 0 else (0.0 if unc <= 0 else self._bs(unc, p_hit, s_n))
         un = td - len(h)
