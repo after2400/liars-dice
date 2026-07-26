@@ -23,10 +23,12 @@ class Merovingian:
         self._s9 = []
         self._tbl_cache: dict[tuple[int, float], list[float]] = {}
         self._face_inv_cache: dict[int, tuple] = {}
+        self._pt_inv: list[tuple] | None = None
 
     def algo(self, ctx) -> Optional[Bet]:
         self._tbl_cache = {}
         self._face_inv_cache = {}
+        self._pt_inv = None
         self._u1(ctx)
         h, b, td = ctx.hand, ctx.prior_bet, ctx.total_dice
         wa = self._w1(ctx)
@@ -158,21 +160,26 @@ class Merovingian:
         return res
 
     def _pt(self, ctx, ph_pub: float) -> float:
-        pl = ctx.round_players
-        if not pl or self.name not in pl:
-            return 0.3
-        idx = pl.index(self.name)
-        rem = [pl[(idx + 1 + i) % len(pl)] for i in range(len(pl) - 1)]
-        if not rem:
+        inv = self._pt_inv
+        if inv is None:
+            pl = ctx.round_players
+            inv = []
+            if pl and self.name in pl:
+                idx = pl.index(self.name)
+                rem = [pl[(idx + 1 + i) % len(pl)] for i in range(len(pl) - 1)]
+                for p in rem:
+                    base = max(0.1, (ctx.stats.challenge_rate.get(p, 0.3) if ctx.stats else 0.3))
+                    n = self._s3.get(p, 0)
+                    mt = (self._s2[p] / n) if n else None
+                    inv.append((base, mt))
+            self._pt_inv = inv
+        if not inv:
             return 0.3
         rs = []
-        for p in rem:
-            base = max(0.1, (ctx.stats.challenge_rate.get(p, 0.3) if ctx.stats else 0.3))
-            n = self._s3.get(p, 0)
-            if not n:
+        for base, mt in inv:
+            if mt is None:
                 rs.append(max(0.1, min(1.0, base * 3, 1.0 - (1.0 - base) * ph_pub)))
             else:
-                mt = self._s2[p] / n
                 rs.append(max(0.1, min(1.0, base * math.exp(-3.0 * (ph_pub - mt)))))
         return max(rs)
 
