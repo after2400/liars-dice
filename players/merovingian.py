@@ -26,6 +26,10 @@ class Merovingian:
         self._pt_inv: list[tuple] | None = None
 
     def algo(self, ctx) -> Optional[Bet]:
+        # Per-turn lazy caches: every one MUST be reset here. Their inputs
+        # (total_dice, hand, round_players, ctx.stats, _s2/_s3) change each
+        # turn, so a surviving entry is a correctness bug, not a stale
+        # optimisation. Add any new per-turn cache to this block.
         self._tbl_cache = {}
         self._face_inv_cache = {}
         self._pt_inv = None
