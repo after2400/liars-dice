@@ -26,11 +26,23 @@ class Merovingian:
         self._pt_inv: list[tuple] | None = None
 
     def algo(self, ctx) -> Optional[Bet]:
-        # Per-turn lazy caches: every one MUST be reset here. Their inputs
-        # (total_dice, hand, round_players, ctx.stats, _s2/_s3) change each
-        # turn, so a surviving entry is a correctness bug, not a stale
-        # optimisation. Add any new per-turn cache to this block.
-        self._tbl_cache = {}
+        # Per-turn lazy caches: every one MUST be reset here, EXCEPT
+        # _tbl_cache. _face_inv_cache/_pt_inv depend on per-turn state
+        # (total_dice, hand, round_players, ctx.stats, _s2/_s3), so a
+        # surviving entry is a correctness bug, not a stale optimisation.
+        # _tbl_cache is the opposite: _build_survival_table(n, p) is a pure
+        # function of (n, p), so cached tables never go stale and are kept
+        # for the instance's whole lifetime -- in production, one instance
+        # is reused across an entire run_series of up to N_GAMES games, so
+        # n ranges over the whole [1, total_dice] interval seen across that
+        # series, not just one turn. Bounded to ~2 x max_total_dice entries
+        # (p takes 2 values): ~90 entries / ~70KB at the PRM/CH production
+        # max (_POOL_MAX=9 players, total_dice<=45). That bound comes from
+        # tier_capacities' PRM/CH/L1 pooling cap, not a hard limit -- the
+        # unpooled DED tier has no such cap, so don't copy this reasoning
+        # into a bot that plays DED without rechecking. Add any new
+        # per-turn cache to the reset block below; add any new pure,
+        # bounded-domain cache alongside _tbl_cache instead.
         self._face_inv_cache = {}
         self._pt_inv = None
         self._u1(ctx)
