@@ -21,8 +21,10 @@ class Merovingian:
         self._s7 = set()
         self._s8 = None
         self._s9 = []
+        self._tbl_cache: dict[tuple[int, float], list[float]] = {}
 
     def algo(self, ctx) -> Optional[Bet]:
+        self._tbl_cache = {}
         self._u1(ctx)
         h, b, td = ctx.hand, ctx.prior_bet, ctx.total_dice
         wa = self._w1(ctx)
@@ -107,19 +109,28 @@ class Merovingian:
             return 0.0
         if k <= 0:
             return 1.0
-        t = 0.0
-        lp, lq = (
-            math.log(p) if p > 0 else -float("inf"),
-            math.log(1 - p) if p < 1 else -float("inf"),
-        )
-        lpmf = (
-            math.lgamma(n + 1) - math.lgamma(k + 1) - math.lgamma(n - k + 1) + k * lp + (n - k) * lq
-        )
-        for i in range(k, n + 1):
-            if i > k:
-                lpmf += math.log((n - i + 1) / i) + lp - lq
-            t += math.exp(lpmf)
-        return min(1.0, t)
+        tbl = self._tbl_cache.get((n, p))
+        if tbl is None:
+            tbl = self._build_survival_table(n, p)
+            self._tbl_cache[(n, p)] = tbl
+        return tbl[k]
+
+    def _build_survival_table(self, n, p) -> list[float]:
+        """S[k] = P(X>=k) for X ~ Binomial(n, p), for k in 0..n, built in one O(n) pass."""
+        lp = math.log(p) if p > 0 else -float("inf")
+        lq = math.log(1 - p) if p < 1 else -float("inf")
+        pmf = [0.0] * (n + 1)
+        lpmf = n * lq
+        pmf[0] = math.exp(lpmf) if lpmf > -float("inf") else 0.0
+        for i in range(1, n + 1):
+            lpmf += math.log((n - i + 1) / i) + lp - lq
+            pmf[i] = math.exp(lpmf) if lpmf > -float("inf") else 0.0
+        tbl = [0.0] * (n + 1)
+        running = 0.0
+        for k in range(n, -1, -1):
+            running += pmf[k]
+            tbl[k] = min(1.0, running)
+        return tbl
 
     def _o1(self, ctx) -> dict:
         if not ctx.bet_history or ctx.prior_bet is None:
