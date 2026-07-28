@@ -6,6 +6,24 @@ from game.components.bets import Bet
 from game.components.context import GameContext
 
 
+def _solve3(h, g):
+    """3x3 Gaussian elimination with partial pivot; None if singular."""
+    m = [row[:] + [g[i]] for i, row in enumerate(h)]
+    for col in range(3):
+        piv = max(range(col, 3), key=lambda r: abs(m[r][col]))
+        if abs(m[piv][col]) < 1e-12:
+            return None
+        m[col], m[piv] = m[piv], m[col]
+        for r in range(col + 1, 3):
+            f = m[r][col] / m[col][col]
+            for c in range(col, 4):
+                m[r][c] -= f * m[col][c]
+    x = [0.0] * 3
+    for r in (2, 1, 0):
+        x[r] = (m[r][3] - sum(m[r][c] * x[c] for c in range(r + 1, 3))) / m[r][r]
+    return x
+
+
 class Littlefinger:
     """
     Chaos is a ladder — and every rung is audited.
@@ -27,88 +45,59 @@ class Littlefinger:
 
     name = "Littlefinger"
 
-    # --- Opponent call model: replicate their EV calc ---
+    # --- Opponent call model: per-opponent fitted call thresholds ---
     POP_BASE_RATE = 0.3  # challenge-rate prior for unseen players
-    # Outcomes reveal every hand, so every past call/pass is re-scored with
-    # the decider's exact private hold-prob. Closed-form tau early; a joint
-    # (tau, slope) MLE takes over with labels, plus five per-stack-size tau
-    # buckets at the pooled slope (their threshold drifts with stack size).
     TAU_PRIOR = 0.3
     TAU_SLOPE = 0.05
     TAU_MIN_OBS_CALLS = 3
     TAU_MIN_OBS_PASSES = 10
-    TAU_FIT_MIN = 40  # labels before the first fit
+    TAU_FIT_MIN = 40  # labels before the first MLE fit
     TAU_FIT_EVERY = 25  # new labels between refits
     TAU_FIT_CAP = 400  # labels kept per player
 
     # --- Survival policy ---
     CALL_MARGIN = 0.15  # call liar only when strictly cheaper than the safest raise
     OPEN_CAP_DIV = 2  # opening search: quantities up to total//DIV + 1
-    BAIT_WEIGHT = 0.5  # credit for a called-and-held bid (the caller bleeds)
-    SQUEEZE_WEIGHT = 0.3  # prefer bids that corner the next player
+    BAIT_WEIGHT = 0.2  # credit for a called-and-held bid
+    SQUEEZE_WEIGHT = 0.35  # prefer bids that corner the next player
 
-    # --- Poison policy ---
-    # Among bids within EPS of optimal loss, take the one our hand least
-    # supports: their certain-dice inference banks a die we do not have.
-    # Below MIN_DICE we play honest — short stacks get believed.
+    # --- Poison band: among near-tied bids take the one our hand least supports ---
     POISON_EPS = 0.05
-    POISON_MIN_DICE = 3
+    POISON_MIN_DICE = 3  # below this, play honest (short stacks get believed)
 
-    # --- Honesty thermostat (reputation closed loop, levers off) ---
-    # A marginal bid of ours (our-seat hold-prob in the band) is either
-    # called or raised over; the realized called-rate is the observable
-    # proxy for how honest they think we are. temp low (read honest): widen
-    # the poison band, squeeze more. temp high (well poisoned): band to its
-    # floor, bait up. The edge is the harvest — lie when cheap so they keep
-    # calling our honest bids; the setpoint self-limits.
-    HON_TEMP = 0  # lever: thermostat-driven poison band
-    HON_TEMP_W = 0  # lever: thermostat-driven bait/squeeze lerp
-    TEMP_P_LO = 0.15  # marginal band on our bid's hold-prob
-    TEMP_P_HI = 0.45
-    TEMP_MIN_OBS = 15  # marginal resolutions before actuating
-    TEMP_TARGET = 0.33  # called-rate setpoint (= Beta(2,4) prior mean)
-    TEMP_K = 0.25  # eps gain per unit of temp error
-    TEMP_LO = 0.02  # band floor
-    TEMP_HI = 0.12  # band ceiling
-    TEMP_WK = 1.5  # weight lerp gain
-    # Per-judge temps: only the next live player clockwise can ever call our
-    # bid, so reputation is per left-neighbor, shrunk toward the global pool.
-    TEMP_PER_OPP = 0  # lever: per-judge posteriors
-    TEMP_OPP_SHRINK = 10.0
-    # Priced dose: within the poison band, take the bid minimizing the
-    # judge-priced loss (sting, bait, squeeze against the actual next
-    # player's call curve, not the all-players aggregate). Off; the
-    # min-support pick runs instead.
-    POISON_EV = 0
+    # --- Poison gate: skip the poison pick vs judges whose claim-pressure
+    # coefficient (per-opponent online IRLS) is confidently negative ---
+    POGATE_Z = -3.0  # gate fires below this z-score on the claim coef
+    POGATE_CAP = 2000  # per-opponent label window (FIFO)
+    POGATE_EVERY = 100  # refit cadence (new labels)
+    POGATE_MIN = 400  # min labels before the fit is trusted
 
-    # --- Call-door personalization (their honesty, read back) ---
-    # CALL_FIT: per-bidder honesty curve P(hold | judge-seat p) fitted on
-    # revealed hands — every opponent bid in every completed round is a
-    # label. Honest bidders select into supported bids (realized hold rate
-    # above the uniform price); bluffers sit below it. Blended with uniform
-    # by label count.
-    # CALL_SUP_W: asymmetric squeeze read — their support posterior may
-    # LOWER P(their bid holds) (a same-qty 6-raise is the weakest honesty
-    # class) but never lift it above the uniform price.
-    CALL_FIT = 1
+    # --- Variance posture: behind on dice, the band pick buys a coin flip ---
+    VAR_EPS = 0.05
+
+    # --- Call door: per-bidder honesty curves + asymmetric squeeze read ---
     CALL_FIT_SHRINK = 40.0  # uniform pseudo-labels blended into each curve
-    CALL_SUP_W = 0.5  # 0 = uniform call door
+    CALL_SUP_W = 0.5  # their sup posterior may lower the price, never raise it
 
-    # --- Support-posterior bid pricing (the raise-door delta model) ---
-    # Per-opponent per-face ABSOLUTE support estimates, reset each round, fed
-    # by raise-class-weighted evidence (measured on revealed hands):
-    #   qty raise to f:  support +0.95 over uniform  -> w 1.0 (the classic)
-    #   same-qty to f<6: support +0.87, skipped -0.3 -> w 0.9 + anti-support
-    #   same-qty to 6:   support +0.36, skipped -0.15, f0 +0.1 (the squeeze)
-    # Raw posteriors over-price the door (winner's curse on the argmax face),
-    # so deviations shrink by SHRINK. Used ONLY in the raise door.
-    SUP_W_QTY = 1.0
-    SUP_W_FLO = 0.9
-    SUP_W_F6 = 0.35
+    # --- Support posterior: per-opponent per-face estimates, reset per round ---
+    SUP_W_QTY = 1.0  # qty raise to f
+    SUP_W_FLO = 0.9  # same-qty raise to f<6
+    SUP_W_F6 = 0.35  # same-qty raise to 6 (the squeeze class)
     SUP_SKIP_FLO = 0.6  # anti-support per skipped face, same-qty to f<6
     SUP_SKIP_F6 = 0.3  # anti-support per skipped face, same-qty to 6
     SUP_UNDER_F6 = 0.2  # support under the bid (f0) after a same-qty 6-raise
-    SUP_SHRINK = 0.5
+    SUP_REV = 1.2  # revisit bonus: raising back to a face already bid this round
+    SUP_SHRINK = 0.5  # winner's-curse shrink toward uniform
+    SUP_REL_SHRINK = 5.0  # pseudo-samples pulling tell reliability to 1.0
+
+    # --- Call-door Platt recalibration: p' = sig(A + B*logit(p)) ---
+    CAL_A = 0.33
+    CAL_B = 1.35
+
+    # --- Dice-diff push: among near-tied candidates take max qty ---
+    DPUSH_N = 5  # push gate: live players >= this
+    DPUSH_EPS = 0.02  # tie window in expected-loss units
+    DPUSH_GAP = 1.5  # max public gap allowed into the push band
 
     def __init__(self) -> None:
         # Per-opponent call/pass labels, re-scored with the decider's exact
@@ -117,6 +106,8 @@ class Littlefinger:
         self._priv_call: dict[str, list[float]] = {}  # [sum, n]
         self._priv_pass: dict[str, list[float]] = {}
         self._labels: dict[str, list[tuple[float, bool, int]]] = {}
+        self._pgap: dict[str, list] = {}  # player -> [(p, claim, called)] window
+        self._pgfit: dict[str, tuple] = {}  # player -> (claim coef, se, n at fit)
         self._fit: dict[str, tuple[float, float]] = {}  # player -> (tau, slope)
         self._fit_n: dict[str, int] = {}
         self._fit_d: dict[tuple[str, str], tuple[float, float]] = {}  # (player, bucket)
@@ -136,20 +127,17 @@ class Littlefinger:
         self._held_start = 0  # first bet_history index of the current round
         self._held_outcomes = 0  # outcomes count at last reset check
         self._sup: dict[str, list[float]] = {}
+        self._sup_sig: dict[str, set[int]] = {}  # faces they bid this round
         self._supcache: dict[tuple, list[float]] = {}
+        # Tell reliability: (player, cls) -> [sum of actual/implied, n].
+        # _rel_events: informative raises (key, player, cls, implied, face,
+        # wild) awaiting their round's reveal for scoring.
+        self._rel: dict[tuple[str, str], list[float]] = {}
+        self._rel_events: list[tuple] = []
         # Binomial survival memo: (n, p, k) -> exact P(X >= k). The tails are
         # the hot path (every call/hold price), and n <= 45 with p in
         # {1/6, 1/3} means a few thousand distinct values per series.
         self._bcache: dict[tuple[int, float, int], float] = {}
-        # Honesty-thermostat state: FIFO of our unresolved bids (qty, face, p,
-        # judge), resolved in _consume_round; Beta(2,4) posterior over the
-        # marginal ones, global + per-judge.
-        self._self_bids: list[tuple[int, int, float, str | None]] = []
-        self._temp_a = 2.0
-        self._temp_b = 4.0
-        self._temp_obs = 0
-        self._opp_a: dict[str, float] = {}
-        self._opp_b: dict[str, float] = {}
         # Honesty-curve state: per-bidder (judge-seat p, failed) labels from
         # revealed hands, logistic fit blended into the call door.
         self._hon_labels: dict[str, list[tuple[float, bool]]] = {}
@@ -165,13 +153,7 @@ class Littlefinger:
         wilds = ctx.stats.ones_are_wild if ctx.stats else True
         self._learn(ctx)
         self._update_held(ctx, hand, total)
-        bet = self._survive(ctx, hand, prior, total, wilds)
-        if self.HON_TEMP and bet is not None:
-            p = self._p_bid_hold(ctx, bet.quantity, bet.face, hand, total, wilds)
-            self._self_bids.append((bet.quantity, bet.face, p, self._judge(ctx)))
-            if len(self._self_bids) > 200:  # defensive: drop ancient stales
-                del self._self_bids[: len(self._self_bids) - 200]
-        return bet
+        return self._survive(ctx, hand, prior, total, wilds)
 
     # ── The bleed race ────────────────────────────────────────────────────────
 
@@ -209,8 +191,8 @@ class Littlefinger:
         """Cost of calling liar: P(the prior bid holds), personalized.
 
         Uniform price from our seat, shrunk toward the bidder's realized
-        honesty curve (CALL_FIT), then the asymmetric squeeze read: their
-        support posterior may lower the price, never raise it (CALL_SUP_W).
+        honesty curve, then the asymmetric squeeze read: their support
+        posterior may lower the price, never raise it.
         """
         cost = self._p_hold_faced(
             prior.player, self._p_holds(prior.quantity, prior.face, hand, total, wilds)
@@ -223,8 +205,6 @@ class Littlefinger:
     def _p_hold_faced(self, bidder, q) -> float:
         """P(their bid holds): uniform price blended toward the bidder's
         realized hold curve as their label count grows."""
-        if not self.CALL_FIT:
-            return q
         self._fit_hon(bidder)
         fit = self._hon_fit.get(bidder)
         if fit is None:
@@ -261,11 +241,10 @@ class Littlefinger:
         """
         prior, min_face = prior_info if prior_info else (None, 1)
         best_bet, best_loss = None, float("inf")
-        cand = []  # (loss, bet) for every legal bid — the near-tie pool
+        cand = []  # (loss, bet, p_hold, p_call) for every legal bid
         pcall_cache = {}  # (qty, p_hit) -> P(any call): faces 2-6 share call math
         judge = self._judge(ctx)
-        bait_w, squeeze_w = self._weights(judge)
-        eps = self._poison_eps(judge)
+        n_live = len(ctx.round_players) if ctx.round_players else 0
         for qty in range(q_lo, q_hi + 1):
             faces = range(min_face, 7) if qty == (prior.quantity if prior else qty) else range(2, 7)
             for face in faces:
@@ -274,46 +253,45 @@ class Littlefinger:
                 ):
                     continue
                 p_hold = self._p_bid_hold(ctx, qty, face, hand, total, wilds)
-                ck = (qty, 2 / 6 if (wilds and face != 1) else 1 / 6)
+                bet = Bet(qty, face, self.name)
+                ck = (qty, self._p_hit(face, wilds))
                 p_call = pcall_cache.get(ck)
                 if p_call is None:
                     p_call = self._p_any_call(ctx, qty, face, total, wilds)
                     pcall_cache[ck] = p_call
-                loss = p_call * (1.0 - p_hold) - bait_w * p_call * p_hold
-                sq = 0.0
-                if squeeze_w:
+                loss = p_call * ((1.0 - p_hold) - self.BAIT_WEIGHT * p_hold)
+                if self.SQUEEZE_WEIGHT:
                     # A bid that passes but leaves the next player no cheap
                     # safe raise corners THEM into the bag-holding seat.
                     sq = 1.0 - self._best_reraise_pub(qty, face, total, wilds)
-                    loss -= squeeze_w * sq * (1.0 - p_call)
-                bet = Bet(qty, face, self.name)
-                cand.append((loss, bet, p_hold, sq))
+                    loss -= self.SQUEEZE_WEIGHT * sq * (1.0 - p_call)
+                cand.append((loss, bet, p_hold, p_call))
                 if loss < best_loss - 1e-12:
                     best_bet, best_loss = bet, loss
-        if eps > 0 and len(hand) >= self.POISON_MIN_DICE:
-            # Every bid within EPS of optimal costs us the same in expectation,
-            # but not to THEM: six of the eight infer our "certain" dice from
-            # our first bid of the round (held ~= qty - unseen*p). Among the
-            # interchangeable bids, take the one our hand least supports.
-            band = [c for c in cand if c[0] <= best_loss + eps]
-            if len(band) > 1 and self.POISON_EV and judge is not None:
-                jcache = {}  # (qty, p_hit) -> P(the judge calls): faces 2-6 share math
-
-                def jloss(c):
-                    b = c[1]
-                    ck = (b.quantity, 2 / 6 if (wilds and b.face != 1) else 1 / 6)
-                    p_jc = jcache.get(ck)
-                    if p_jc is None:
-                        p_jc = self._p_call_struct(
-                            ctx.stats, judge, b.quantity, b.face, total, wilds
-                        )
-                        jcache[ck] = p_jc
-                    return (
-                        p_jc * (1.0 - c[2]) - bait_w * p_jc * c[2] - squeeze_w * c[3] * (1.0 - p_jc)
-                    )
-
-                best_bet = min(band, key=lambda c: (jloss(c), c[0], (c[1].quantity, c[1].face)))[1]
-            elif len(band) > 1:
+        counts = ctx.stats.dice_counts if ctx.stats else {}
+        behind = False
+        if counts:
+            alive = sum(1 for v in counts.values() if v > 0)
+            behind = total > 0 and alive > 0 and len(hand) * alive < total
+        if behind:
+            # Trailing: take the max-variance bid in the band — the grind has
+            # no edge, so buy a coin flip. Replaces the poison pick.
+            band = [c for c in cand if c[0] <= best_loss + self.VAR_EPS]
+            if len(band) > 1:
+                best_bet = max(
+                    band,
+                    key=lambda c: (
+                        c[3] - (c[3] * (2.0 * c[2] - 1.0)) ** 2,
+                        -c[0],
+                        (-c[1].quantity, -c[1].face),
+                    ),
+                )[1]
+        elif len(hand) >= self.POISON_MIN_DICE and self._poison_pays(judge):
+            # Bids within EPS of optimal cost us the same in expectation, but
+            # not THEM: the pool inverts our first bid of the round into
+            # "certain" dice. Take the one our hand least supports.
+            band = [c for c in cand if c[0] <= best_loss + self.POISON_EPS]
+            if len(band) > 1:
                 best_bet = min(
                     band,
                     key=lambda c: (
@@ -322,11 +300,36 @@ class Littlefinger:
                         (c[1].quantity, c[1].face),
                     ),
                 )[1]
+        else:
+            # The push: among near-tied candidates take max qty — a tied
+            # higher-qty bid must be better backed, so the tiebreak is a
+            # selectivity filter that also buys rung advancement.
+            band = [c for c in cand if c[0] <= best_loss + self.DPUSH_EPS]
+            if n_live >= self.DPUSH_N:
+                pushable = [
+                    c
+                    for c in band
+                    if c[1].quantity - total * self._p_hit(c[1].face, wilds) <= self.DPUSH_GAP
+                ]
+                if pushable:
+                    best_bet = max(
+                        pushable,
+                        key=lambda c: (c[1].quantity, -c[0], -c[1].face),
+                    )[1]
         return best_bet, best_loss
 
-    def _temp(self) -> float:
-        """Posterior mean of P(they call our marginal bid): the honesty temp."""
-        return self._temp_a / (self._temp_a + self._temp_b)
+    def _poison_pays(self, judge) -> bool:
+        """Skip the min-support pick vs judges whose claim coefficient is
+        confidently negative — they go passive under claim pressure, so the
+        unsupported-face bid buys no bait into them. ON until the fit has
+        POGATE_MIN labels."""
+        if judge is None:
+            return True
+        fit = self._pgfit.get(judge)
+        if fit is None or fit[2] < self.POGATE_MIN:
+            return True
+        coef, se, _n = fit
+        return not (coef < 0.0 and se > 0.0 and coef / se < self.POGATE_Z)
 
     def _judge(self, ctx):
         """The only opponent who can call our next bid: next live player clockwise."""
@@ -335,35 +338,28 @@ class Littlefinger:
             return players[(players.index(self.name) + 1) % len(players)]
         return None
 
-    def _temp_for(self, judge) -> float:
-        """Effective temp for a judge: per-opp posterior shrunk to the global pool."""
-        if not self.TEMP_PER_OPP or judge is None:
-            return self._temp()
-        a = self._opp_a.get(judge, 0.0)
-        b = self._opp_b.get(judge, 0.0)
-        return (a + self.TEMP_OPP_SHRINK * self._temp()) / (a + b + self.TEMP_OPP_SHRINK)
-
-    def _poison_eps(self, judge=None) -> float:
-        if not self.HON_TEMP or self._temp_obs < self.TEMP_MIN_OBS:
-            return self.POISON_EPS
-        eps = self.POISON_EPS + self.TEMP_K * (self.TEMP_TARGET - self._temp_for(judge))
-        return min(self.TEMP_HI, max(self.TEMP_LO, eps))
-
-    def _weights(self, judge=None) -> tuple[float, float]:
-        if not self.HON_TEMP_W or self._temp_obs < self.TEMP_MIN_OBS:
-            return self.BAIT_WEIGHT, self.SQUEEZE_WEIGHT
-        err = self.TEMP_WK * (self._temp_for(judge) - self.TEMP_TARGET)
-        bait = self.BAIT_WEIGHT * min(2.0, max(0.5, 1.0 + err))
-        squeeze = self.SQUEEZE_WEIGHT * min(2.0, max(0.5, 1.0 - err))
-        return bait, squeeze
+    def _best_reraise(self, qty, face, total, wilds) -> tuple[int, int, float]:
+        """The next player's best cheap raise over (qty, face) and its public
+        hold-prob: the minimal bump (same qty, next face up) or the lowest
+        qty raise, whichever holds better."""
+        min_face = 2 if wilds else 1
+        options = [(qty + 1, min_face)]
+        if face < 6:
+            options.append((qty, face + 1))
+        q2, f2 = max(options, key=lambda bf: self._p_holds_public(bf[0], bf[1], total, wilds))
+        return q2, f2, self._p_holds_public(q2, f2, total, wilds)
 
     def _best_reraise_pub(self, qty, face, total, wilds) -> float:
         """Public hold-prob of the next player's best cheap raise over (qty, face)."""
-        min_face = 2 if wilds else 1
-        options = [self._p_holds_public(qty + 1, min_face, total, wilds)]
-        if face < 6:
-            options.append(self._p_holds_public(qty, face + 1, total, wilds))
-        return max(options)
+        return self._best_reraise(qty, face, total, wilds)[2]
+
+    def _seat_order(self, ctx) -> list:
+        """Live seats after us, clockwise — the order callers act in."""
+        players = ctx.round_players
+        if players and self.name in players and len(players) > 1:
+            idx = players.index(self.name)
+            return [players[(idx + 1 + i) % len(players)] for i in range(len(players) - 1)]
+        return []
 
     # ── The call model: their EV calc, reconstructed ──────────────────────────
 
@@ -413,6 +409,7 @@ class Littlefinger:
             self._held_outcomes = len(ctx.outcomes)
             self._held = {}
             self._sup = {}
+            self._sup_sig = {}
             self._supcache.clear()
             self._held_seen = len(bets)
             while (
@@ -420,7 +417,7 @@ class Littlefinger:
                 and (bets[self._held_seen - 1]["game"], bets[self._held_seen - 1]["round"]) == key
             ):
                 self._held_seen -= 1
-            self._held_start = self._held_seen  # first bet entry of this round
+            self._held_start = self._held_seen  # first bet_history index of the current round
         stats = ctx.stats
         counts = stats.dice_counts if stats else {}
 
@@ -436,7 +433,7 @@ class Littlefinger:
             sup = self._sup.get(player)
             if sup is None:
                 d_j = counts.get(player, 0)
-                sup = [0.0] + [d_j * (2 / 6 if (wild and f != 1) else 1 / 6) for f in range(1, 7)]
+                sup = [0.0] + [d_j * self._p_hit(f, wild) for f in range(1, 7)]
                 self._sup[player] = sup
             return sup
 
@@ -458,9 +455,11 @@ class Littlefinger:
             d_j = counts.get(player, 0)
             if player != self.name and d_j:
                 est = est_for(player)
-                p_hit = 2 / 6 if (wild and bet.face != 1) else 1 / 6
-                implied = bet.quantity - (total - d_j) * p_hit
+                implied = bet.quantity - (total - d_j) * self._p_hit(bet.face, wild)
                 est[bet.face] = min(float(d_j), max(est[bet.face], implied))
+                faces = self._sup_sig.setdefault(player, set())
+                revisit = bet.face in faces
+                faces.add(bet.face)
                 if prev is not None:
                     q0, f0 = prev["bet"].quantity, prev["bet"].face
                     if bet.quantity > q0:
@@ -480,7 +479,9 @@ class Littlefinger:
                             # An informative raise SETS the estimate (a f6
                             # squeeze revises support DOWN from uniform);
                             # a cheap one (implied ~ 0) says nothing.
-                            sup[bet.face] = min(float(d_j), w * implied)
+                            rel = self._rel_for(player, cls)
+                            sup[bet.face] = min(float(d_j), w * implied * rel)
+                            self._rel_events.append((key, player, cls, implied, bet.face, wild))
                         if cls == "f6":
                             skip = self.SUP_SKIP_F6
                         elif cls == "f_lo":
@@ -491,6 +492,10 @@ class Littlefinger:
                             sup[g] = max(0.0, sup[g] - skip)
                         if cls == "f6" and f0 >= 2:
                             sup[f0] = min(float(d_j), sup[f0] + self.SUP_UNDER_F6)
+                        if revisit and self.SUP_REV:
+                            # Back to a face they already bid — the pattern is
+                            # the evidence, even when implied says nothing.
+                            sup[bet.face] = min(float(d_j), sup[bet.face] + self.SUP_REV)
             prev = e
             if bet.face == 1:
                 wild = False  # a 1-face bid closes wilds for the rest of the round
@@ -500,6 +505,23 @@ class Littlefinger:
         est = self._held.get(player)
         return int(est[face]) if est is not None else 0
 
+    def _rel_score(self, player, cls, implied, actual) -> None:
+        """Fold one revealed informative raise into the reliability stats."""
+        s = self._rel.setdefault((player, cls), [0.0, 0.0])
+        s[0] += min(3.0, actual / implied)
+        s[1] += 1.0
+        if s[1] > 240.0:  # cap: halve both so the mean can drift
+            s[0] *= 0.5
+            s[1] *= 0.5
+
+    def _rel_for(self, player, cls) -> float:
+        """Reliability multiplier for this raiser's class, shrunk to 1.0."""
+        s = self._rel.get((player, cls))
+        if s is None:
+            return 1.0
+        r = (s[0] + self.SUP_REL_SHRINK) / (s[1] + self.SUP_REL_SHRINK)
+        return min(1.6, max(0.3, r))
+
     def _consume_round(self, outcome, round_bets) -> None:
         if not round_bets:
             return
@@ -508,8 +530,34 @@ class Littlefinger:
         def wild_at(upto):
             return not any(e["bet"].face == 1 for e in round_bets[:upto])
 
+        def claim_at(upto, face, decider):
+            # Same-face claim pressure on the judged bid: summed qty of
+            # same-face round bids by others, per unseen die of the decider.
+            unseen = max(1, total - len(hands[decider]))
+            return (
+                sum(
+                    e["bet"].quantity
+                    for e in round_bets[:upto]
+                    if e["bet"].face == face and e["player"] != decider
+                )
+                / unseen
+            )
+
         # Passes: each bettor after the opener declined to call the prior bet.
         hands = outcome["hands"]
+        if self._rel_events:
+            # Score this round's informative raises against the reveal. Keep
+            # only events from later rounds (folded before the outcome
+            # landed); past-round events can never match and are dropped.
+            rkey = (outcome["game"], outcome["round"])
+            keep = []
+            for k, player, cls, implied, face, w in self._rel_events:
+                if k != rkey or player not in hands:
+                    if k > rkey:
+                        keep.append((k, player, cls, implied, face, w))
+                    continue
+                self._rel_score(player, cls, implied, self._count(list(hands[player]), face, w))
+            self._rel_events = keep
         for i in range(1, len(round_bets)):
             player = round_bets[i]["player"]
             if player == self.name or player not in hands:
@@ -520,6 +568,7 @@ class Littlefinger:
                 self._p_priv(hands[player], faced.quantity, faced.face, total, wild_at(i)),
                 called=False,
                 d=len(hands[player]),
+                claim=claim_at(i, faced.face, player),
             )
         # The call: the challenger called the final bet.
         challenger = outcome["challenger"]
@@ -536,11 +585,9 @@ class Littlefinger:
                 ),
                 called=True,
                 d=len(hands[challenger]),
+                claim=claim_at(len(round_bets), final.face, challenger),
             )
-        if self.CALL_FIT:
-            self._label_honesty(outcome, round_bets, hands, total, wild_at)
-        if self.HON_TEMP:
-            self._resolve_self(round_bets)
+        self._label_honesty(outcome, round_bets, hands, total, wild_at)
 
     def _label_honesty(self, outcome, round_bets, hands, total, wild_at) -> None:
         """Per-bidder honesty labels: every opponent bid, scored by the
@@ -573,34 +620,6 @@ class Littlefinger:
         if len(labels) > self.TAU_FIT_CAP:
             del labels[: len(labels) - self.TAU_FIT_CAP]
 
-    def _resolve_self(self, round_bets) -> None:
-        """Thermostat observations: our bids this round, called or raised over.
-
-        Every consumed round ended in a call, so our last bid was called iff
-        it is the round's final bet; all our earlier ones passed. The FIFO is
-        aligned on (qty, face); heads that don't match belong to skipped
-        (penalty) rounds and are dropped.
-        """
-        for i, e in enumerate(round_bets):
-            if e["player"] != self.name:
-                continue
-            b = e["bet"]
-            while self._self_bids and self._self_bids[0][:2] != (b.quantity, b.face):
-                self._self_bids.pop(0)
-            if not self._self_bids:
-                return
-            p, judge = self._self_bids.pop(0)[2:4]
-            if self.TEMP_P_LO <= p <= self.TEMP_P_HI:
-                called = i == len(round_bets) - 1
-                if called:
-                    self._temp_a += 1.0
-                else:
-                    self._temp_b += 1.0
-                if judge is not None:
-                    store = self._opp_a if called else self._opp_b
-                    store[judge] = store.get(judge, 0.0) + 1.0
-                self._temp_obs += 1
-
     def _p_priv(self, their_hand, qty, face, total, wilds) -> float:
         """P(bid holds) from THEIR seat — exact, since outcomes reveal hands."""
         own = self._count(list(their_hand), face, wilds)
@@ -608,10 +627,9 @@ class Littlefinger:
         if need <= 0:
             return 1.0
         unseen = total - len(their_hand)
-        p_hit = 2 / 6 if (wilds and face != 1) else 1 / 6
-        return self._binom_sf(unseen, p_hit, need)
+        return self._binom_sf(unseen, self._p_hit(face, wilds), need)
 
-    def _record_priv(self, player, p, called, d) -> None:
+    def _record_priv(self, player, p, called, d, claim=None) -> None:
         store = self._priv_call if called else self._priv_pass
         s = store.setdefault(player, [0.0, 0])
         s[0] += p
@@ -621,6 +639,62 @@ class Littlefinger:
         self._labels_total[player] = self._labels_total.get(player, 0) + 1
         if len(labels) > self.TAU_FIT_CAP:
             del labels[: len(labels) - self.TAU_FIT_CAP]
+        if claim is not None and 0.076 <= p <= 0.378:
+            g = self._pgap.setdefault(player, [])
+            g.append((p, claim, called))
+            if len(g) > self.POGATE_CAP:
+                del g[: len(g) - self.POGATE_CAP]
+            fit = self._pgfit.get(player)
+            if fit is None or len(g) - fit[2] >= self.POGATE_EVERY:
+                self._pgate_fit(player)
+
+    def _pgate_fit(self, player) -> None:
+        """IRLS refit of the player's claim coefficient over the window.
+
+        call ~ 1 + logit(p) + claim — the audit estimator, online. Only the
+        claim coef and its SE are kept; the gate reads sign + z-score.
+        """
+        from math import log
+
+        rows = self._pgap.get(player)
+        if not rows:
+            return
+        x = [[0.0] * 3 for _ in range(3)]
+        beta = [0.0, 0.0, 0.0]
+        for _ in range(15):
+            grad = [0.0, 0.0, 0.0]
+            for r in range(3):
+                x[r] = [0.0, 0.0, 0.0]
+            for p, claim, called in rows:
+                lp = log(p / (1.0 - p))
+                z = max(-30.0, min(30.0, beta[0] + beta[1] * lp + beta[2] * claim))
+                pr = self._sig(z)
+                w = max(1e-9, pr * (1.0 - pr))
+                r_ = (1.0 if called else 0.0) - pr
+                grad[0] += r_
+                grad[1] += lp * r_
+                grad[2] += claim * r_
+                x[0][0] += w
+                x[0][1] += w * lp
+                x[0][2] += w * claim
+                x[1][1] += w * lp * lp
+                x[1][2] += w * lp * claim
+                x[2][2] += w * claim * claim
+            x[1][0], x[2][0], x[2][1] = x[0][1], x[0][2], x[1][2]
+            step = _solve3(x, grad)
+            if step is None:
+                return
+            for a in range(3):
+                beta[a] += step[a]
+        det = (
+            x[0][0] * (x[1][1] * x[2][2] - x[1][2] * x[1][2])
+            - x[0][1] * (x[0][1] * x[2][2] - x[1][2] * x[0][2])
+            + x[0][2] * (x[0][1] * x[1][2] - x[1][1] * x[0][2])
+        )
+        if abs(det) < 1e-18:
+            return
+        se = (max(0.0, (x[0][0] * x[1][1] - x[0][1] * x[0][1]) / det)) ** 0.5
+        self._pgfit[player] = (beta[2], se, len(rows))
 
     @staticmethod
     def _sig(z) -> float:
@@ -750,35 +824,33 @@ class Littlefinger:
         if not d_j:
             q = self._p_holds_public(qty, face, total, wilds)
             return min(1.0, self.POP_BASE_RATE * 2.0 * (1.0 - q))
-        p_hit = 2 / 6 if (wilds and face != 1) else 1 / 6
+        p_hit = self._p_hit(face, wilds)
         tau = self._tau(player, d_j)
         slope = self._slope(player, d_j)
         k_min = self._held_floor(player, face)
-        if k_min:
-            den = self._binom_sf(d_j, p_hit, k_min)
-            p_call = 0.0
-            for k in range(k_min, d_j + 1):
-                pmf = comb(d_j, k) * (p_hit**k) * ((1 - p_hit) ** (d_j - k))
-                their_p = self._binom_sf(total - d_j, p_hit, qty - k)
-                p_call += pmf * self._sig((tau - their_p) / slope)
-            return min(1.0, p_call / den)
+        den = self._binom_sf(d_j, p_hit, k_min) if k_min else 1.0
+        pmfs = self._pmf(d_j, p_hit)
         p_call = 0.0
-        for k in range(d_j + 1):
-            pmf = comb(d_j, k) * (p_hit**k) * ((1 - p_hit) ** (d_j - k))
+        for k in range(k_min, d_j + 1):
             their_p = self._binom_sf(total - d_j, p_hit, qty - k)
-            p_call += pmf * self._sig((tau - their_p) / slope)
-        return min(1.0, p_call)
+            p_call += pmfs[k] * self._sig((tau - their_p) / slope)
+        p = min(1.0, p_call / den)
+        return self._platt(p)
+
+    def _platt(self, p: float) -> float:
+        """Audit-fitted recalibration of the call-door mixture."""
+        from math import log
+
+        p = min(1.0 - 1e-9, max(1e-9, p))
+        return self._sig(self.CAL_A + self.CAL_B * log(p / (1.0 - p)))
 
     def _p_any_call(self, ctx, qty, face, total, wilds) -> float:
         """P(at least one player left to act calls this bid)."""
         players = ctx.round_players
-        stats = ctx.stats
         if players and self.name in players:
-            idx = players.index(self.name)
-            remaining = [players[(idx + 1 + i) % len(players)] for i in range(len(players) - 1)]
             p_none = 1.0
-            for p in remaining:
-                p_none *= 1.0 - self._p_call_struct(stats, p, qty, face, total, wilds)
+            for p in self._seat_order(ctx):
+                p_none *= 1.0 - self._p_call_struct(ctx.stats, p, qty, face, total, wilds)
             return min(1.0, max(0.0, 1.0 - p_none))
         q = self._p_holds_public(qty, face, total, wilds)
         return min(1.0, self.POP_BASE_RATE * 2.0 * (1.0 - q))
@@ -789,6 +861,14 @@ class Littlefinger:
     def _count(hand, face, wilds) -> int:
         return hand.count(face) + (hand.count(1) if (wilds and face != 1) else 0)
 
+    @staticmethod
+    def _p_hit(face, wilds) -> float:
+        return 2 / 6 if (wilds and face != 1) else 1 / 6
+
+    @staticmethod
+    def _pmf(n, p) -> list[float]:
+        return [comb(n, k) * (p**k) * ((1 - p) ** (n - k)) for k in range(n + 1)]
+
     def _p_holds(self, qty, face, hand, total, wilds) -> float:
         """P(bid holds) from our seat: our dice known, the rest uniform."""
         own = self._count(hand, face, wilds)
@@ -798,8 +878,7 @@ class Littlefinger:
         unseen = total - len(hand)
         if unseen <= 0:
             return 0.0
-        p_hit = 2 / 6 if (wilds and face != 1) else 1 / 6
-        return self._binom_sf(unseen, p_hit, need)
+        return self._binom_sf(unseen, self._p_hit(face, wilds), need)
 
     def _sup_suffix(self, ctx, face, total, wilds, hand_len) -> list[float]:
         """Suffix sums of the table's support distribution for one face.
@@ -815,7 +894,7 @@ class Littlefinger:
         cached = self._supcache.get(key)
         if cached is not None:
             return cached
-        p_hit = 2 / 6 if (wilds and face != 1) else 1 / 6
+        p_hit = self._p_hit(face, wilds)
         counts = ctx.stats.dice_counts if ctx.stats else {}
         dist = [1.0]
         known = 0
@@ -836,15 +915,11 @@ class Littlefinger:
             mu = est[face] if est is not None else d_j * p_hit
             mu = d_j * p_hit + self.SUP_SHRINK * (mu - d_j * p_hit)
             p_adj = min(0.99, max(0.01, mu / d_j))
-            pmf = [comb(d_j, k) * (p_adj**k) * ((1 - p_adj) ** (d_j - k)) for k in range(d_j + 1)]
-            dist = convolve(dist, pmf)
+            dist = convolve(dist, self._pmf(d_j, p_adj))
             known += d_j
         lump = total - hand_len - known
         if lump > 0:
-            pmf = [
-                comb(lump, k) * (p_hit**k) * ((1 - p_hit) ** (lump - k)) for k in range(lump + 1)
-            ]
-            dist = convolve(dist, pmf)
+            dist = convolve(dist, self._pmf(lump, p_hit))
         suffix = [0.0] * (len(dist) + 1)
         acc = 0.0
         for s in range(len(dist) - 1, -1, -1):
