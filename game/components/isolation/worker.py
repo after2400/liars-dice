@@ -8,7 +8,9 @@ import + instantiate the player under enforce().
 import importlib.util
 import os
 import random
+import sys
 import tempfile
+import traceback
 from dataclasses import dataclass
 
 from game.components.isolation import protocol
@@ -109,4 +111,10 @@ def worker_main(conn, cfg: WorkerConfig):
                 action = player.algo(ctx)
             conn.send_bytes(protocol.encode_result(action))
         except Exception:
+            # Unlike a bootstrap-time crash (import/__init__), which propagates
+            # out of worker_main and gets printed by multiprocessing's default
+            # excepthook, this is caught deliberately so one bad turn doesn't
+            # kill the worker. Print it ourselves so it still reaches the
+            # parent's inherited stderr instead of vanishing silently.
+            traceback.print_exc(file=sys.stderr)
             conn.send_bytes(protocol.encode_result(protocol.WORKER_ERROR))
