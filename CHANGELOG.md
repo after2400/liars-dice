@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v3.0.1 (2026-08-05)
+
+### 🐞 Bug Fixes
+
+- **engine**: Print traceback on isolated worker per-turn crash
+  ([`316d78a`](https://github.com/after2400/liars-dice/commit/316d78ab2e82835c63fe1b40e3a6363573472a4c))
+
+The per-turn except block in worker_main caught algo() crashes and sent back WORKER_ERROR without ever logging the exception, so validate.py's "see traceback above" message had nothing to point to. A bootstrap crash (import/__init__) already propagates and gets printed by multiprocessing's default excepthook, so this makes the per-turn path consistent with that.
+
+Fixes #211
+
+
 ## v3.0.0 (2026-07-16)
 
 ### ✨ Features
