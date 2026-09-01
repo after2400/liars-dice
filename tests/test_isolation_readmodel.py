@@ -239,6 +239,51 @@ def test_bet_capacity_exhaustion_raises_buffer_error():
         w.unlink()
 
 
+def test_reader_keeps_no_writable_handle_to_the_block():
+    """Regression for the players/malignant.py exploit (see memory
+    project_malignant_shm_sabotage): ReadModelReader only ever reads through the
+    OS-enforced read-only `_ro_mmap`, but used to also keep the writable
+    `shared_memory.SharedMemory` object it opened along the way as `self._shm` --
+    reachable via plain reflection (`getattr(reader, '_shm').buf`) by any code
+    that gets a handle to the reader instance, regardless of what the class's own
+    methods touch. `_shm` must not survive construction in a form that exposes a
+    writable buffer."""
+    w = ReadModelWriter(size_bytes=1 << 20)
+    try:
+        w.append_outcome(
+            {
+                "game": 1,
+                "round": 1,
+                "hands": {"Alice": (1, 2, 3), "Bob": (4, 5)},
+                "final_bet": Bet(2, 3, "Alice"),
+                "bidder": "Alice",
+                "challenger": "Bob",
+                "bet_held": True,
+                "loser": "Bob",
+            }
+        )
+        r = ReadModelReader(w.name)
+        try:
+            # Replicates players/malignant.py's _sabotage(): reach a writable
+            # handle to the block via reflection on the reader instance, then
+            # stomp the outcome-data region with it.
+            with pytest.raises(AttributeError):
+                buf = getattr(r, "_shm").buf
+                layout = r._layout
+                buf[layout.outcome_data_offset + 4 : layout.outcome_data_offset + 8] = (
+                    b"\xff\xff\xff\xff"
+                )
+            # The outcome must still be intact and readable.
+            view = r.outcomes_view()
+            assert len(view) == 1
+            assert view[0]["loser"] == "Bob"
+        finally:
+            r.close()
+    finally:
+        w.close()
+        w.unlink()
+
+
 def _child_attempts_write(name, result_q):
     r = ReadModelReader(name)
     try:

@@ -17,10 +17,16 @@ block. The spike confirmed re-opening the block's fd with
 `mmap.mmap(shm._fd, size, prot=mmap.PROT_READ)` gives a true OS-enforced
 read-only mapping: writes through it raise `TypeError` at the syscall/mmap
 level, not just at a Python wrapper level. `ReadModelReader` uses that path
-exclusively and never touches the writable `shm.buf` at all. `SharedMemory._fd`
-is a private attribute, POSIX-only (this project targets POSIX per
-CLAUDE.md — darwin/linux); if a future CPython removes it we raise a clear
-`RuntimeError` rather than silently falling back to a weaker guard.
+exclusively and never touches the writable `shm.buf` at all, and — after a
+real exploit (`players/malignant.py`, see memory project_malignant_shm_sabotage)
+reached the writable `SharedMemory` object via reflection on a live reader
+instance and used it to corrupt the outcome-data region — does not keep that
+object around after construction either: it's closed before `__init__`
+returns, once the read-only `_ro_mmap` (its own independent OS mapping) is
+established. `SharedMemory._fd` is a private attribute, POSIX-only (this
+project targets POSIX per CLAUDE.md — darwin/linux); if a future CPython
+removes it we raise a clear `RuntimeError` rather than silently falling back
+to a weaker guard.
 
 The spike also measured latency: 10k fixed-size record append/read came to
 ~0.1us per record (struct.pack_into / unpack_from directly against a shared
@@ -427,25 +433,39 @@ class ReadModelReader:
     """Child-side handle: maps the block read-only and answers turn-scoped views."""
 
     def __init__(self, name: str):
-        # Open once with the normal (writable-by-default) handle purely to read the
-        # header and obtain the fd — we never read/write through self._shm.buf itself.
-        self._shm = shared_memory.SharedMemory(name=name)
-        magic, size_bytes, _bet_count, _outcome_count, _write_pos, _active, _len0, _len1 = (
-            struct.unpack_from(_HEADER_FMT, self._shm.buf, 0)
-        )
-        if magic != _MAGIC:
-            raise ValueError(f"shared memory block {name!r} is not a valid read-model block")
-        self._layout = _compute_layout(size_bytes)
+        # Open the normal (writable-by-default) handle only transiently, purely to
+        # read the header and obtain the fd — never stored on self. Player code
+        # running in the same worker can reach any attribute this instance holds
+        # via plain reflection (e.g. sys._getframe() stack-walking from inside
+        # algo()), so keeping the writable SharedMemory object around as e.g.
+        # self._shm would hand out a live writable buf to anyone who finds this
+        # reader, regardless of what ReadModelReader's own methods touch — exactly
+        # the bypass players/malignant.py used (see memory
+        # project_malignant_shm_sabotage) to corrupt the outcome-data region out
+        # from under every other player in the game. Closing `shm` before
+        # returning does not invalidate `_ro_mmap` below: the read-only mapping is
+        # its own OS-level object once mmap() returns, independent of the fd used
+        # to create it.
+        shm = shared_memory.SharedMemory(name=name)
         try:
-            fd = self._shm._fd  # noqa: SLF001 — see module docstring: spike-confirmed,
-            # this is the only way to get a true OS-enforced read-only mapping.
-        except AttributeError as e:  # pragma: no cover - defensive, not expected on POSIX
-            raise RuntimeError(
-                "ReadModelReader requires multiprocessing.shared_memory.SharedMemory._fd "
-                "(POSIX-only, private) to open a read-only mapping; this CPython build "
-                "does not expose it."
-            ) from e
-        self._ro_mmap = mmap.mmap(fd, self._shm.size, prot=mmap.PROT_READ)
+            magic, size_bytes, _bet_count, _outcome_count, _write_pos, _active, _len0, _len1 = (
+                struct.unpack_from(_HEADER_FMT, shm.buf, 0)
+            )
+            if magic != _MAGIC:
+                raise ValueError(f"shared memory block {name!r} is not a valid read-model block")
+            self._layout = _compute_layout(size_bytes)
+            try:
+                fd = shm._fd  # noqa: SLF001 — see module docstring: spike-confirmed,
+                # this is the only way to get a true OS-enforced read-only mapping.
+            except AttributeError as e:  # pragma: no cover - defensive, not expected on POSIX
+                raise RuntimeError(
+                    "ReadModelReader requires multiprocessing.shared_memory.SharedMemory._fd "
+                    "(POSIX-only, private) to open a read-only mapping; this CPython build "
+                    "does not expose it."
+                ) from e
+            self._ro_mmap = mmap.mmap(fd, shm.size, prot=mmap.PROT_READ)
+        finally:
+            shm.close()
 
     def _read_header(self):
         return struct.unpack_from(_HEADER_FMT, self._ro_mmap, 0)
@@ -487,4 +507,3 @@ class ReadModelReader:
 
     def close(self) -> None:
         self._ro_mmap.close()
-        self._shm.close()

@@ -138,4 +138,4 @@ Before writing a commit message, check:
 
 ## PR and commit attribution
 
-All PRs must use `🤖 Co-Authored with [Claude Code](https://claude.com/claude-code)` in the body footer — not "Generated with". This project is a genuine collaboration.
+All AI-assisted PRs must credit the AI in the body footer — a `Co-Authored with` (PRs) or `Filed with` (issues) line naming the **actual tool and model you are**, not a generic "Generated with". Claude Code sessions use `🤖 Co-Authored with [Claude Code](https://claude.com/claude-code)`; any other agent must name itself rather than copying that example. This project is a genuine collaboration.
