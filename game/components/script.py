@@ -300,6 +300,20 @@ def game_orchestrator(
                     loser = player_idx
                     if stats is not None:
                         stats.record_penalty(player.name)
+                elif current_bet is None and not (
+                    action.face in FACES and 1 <= action.quantity <= total_dice
+                ):
+                    # The opening bid of a round has no prior bet for bet_validator to
+                    # check it against, so it was never range-checked at all (#213):
+                    # quantity 0 makes bet_grader's `n >= bet.quantity` unconditionally
+                    # true (a free win for anyone who calls liar on it, and the opener
+                    # can never lose from its own opening bid), and a face outside 1-6
+                    # is graded as if it were a 1x1 bet while still locking in
+                    # ones_allowed=False for the round.
+                    logger.warning(f"{player.name} made invalid opening bid [{action}] - penalised")
+                    loser = player_idx
+                    if stats is not None:
+                        stats.record_penalty(player.name)
                 elif current_bet is not None and not bet_validator(current_bet, action):
                     logger.warning(f"{player.name} made invalid bid [{action}] - penalised")
                     loser = player_idx
