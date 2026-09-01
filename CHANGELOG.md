@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v3.0.2 (2026-09-01)
+
+### 🛡️ Security
+
+- **security** · fix: Drop writable shm handle from isolated read-model reader
+  ([`1d21625`](https://github.com/after2400/liars-dice/commit/1d216252eabde564d025bbd4691bb3edef57a216))
+
+ReadModelReader kept the writable shared_memory.SharedMemory object it opened as self._shm, reachable via reflection (getattr(reader, '_shm').buf) by any player code that gets a handle to the reader instance -- regardless of the class's own methods only ever reading through the OS-enforced read-only mmap. A PoC bot used exactly this to corrupt the shared outcome-data region, crashing every other player in the game that reads ctx.outcomes with pickle.UnpicklingError and getting them penalised.
+
+Fix: open the writable handle as a local variable and close it once the independent read-only mmap is established -- closing it doesn't invalidate that mapping, so no writable reference to the block survives construction.
+
+Also updates the PR/commit attribution rule in CLAUDE.md to name the actual AI tool/model rather than a generic line, and adds the AGENTS.md symlink so non-Claude agents pick up the same project rules.
+
+
 ## v3.0.1 (2026-08-05)
 
 ### 🐞 Bug Fixes
