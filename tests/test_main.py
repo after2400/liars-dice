@@ -1061,6 +1061,81 @@ def test_bet_history_includes_dice_count():
         assert 1 <= entry["dice_count"] <= 5
 
 
+def test_zero_quantity_opening_bid_is_penalised():
+    """Regression for #213: the opening bid of a round was never range-checked,
+    so Bet(0, ...) was accepted -- bet_grader's `n >= bet.quantity` is
+    unconditionally true for quantity 0, so any opponent calling liar on it
+    would win a die for free while the opener could never lose from its own
+    opening bid. Two symmetric zero-quantity openers means every single round
+    is decided by the new opening-bid check alone (no bet is ever legal, so no
+    challenge/reveal ever happens) -- avoids depending on which player the
+    orchestrator's internal RNG happens to pick to open first."""
+    from game.components.stats import GameStats
+
+    class ZeroOpener:
+        def __init__(self, name):
+            self.name = name
+
+        def algo(self, ctx):
+            return Bet(0, 5, self.name)  # illegal at any point, opening or not
+
+    stats = GameStats()
+    bet_history: list[dict] = []
+    game_orchestrator([ZeroOpener("P1"), ZeroOpener("P2")], stats=stats, bet_history=bet_history)
+
+    assert sum(stats.penalty_count.values()) > 0
+    assert bet_history == [], "a quantity-0 bid must never be accepted as a legal bid"
+
+
+def test_out_of_range_face_opening_bid_is_penalised():
+    """Regression for #213: an opening face outside 1-6 (e.g. 1x7) was accepted
+    and graded as if it were a 1x1 bet (wilds still count, 7s don't), giving it
+    a near-certain hold rate while also locking in ones_allowed=False --
+    penalising any opponent who later bids on 1s that round. Same symmetric-
+    opener structure as the zero-quantity test, for the same reason."""
+    from game.components.stats import GameStats
+
+    class BadFaceOpener:
+        def __init__(self, name):
+            self.name = name
+
+        def algo(self, ctx):
+            return Bet(1, 7, self.name)  # face outside 1-6, illegal at any point
+
+    stats = GameStats()
+    bet_history: list[dict] = []
+    game_orchestrator(
+        [BadFaceOpener("P1"), BadFaceOpener("P2")], stats=stats, bet_history=bet_history
+    )
+
+    assert sum(stats.penalty_count.values()) > 0
+    assert bet_history == [], "a face-7 bid must never be accepted as a legal bid"
+
+
+def test_valid_opening_bid_is_not_penalised():
+    """Non-regression for #213's fix: a legitimate, in-range opening bid
+    (1 <= quantity <= total_dice, face in FACES) must never trip the new
+    range check. Both players always open on a minimal, always-in-range
+    Bet(1, 3, ...) and always call liar on anything raised over it, so the
+    only die losses across the whole game come from real challenge/reveal
+    outcomes -- penalty_count must stay empty throughout."""
+    from game.components.stats import GameStats
+
+    class HonestOpener:
+        def __init__(self, name):
+            self.name = name
+
+        def algo(self, ctx):
+            if ctx.prior_bet is None:
+                return Bet(1, 3, self.name)
+            return None  # always call liar on a raise
+
+    stats = GameStats()
+    game_orchestrator([HonestOpener("P1"), HonestOpener("P2")], stats=stats)
+
+    assert dict(stats.penalty_count) == {}
+
+
 def _make_outcome(bidder, challenger, bet_held, loser, hands, face=2):
     """Helper: build a minimal outcome dict for stats testing."""
     from game.components.bets import Bet
