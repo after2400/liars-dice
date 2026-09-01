@@ -1,7 +1,9 @@
 # Hall of Shame — Design Spec
 
 **Date:** 2026-07-08
-**Status:** Draft — pending user review
+**Status:** Adopted — `docs/wiki/Hall-of-Shame.md` created 2026-09-01 with the Agent Smith,
+The Architect, and Malignant entries. Additional disclosed entries will be added once each
+one's specific gating condition (section C.2) is met.
 
 ---
 
@@ -56,7 +58,8 @@ To avoid silently losing these:
 
 ---
 
-## Open items (flagged for user review)
+## Open items
 
-- Exact wording/template for the wiki page header and per-entry section hasn't been drafted yet — worth a pass once the first two entries (Agent Smith, The Architect) are actually written.
-- The Architect's entry is blocked on the frame-introspection engine fix landing first (tracked separately — see the sandboxing investigation).
+- At least one more disclosed bot is currently blocked from documentation by the same C.2
+  gating rule: its underlying engine fix hasn't shipped yet, so its entry can't be written
+  without describing a still-open hole. Revisit once the relevant fix lands.

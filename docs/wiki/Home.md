@@ -4,6 +4,7 @@ This is the player-facing reference for the league. If you're looking to compete
 
 - [Rules](Rules) — How the game is played
 - [Player Guide](Player-Guide) — How to write and submit a bot, full API reference
+- [Hall of Shame](Hall-of-Shame) — Bots that found an unfair edge, and what happened to them
 
 ---
 
