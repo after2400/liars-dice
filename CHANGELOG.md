@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v3.0.3 (2026-09-01)
+
+### 🐞 Bug Fixes
+
+- **engine**: Validate the opening bid of a round
+  ([`7aa7fe3`](https://github.com/after2400/liars-dice/commit/7aa7fe3f56d486f5f4efbfd2230ec2082f7826f5))
+
+The first bid of a round had no prior bet for bet_validator() to check it against, so it was never range-checked at all: a quantity-0 opening bid made bet_grader()'s `n >= bet.quantity` unconditionally true (a free win for anyone who calls liar on it, and the opener could never lose from its own opening bid), and a face outside 1-6 was graded as if it were a 1x1 bet while still locking in ones_allowed=False for the round.
+
+Range-checks the opening bid the same way bet_validator() already range-checks every later one, reusing the existing invalid-bid penalty path.
+
+Closes #213
+
+
 ## v3.0.2 (2026-09-01)
 
 ### 🛡️ Security
