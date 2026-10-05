@@ -1,5 +1,5 @@
 total_runs: 192
-last_updated: '2026-09-28T17:24:37Z'
+last_updated: '2026-10-05T17:42:40Z'
 current_season_issue: 189
 players:
   Alice:
@@ -7,404 +7,232 @@ players:
     github_username: zachaustin01
     date_added: '2026-05-22T15:47:31Z'
     tier: L1
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 2766
-        games: 24000
-        win_pct: 11.5
+    tier_stats: {}
   Bruno:
     display_name: Bruno
     github_username: zachaustin01
     date_added: '2026-05-22T15:47:31Z'
     tier: L1
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 2790
-        games: 24000
-        win_pct: 11.6
+    tier_stats: {}
   Cleo:
     display_name: Cleo
     github_username: zachaustin01
     date_added: '2026-05-22T15:47:31Z'
     tier: L1
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 353
-        games: 24000
-        win_pct: 1.5
+    tier_stats: {}
   Diego:
     display_name: Diego
     github_username: zachaustin01
     date_added: '2026-05-22T16:10:13Z'
-    tier: L1
-    tier_since: '2026-08-17T09:43:23Z'
+    tier: CH
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      CH:
-        wins: 1828
-        games: 18000
-        win_pct: 10.2
-      L1:
-        wins: 1709
-        games: 6000
-        win_pct: 28.5
+    tier_stats: {}
   Finn:
     display_name: Finn
     github_username: after2400
     date_added: '2026-06-08T20:41:19Z'
     tier: L1
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 3951
-        games: 24000
-        win_pct: 16.5
+    tier_stats: {}
     avatar: hdyiihba/Finn_Carter.png
   Eva:
     display_name: Eva
     github_username: after2400
     date_added: '2026-06-09T20:12:00Z'
     tier: CH
-    tier_since: '2026-09-28T17:16:57Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      CH:
-        wins: 1365
-        games: 15000
-        win_pct: 9.1
-      L1:
-        wins: 3505
-        games: 12000
-        win_pct: 29.2
+    tier_stats: {}
     avatar: hdyiihba/Eva_Longoria.png
   Sloane:
     display_name: Sloane
     github_username: after2400
     date_added: '2026-06-09T20:12:00Z'
     tier: CH
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      CH:
-        wins: 2611
-        games: 24000
-        win_pct: 10.9
+    tier_stats: {}
     avatar: hdyiihba/Sloane_Avery.png
   Zara:
     display_name: Zara
     github_username: after2400
     date_added: '2026-06-09T20:12:00Z'
     tier: CH
-    tier_since: '2026-09-21T15:36:55Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      CH:
-        wins: 1563
-        games: 16000
-        win_pct: 9.8
-      L1:
-        wins: 2845
-        games: 10000
-        win_pct: 28.4
+    tier_stats: {}
     avatar: hdyiihba/Zara.png
   Remy:
     display_name: Remy
     github_username: after2400
     date_added: '2026-06-09T20:12:00Z'
     tier: L1
-    tier_since: '2026-07-21T11:13:55Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 5078
-        games: 24000
-        win_pct: 21.2
-      CH:
-        wins: 46
-        games: 1000
-        win_pct: 4.6
+    tier_stats: {}
     avatar: hdyiihba/Remy_Beasley.png
   Topper:
     display_name: Topper
     github_username: after2400
     date_added: '2026-06-11T03:29:08Z'
     tier: L1
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 599
-        games: 24000
-        win_pct: 2.5
+    tier_stats: {}
     avatar: hdyiihba/Topper.png
   Pyro:
     display_name: "Liar\xB2, Pants on Fire"
     github_username: after2400
     date_added: '2026-06-11T03:32:43Z'
     tier: L1
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 887
-        games: 24000
-        win_pct: 3.7
+    tier_stats: {}
     avatar: hdyiihba/Liar_Liar.png
   Nuke:
     display_name: Nuke LaLoosh
     github_username: after2400
     date_added: '2026-06-16T04:17:48Z'
     tier: L1
-    tier_since: '2026-09-07T14:54:15Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 6786
-        games: 23000
-        win_pct: 29.5
-      CH:
-        wins: 724
-        games: 9000
-        win_pct: 8.0
+    tier_stats: {}
     avatar: hdyiihba/Nuke_LaLoosh.png
   Stewie:
     display_name: Stewie
     github_username: zachaustin01
     date_added: '2026-06-17T20:24:22Z'
-    tier: L1
-    tier_since: '2026-09-28T17:24:37Z'
+    tier: CH
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      CH:
-        wins: 2538
-        games: 23000
-        win_pct: 11.0
-      PRM:
-        wins: 52
-        games: 1000
-        win_pct: 5.2
-      L1:
-        wins: 661
-        games: 2000
-        win_pct: 33.1
+    tier_stats: {}
   Rick:
     display_name: Rick Sanchez
     github_username: zachaustin01
     date_added: '2026-06-17T21:58:43Z'
     tier: L1
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 3738
-        games: 24000
-        win_pct: 15.6
+    tier_stats: {}
   HonestAbe:
     display_name: Honest Abe
     github_username: DNiev
     date_added: '2026-06-18T01:30:55Z'
-    tier: L1
-    tier_since: '2026-08-31T16:50:37Z'
+    tier: CH
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      CH:
-        wins: 434
-        games: 6000
-        win_pct: 7.2
-      L1:
-        wins: 6246
-        games: 22000
-        win_pct: 28.4
+    tier_stats: {}
     avatar: dfcgw5cr6/Honest_Abe.jpg
   CalCulated:
     display_name: Cal Culatid
     github_username: DNiev
     date_added: '2026-06-18T03:28:08Z'
-    tier: CH
-    tier_since: '2026-07-23T11:06:51Z'
+    tier: L1
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 957
-        games: 3000
-        win_pct: 31.9
-      CH:
-        wins: 2327
-        games: 23000
-        win_pct: 10.1
+    tier_stats: {}
     avatar: dfcgw5cr6/Cal_Culatid.jpg
   PeterGriffin:
     display_name: Peter Griffin
     github_username: DNiev
     date_added: '2026-06-18T23:29:14Z'
     tier: CH
-    tier_since: '2026-07-20T11:49:55Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      CH:
-        wins: 2625
-        games: 23000
-        win_pct: 11.4
-      PRM:
-        wins: 141
-        games: 3000
-        win_pct: 4.7
+    tier_stats: {}
   PeterBeter:
     display_name: Peter Beter
     github_username: DNiev
     date_added: '2026-06-19T12:30:06Z'
-    tier: CH
-    tier_since: '2026-07-20T19:38:39Z'
+    tier: PRM
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      PRM:
-        wins: 350
-        games: 7000
-        win_pct: 5.0
-      CH:
-        wins: 2433
-        games: 19000
-        win_pct: 12.8
+    tier_stats: {}
   DeepThought:
     display_name: Deep Thought
     github_username: DNiev
     date_added: '2026-06-20T02:45:04Z'
-    tier: PRM
-    tier_since: '2026-09-21T15:39:59Z'
+    tier: CH
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      CH:
-        wins: 669
-        games: 4000
-        win_pct: 16.7
-      PRM:
-        wins: 2121
-        games: 24000
-        win_pct: 8.8
+    tier_stats: {}
     avatar: dfcgw5cr6/Deep_Thought.jpg
   EvilStewie:
     display_name: EvilStewie
     github_username: zachaustin01
     date_added: '2026-06-22T20:35:12Z'
     tier: PRM
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      PRM:
-        wins: 2545
-        games: 24000
-        win_pct: 10.6
+    tier_stats: {}
   Meg:
     display_name: Meg Griffin
     github_username: after2400
     date_added: '2026-06-25T03:17:47Z'
     tier: L1
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 3634
-        games: 24000
-        win_pct: 15.1
+    tier_stats: {}
     avatar: hdyiihba/Meg_Griffin.png
   Columbo:
     display_name: Columbo
     github_username: iappanaitis
     date_added: '2026-06-29T20:41:43Z'
-    tier: CH
-    tier_since: '2026-07-27T12:18:13Z'
+    tier: PRM
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      PRM:
-        wins: 127
-        games: 3000
-        win_pct: 4.2
-      CH:
-        wins: 2261
-        games: 21000
-        win_pct: 10.8
-      L1:
-        wins: 538
-        games: 2000
-        win_pct: 26.9
+    tier_stats: {}
   Merovingian:
     display_name: The Merovingian
     github_username: after2400
     date_added: '2026-07-01T07:24:06Z'
     tier: PRM
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      PRM:
-        wins: 2937
-        games: 24000
-        win_pct: 12.2
+    tier_stats: {}
     avatar: hdyiihba/The_Merovingian.png
   Oracle:
     display_name: The Oracle
     github_username: DNiev
     date_added: '2026-07-01T20:10:41Z'
     tier: PRM
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      PRM:
-        wins: 3238
-        games: 24000
-        win_pct: 13.5
+    tier_stats: {}
     avatar: dfcgw5cr6/The_Oracle.gif
   Ripley:
     display_name: Ripley
     github_username: iappanaitis
     date_added: '2026-07-01T20:51:17Z'
     tier: PRM
-    tier_since: '2026-07-06T21:44:04Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      PRM:
-        wins: 3174
-        games: 24000
-        win_pct: 13.2
+    tier_stats: {}
   Hal:
     display_name: HAL 9000
     github_username: fransposito
     date_added: '2026-07-01T23:05:55Z'
     tier: PRM
-    tier_since: '2026-09-14T15:38:23Z'
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      PRM:
-        wins: 2014
-        games: 24000
-        win_pct: 8.4
-      CH:
-        wins: 1087
-        games: 6000
-        win_pct: 18.1
+    tier_stats: {}
     avatar: rzifhdkf/HAL_9000.png
   Shwimpevwild:
     display_name: Shwimp
     github_username: dills122
     date_added: '2026-07-02T16:34:47Z'
-    tier: CH
-    tier_since: '2026-09-28T17:24:37Z'
+    tier: PRM
+    tier_since: '2026-10-05T17:42:40Z'
     times_inactive: 0
-    tier_stats:
-      PRM:
-        wins: 1959
-        games: 24000
-        win_pct: 8.2
-      CH:
-        wins: 1071
-        games: 6000
-        win_pct: 17.8
+    tier_stats: {}
   Littlefinger:
     display_name: Littlefinger
     github_username: max-cole
@@ -412,19 +240,7 @@ players:
     tier: PRM
     tier_since: '2026-07-20T19:31:17Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 447
-        games: 1000
-        win_pct: 44.7
-      CH:
-        wins: 158
-        games: 1000
-        win_pct: 15.8
-      PRM:
-        wins: 2993
-        games: 18000
-        win_pct: 16.6
+    tier_stats: {}
   Varys:
     display_name: Varys
     github_username: max-cole
@@ -432,21 +248,9 @@ players:
     tier: PRM
     tier_since: '2026-07-22T01:21:39Z'
     times_inactive: 0
-    tier_stats:
-      L1:
-        wins: 510
-        games: 1000
-        win_pct: 51.0
-      CH:
-        wins: 260
-        games: 1000
-        win_pct: 26.0
-      PRM:
-        wins: 2349
-        games: 16000
-        win_pct: 14.7
+    tier_stats: {}
 tournament_state:
-  quarter: 2026-Q3
+  quarter: 2026-Q4
   pool_results:
     pool_0:
       Hal: 231
