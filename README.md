@@ -13,77 +13,77 @@ Interested in competing? **[Visit the Wiki](https://github.com/after2400/liars-d
 ### Premier
 | Player | Season W% | Wins in PRM | Win % Total | Total Wins | Games |
 |--------|-----------|----------------|-------------|------------|-------|
-| <img src="https://www.gravatar.com/avatar/9d7a2fcd3b902c71412b196c29f5ba95?d=identicon&f=y&s=64" width="64" height="64"> Littlefinger | 19.3 | 193 | 19.3 | 193 | 1000 |
-| <img src="https://www.gravatar.com/avatar/76fdf124f5765d774886a793d5023f32?d=identicon&f=y&s=64" width="64" height="64"> Varys | 14.3 | 143 | 14.3 | 143 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/The_Merovingian.png" width="64" height="64"> The Merovingian | 10.3 | 103 | 10.3 | 103 | 1000 |
-| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/The_Oracle.gif" width="64" height="64"> The Oracle | 10.2 | 102 | 10.2 | 102 | 1000 |
-| <img src="https://www.gravatar.com/avatar/39c6087277499978d0500bb0205419d1?d=identicon&f=y&s=64" width="64" height="64"> Ripley | 9.9 | 99 | 9.9 | 99 | 1000 |
-| <img src="https://www.gravatar.com/avatar/4d0a927fbe8ecbf7e9d05deea69a694f?d=identicon&f=y&s=64" width="64" height="64"> Shwimp | 8.1 | 81 | 8.1 | 81 | 1000 |
-| <img src="https://www.gravatar.com/avatar/f68b87e0e12c96cc8ec181aa48e4e9b5?d=identicon&f=y&s=64" width="64" height="64"> EvilStewie | 7.8 | 78 | 7.8 | 78 | 1000 |
-| <img src="https://res.cloudinary.com/rzifhdkf/image/upload/w_64,h_64,c_fill/HAL_9000.png" width="64" height="64"> HAL 9000 | 7.1 | 71 | 7.1 | 71 | 1000 |
+| <img src="https://www.gravatar.com/avatar/9d7a2fcd3b902c71412b196c29f5ba95?d=identicon&f=y&s=64" width="64" height="64"> Littlefinger | 17.5 | 368 | 18.4 | 368 | 2000 |
+| <img src="https://www.gravatar.com/avatar/76fdf124f5765d774886a793d5023f32?d=identicon&f=y&s=64" width="64" height="64"> Varys | 15.8 | 301 | 15.0 | 301 | 2000 |
+| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/The_Oracle.gif" width="64" height="64"> The Oracle | 13.6 | 238 | 11.9 | 238 | 2000 |
+| <img src="https://www.gravatar.com/avatar/39c6087277499978d0500bb0205419d1?d=identicon&f=y&s=64" width="64" height="64"> Ripley | 10.2 | 201 | 10.1 | 201 | 2000 |
+| <img src="https://www.gravatar.com/avatar/f68b87e0e12c96cc8ec181aa48e4e9b5?d=identicon&f=y&s=64" width="64" height="64"> EvilStewie | 10.2 | 180 | 9.0 | 180 | 2000 |
+| <img src="https://www.gravatar.com/avatar/4d0a927fbe8ecbf7e9d05deea69a694f?d=identicon&f=y&s=64" width="64" height="64"> Shwimp | 10.0 | 181 | 9.0 | 181 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/The_Merovingian.png" width="64" height="64"> The Merovingian | 9.5 | 198 | 9.9 | 198 | 2000 |
+| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/Deep_Thought.jpg" width="64" height="64"> Deep Thought | 6.8 | 138 | 12.8 | 513 | 4000 |
 
 ### Championship
 | Player | Season W% | Wins in CH | Win % Total | Total Wins | Games |
 |--------|-----------|----------------|-------------|------------|-------|
-| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/Deep_Thought.jpg" width="64" height="64"> Deep Thought | Relegated | 190 | 13.0 | 260 | 2000 |
-| <img src="https://www.gravatar.com/avatar/28c4ac8b8ecc3772ff3d22f9bf6c737a?d=identicon&f=y&s=64" width="64" height="64"> Peter Beter | Relegated | 0 | 3.1 | 31 | 1000 |
-| <img src="https://www.gravatar.com/avatar/8eb6692d51ca57e7464df1cb61624c89?d=identicon&f=y&s=64" width="64" height="64"> Columbo | Relegated | 0 | 2.9 | 29 | 1000 |
-| <img src="https://www.gravatar.com/avatar/d51be008f389672257bcaa7b722a3df8?d=identicon&f=y&s=64" width="64" height="64"> Peter Griffin | 14.5 | 145 | 14.5 | 145 | 1000 |
-| <img src="https://www.gravatar.com/avatar/b4eed5a89f11670e6c411cab8aa2b5a7?d=identicon&f=y&s=64" width="64" height="64"> Stewie | 11.0 | 110 | 11.0 | 110 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Sloane_Avery.png" width="64" height="64"> Sloane | 10.4 | 104 | 10.4 | 104 | 1000 |
-| <img src="https://www.gravatar.com/avatar/4fb845c67d91bcb3178498fc6fe1fedc?d=identicon&f=y&s=64" width="64" height="64"> Diego | 10.0 | 100 | 10.0 | 100 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Zara.png" width="64" height="64"> Zara | 10.0 | 100 | 10.0 | 100 | 1000 |
+| <img src="https://res.cloudinary.com/rzifhdkf/image/upload/w_64,h_64,c_fill/HAL_9000.png" width="64" height="64"> HAL 9000 | Relegated | 0 | 6.8 | 135 | 2000 |
+| <img src="https://www.gravatar.com/avatar/4fb845c67d91bcb3178498fc6fe1fedc?d=identicon&f=y&s=64" width="64" height="64"> Diego | 13.0 | 230 | 11.5 | 230 | 2000 |
+| <img src="https://www.gravatar.com/avatar/28c4ac8b8ecc3772ff3d22f9bf6c737a?d=identicon&f=y&s=64" width="64" height="64"> Peter Beter | 12.3 | 123 | 7.7 | 154 | 2000 |
+| <img src="https://www.gravatar.com/avatar/d51be008f389672257bcaa7b722a3df8?d=identicon&f=y&s=64" width="64" height="64"> Peter Griffin | 10.3 | 248 | 12.4 | 248 | 2000 |
+| <img src="https://www.gravatar.com/avatar/b4eed5a89f11670e6c411cab8aa2b5a7?d=identicon&f=y&s=64" width="64" height="64"> Stewie | 10.3 | 213 | 10.7 | 213 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Sloane_Avery.png" width="64" height="64"> Sloane | 10.3 | 207 | 10.3 | 207 | 2000 |
+| <img src="https://www.gravatar.com/avatar/8eb6692d51ca57e7464df1cb61624c89?d=identicon&f=y&s=64" width="64" height="64"> Columbo | 9.3 | 93 | 6.1 | 122 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Zara.png" width="64" height="64"> Zara | 8.4 | 184 | 9.2 | 184 | 2000 |
 
 ### Level 1
 | Player | Season W% | Wins in L1 | Win % Total | Total Wins | Games |
 |--------|-----------|----------------|-------------|------------|-------|
-| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/Cal_Culatid.jpg" width="64" height="64"> Cal Culatid | Relegated | 390 | 23.8 | 477 | 2000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Eva_Longoria.png" width="64" height="64"> Eva | Relegated | 0 | 9.0 | 90 | 1000 |
-| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/Honest_Abe.jpg" width="64" height="64"> Honest Abe | Relegated | 0 | 7.4 | 74 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Nuke_LaLoosh.png" width="64" height="64"> Nuke LaLoosh | 35.1 | 351 | 35.1 | 351 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Meg_Griffin.png" width="64" height="64"> Meg Griffin | 25.1 | 251 | 25.1 | 251 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Finn_Carter.png" width="64" height="64"> Finn | 20.8 | 208 | 20.8 | 208 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Remy_Beasley.png" width="64" height="64"> Remy | 20.1 | 201 | 20.1 | 201 | 1000 |
-| <img src="https://www.gravatar.com/avatar/9b2b78033ecf0401a2feab5b4ba7462e?d=identicon&f=y&s=64" width="64" height="64"> Bruno | 19.1 | 191 | 19.1 | 191 | 1000 |
-| <img src="https://www.gravatar.com/avatar/17ad55a9b8384777496330d23e59d520?d=identicon&f=y&s=64" width="64" height="64"> Rick Sanchez | 14.2 | 142 | 14.2 | 142 | 1000 |
-| <img src="https://www.gravatar.com/avatar/64489c85dc2fe0787b85cd87214b3810?d=identicon&f=y&s=64" width="64" height="64"> Alice | 9.8 | 98 | 9.8 | 98 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Topper.png" width="64" height="64"> Topper | 7.5 | 75 | 7.5 | 75 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Liar_Liar.png" width="64" height="64"> Liar², Pants on Fire | 4.8 | 48 | 4.8 | 48 | 1000 |
-| <img src="https://www.gravatar.com/avatar/6e1def9bfa26327930ba900d46f8c9b3?d=identicon&f=y&s=64" width="64" height="64"> Cleo | 4.5 | 45 | 4.5 | 45 | 1000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Nuke_LaLoosh.png" width="64" height="64"> Nuke LaLoosh | Relegated | 738 | 27.1 | 814 | 3000 |
+| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/Cal_Culatid.jpg" width="64" height="64"> Cal Culatid | 23.0 | 620 | 23.6 | 707 | 3000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Eva_Longoria.png" width="64" height="64"> Eva | 22.6 | 226 | 15.8 | 316 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Meg_Griffin.png" width="64" height="64"> Meg Griffin | 19.6 | 447 | 22.4 | 447 | 2000 |
+| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/Honest_Abe.jpg" width="64" height="64"> Honest Abe | 18.4 | 184 | 12.9 | 258 | 2000 |
+| <img src="https://www.gravatar.com/avatar/9b2b78033ecf0401a2feab5b4ba7462e?d=identicon&f=y&s=64" width="64" height="64"> Bruno | 15.8 | 349 | 17.4 | 349 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Remy_Beasley.png" width="64" height="64"> Remy | 15.3 | 354 | 17.7 | 354 | 2000 |
+| <img src="https://www.gravatar.com/avatar/17ad55a9b8384777496330d23e59d520?d=identicon&f=y&s=64" width="64" height="64"> Rick Sanchez | 15.0 | 292 | 14.6 | 292 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Finn_Carter.png" width="64" height="64"> Finn | 11.8 | 326 | 16.3 | 326 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Liar_Liar.png" width="64" height="64"> Liar², Pants on Fire | 8.3 | 131 | 6.6 | 131 | 2000 |
+| <img src="https://www.gravatar.com/avatar/64489c85dc2fe0787b85cd87214b3810?d=identicon&f=y&s=64" width="64" height="64"> Alice | 7.8 | 176 | 8.8 | 176 | 2000 |
+| <img src="https://www.gravatar.com/avatar/6e1def9bfa26327930ba900d46f8c9b3?d=identicon&f=y&s=64" width="64" height="64"> Cleo | 2.6 | 71 | 3.5 | 71 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Topper.png" width="64" height="64"> Topper | 1.1 | 86 | 4.3 | 86 | 2000 |
 
 ### Quarter Leaderboard
 
 | Player | Tier | PRM W% | CH W% | L1 W% | Total W% | Games |
 |--------|------|--------|-------|-------|----------|-------|
-| <img src="https://www.gravatar.com/avatar/9d7a2fcd3b902c71412b196c29f5ba95?d=identicon&f=y&s=64" width="64" height="64"> Littlefinger | Premier | 19.3 | — | — | 19.3 | 1000 |
-| <img src="https://www.gravatar.com/avatar/76fdf124f5765d774886a793d5023f32?d=identicon&f=y&s=64" width="64" height="64"> Varys | Premier | 14.3 | — | — | 14.3 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/The_Merovingian.png" width="64" height="64"> The Merovingian | Premier | 10.3 | — | — | 10.3 | 1000 |
-| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/The_Oracle.gif" width="64" height="64"> The Oracle | Premier | 10.2 | — | — | 10.2 | 1000 |
-| <img src="https://www.gravatar.com/avatar/39c6087277499978d0500bb0205419d1?d=identicon&f=y&s=64" width="64" height="64"> Ripley | Premier | 9.9 | — | — | 9.9 | 1000 |
-| <img src="https://www.gravatar.com/avatar/4d0a927fbe8ecbf7e9d05deea69a694f?d=identicon&f=y&s=64" width="64" height="64"> Shwimp | Premier | 8.1 | — | — | 8.1 | 1000 |
-| <img src="https://www.gravatar.com/avatar/f68b87e0e12c96cc8ec181aa48e4e9b5?d=identicon&f=y&s=64" width="64" height="64"> EvilStewie | Premier | 7.8 | — | — | 7.8 | 1000 |
-| <img src="https://res.cloudinary.com/rzifhdkf/image/upload/w_64,h_64,c_fill/HAL_9000.png" width="64" height="64"> HAL 9000 | Premier | 7.1 | — | — | 7.1 | 1000 |
-| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/Deep_Thought.jpg" width="64" height="64"> Deep Thought | Championship | 7.0 | 19.0 | — | 13.0 | 2000 |
-| <img src="https://www.gravatar.com/avatar/28c4ac8b8ecc3772ff3d22f9bf6c737a?d=identicon&f=y&s=64" width="64" height="64"> Peter Beter | Championship | 3.1 | — | — | 3.1 | 1000 |
-| <img src="https://www.gravatar.com/avatar/8eb6692d51ca57e7464df1cb61624c89?d=identicon&f=y&s=64" width="64" height="64"> Columbo | Championship | 2.9 | — | — | 2.9 | 1000 |
-| <img src="https://www.gravatar.com/avatar/d51be008f389672257bcaa7b722a3df8?d=identicon&f=y&s=64" width="64" height="64"> Peter Griffin | Championship | — | 14.5 | — | 14.5 | 1000 |
-| <img src="https://www.gravatar.com/avatar/b4eed5a89f11670e6c411cab8aa2b5a7?d=identicon&f=y&s=64" width="64" height="64"> Stewie | Championship | — | 11.0 | — | 11.0 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Sloane_Avery.png" width="64" height="64"> Sloane | Championship | — | 10.4 | — | 10.4 | 1000 |
-| <img src="https://www.gravatar.com/avatar/4fb845c67d91bcb3178498fc6fe1fedc?d=identicon&f=y&s=64" width="64" height="64"> Diego | Championship | — | 10.0 | — | 10.0 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Zara.png" width="64" height="64"> Zara | Championship | — | 10.0 | — | 10.0 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Eva_Longoria.png" width="64" height="64"> Eva | Level 1 | — | 9.0 | — | 9.0 | 1000 |
-| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/Cal_Culatid.jpg" width="64" height="64"> Cal Culatid | Level 1 | — | 8.7 | 39.0 | 23.8 | 2000 |
-| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/Honest_Abe.jpg" width="64" height="64"> Honest Abe | Level 1 | — | 7.4 | — | 7.4 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Nuke_LaLoosh.png" width="64" height="64"> Nuke LaLoosh | Level 1 | — | — | 35.1 | 35.1 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Meg_Griffin.png" width="64" height="64"> Meg Griffin | Level 1 | — | — | 25.1 | 25.1 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Finn_Carter.png" width="64" height="64"> Finn | Level 1 | — | — | 20.8 | 20.8 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Remy_Beasley.png" width="64" height="64"> Remy | Level 1 | — | — | 20.1 | 20.1 | 1000 |
-| <img src="https://www.gravatar.com/avatar/9b2b78033ecf0401a2feab5b4ba7462e?d=identicon&f=y&s=64" width="64" height="64"> Bruno | Level 1 | — | — | 19.1 | 19.1 | 1000 |
-| <img src="https://www.gravatar.com/avatar/17ad55a9b8384777496330d23e59d520?d=identicon&f=y&s=64" width="64" height="64"> Rick Sanchez | Level 1 | — | — | 14.2 | 14.2 | 1000 |
-| <img src="https://www.gravatar.com/avatar/64489c85dc2fe0787b85cd87214b3810?d=identicon&f=y&s=64" width="64" height="64"> Alice | Level 1 | — | — | 9.8 | 9.8 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Topper.png" width="64" height="64"> Topper | Level 1 | — | — | 7.5 | 7.5 | 1000 |
-| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Liar_Liar.png" width="64" height="64"> Liar², Pants on Fire | Level 1 | — | — | 4.8 | 4.8 | 1000 |
-| <img src="https://www.gravatar.com/avatar/6e1def9bfa26327930ba900d46f8c9b3?d=identicon&f=y&s=64" width="64" height="64"> Cleo | Level 1 | — | — | 4.5 | 4.5 | 1000 |
+| <img src="https://www.gravatar.com/avatar/9d7a2fcd3b902c71412b196c29f5ba95?d=identicon&f=y&s=64" width="64" height="64"> Littlefinger | Premier | 18.4 | — | — | 18.4 | 2000 |
+| <img src="https://www.gravatar.com/avatar/76fdf124f5765d774886a793d5023f32?d=identicon&f=y&s=64" width="64" height="64"> Varys | Premier | 15.0 | — | — | 15.0 | 2000 |
+| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/The_Oracle.gif" width="64" height="64"> The Oracle | Premier | 11.9 | — | — | 11.9 | 2000 |
+| <img src="https://www.gravatar.com/avatar/39c6087277499978d0500bb0205419d1?d=identicon&f=y&s=64" width="64" height="64"> Ripley | Premier | 10.1 | — | — | 10.1 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/The_Merovingian.png" width="64" height="64"> The Merovingian | Premier | 9.9 | — | — | 9.9 | 2000 |
+| <img src="https://www.gravatar.com/avatar/f68b87e0e12c96cc8ec181aa48e4e9b5?d=identicon&f=y&s=64" width="64" height="64"> EvilStewie | Premier | 9.0 | — | — | 9.0 | 2000 |
+| <img src="https://www.gravatar.com/avatar/4d0a927fbe8ecbf7e9d05deea69a694f?d=identicon&f=y&s=64" width="64" height="64"> Shwimp | Premier | 9.0 | — | — | 9.0 | 2000 |
+| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/Deep_Thought.jpg" width="64" height="64"> Deep Thought | Premier | 6.9 | 18.8 | — | 12.8 | 4000 |
+| <img src="https://res.cloudinary.com/rzifhdkf/image/upload/w_64,h_64,c_fill/HAL_9000.png" width="64" height="64"> HAL 9000 | Championship | 6.8 | — | — | 6.8 | 2000 |
+| <img src="https://www.gravatar.com/avatar/28c4ac8b8ecc3772ff3d22f9bf6c737a?d=identicon&f=y&s=64" width="64" height="64"> Peter Beter | Championship | 3.1 | 12.3 | — | 7.7 | 2000 |
+| <img src="https://www.gravatar.com/avatar/8eb6692d51ca57e7464df1cb61624c89?d=identicon&f=y&s=64" width="64" height="64"> Columbo | Championship | 2.9 | 9.3 | — | 6.1 | 2000 |
+| <img src="https://www.gravatar.com/avatar/d51be008f389672257bcaa7b722a3df8?d=identicon&f=y&s=64" width="64" height="64"> Peter Griffin | Championship | — | 12.4 | — | 12.4 | 2000 |
+| <img src="https://www.gravatar.com/avatar/4fb845c67d91bcb3178498fc6fe1fedc?d=identicon&f=y&s=64" width="64" height="64"> Diego | Championship | — | 11.5 | — | 11.5 | 2000 |
+| <img src="https://www.gravatar.com/avatar/b4eed5a89f11670e6c411cab8aa2b5a7?d=identicon&f=y&s=64" width="64" height="64"> Stewie | Championship | — | 10.7 | — | 10.7 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Sloane_Avery.png" width="64" height="64"> Sloane | Championship | — | 10.3 | — | 10.3 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Zara.png" width="64" height="64"> Zara | Championship | — | 9.2 | — | 9.2 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Eva_Longoria.png" width="64" height="64"> Eva | Level 1 | — | 9.0 | 22.6 | 15.8 | 2000 |
+| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/Cal_Culatid.jpg" width="64" height="64"> Cal Culatid | Level 1 | — | 8.7 | 31.0 | 23.6 | 3000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Nuke_LaLoosh.png" width="64" height="64"> Nuke LaLoosh | Level 1 | — | 7.6 | 36.9 | 27.1 | 3000 |
+| <img src="https://res.cloudinary.com/dfcgw5cr6/image/upload/w_64,h_64,c_fill/Honest_Abe.jpg" width="64" height="64"> Honest Abe | Level 1 | — | 7.4 | 18.4 | 12.9 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Meg_Griffin.png" width="64" height="64"> Meg Griffin | Level 1 | — | — | 22.4 | 22.4 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Remy_Beasley.png" width="64" height="64"> Remy | Level 1 | — | — | 17.7 | 17.7 | 2000 |
+| <img src="https://www.gravatar.com/avatar/9b2b78033ecf0401a2feab5b4ba7462e?d=identicon&f=y&s=64" width="64" height="64"> Bruno | Level 1 | — | — | 17.4 | 17.4 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Finn_Carter.png" width="64" height="64"> Finn | Level 1 | — | — | 16.3 | 16.3 | 2000 |
+| <img src="https://www.gravatar.com/avatar/17ad55a9b8384777496330d23e59d520?d=identicon&f=y&s=64" width="64" height="64"> Rick Sanchez | Level 1 | — | — | 14.6 | 14.6 | 2000 |
+| <img src="https://www.gravatar.com/avatar/64489c85dc2fe0787b85cd87214b3810?d=identicon&f=y&s=64" width="64" height="64"> Alice | Level 1 | — | — | 8.8 | 8.8 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Liar_Liar.png" width="64" height="64"> Liar², Pants on Fire | Level 1 | — | — | 6.6 | 6.6 | 2000 |
+| <img src="https://res.cloudinary.com/hdyiihba/image/upload/w_64,h_64,c_fill/Topper.png" width="64" height="64"> Topper | Level 1 | — | — | 4.3 | 4.3 | 2000 |
+| <img src="https://www.gravatar.com/avatar/6e1def9bfa26327930ba900d46f8c9b3?d=identicon&f=y&s=64" width="64" height="64"> Cleo | Level 1 | — | — | 3.5 | 3.5 | 2000 |
 
 <!-- leaderboard-end -->
 <!-- prettier-ignore-end -->
