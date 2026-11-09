@@ -104,7 +104,9 @@
 
 {#
   MACRO: join a commit's body paragraphs (everything after the summary line),
-  dropping trailing footer trailers (co-author / sign-off / generated-with)
+  dropping trailing footer trailers (co-author / sign-off / generated-with /
+  Claude-Session). Trailer keys are case-insensitive: GitHub's squash merges
+  write "Co-authored-by".
 #}{%  macro format_body_without_footers(commit)
 %}{%    set ns = namespace(parts=[])
 %}{#
@@ -112,9 +114,10 @@
 %}{%      for paragraph in commit.descriptions[1:]
 %}{%        if not (
               paragraph.startswith("🤖")
-              or paragraph.startswith("Co-Authored-By")
-              or paragraph.startswith("Signed-off-by")
+              or paragraph.lower().startswith("co-authored-by")
+              or paragraph.lower().startswith("signed-off-by")
               or paragraph.startswith("Generated")
+              or paragraph.lower().startswith("claude-session")
             )
 %}{#
 #}{%          set _ = ns.parts.append(paragraph)
