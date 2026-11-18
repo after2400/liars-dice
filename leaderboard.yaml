@@ -1,5 +1,5 @@
 total_runs: 210
-last_updated: '2026-11-16T19:18:12Z'
+last_updated: '2026-11-18T15:11:50Z'
 current_season_issue: 189
 players:
   Alice:
@@ -401,6 +401,15 @@ players:
         wins: 861
         games: 6000
         win_pct: 14.3
+  Retep:
+    display_name: Retep
+    github_username: zachaustin01
+    date_added: '2026-11-18T15:11:50Z'
+    tier: L1
+    tier_since: '2026-11-18T15:11:50Z'
+    times_inactive: 0
+    tier_stats: {}
+    avatar: ohkyed3h/retep_avatar.jpg
 tournament_state:
   quarter: 2026-Q4
   pool_results:
